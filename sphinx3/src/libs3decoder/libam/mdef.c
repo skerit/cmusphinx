@@ -750,7 +750,7 @@ mdef_init(const char *mdeffile, int32 breport)
 
     /* Initialize ciphone info */
     m->n_ciphone = n_ci;
-    m->ciphone_ht = hash_table_new(n_ci, 1);  /* With case-insensitive string names *//* freed in mdef_free */
+    m->ciphone_ht = hash_table_new(n_ci, HASH_CASE_YES);  /* With case-insensitive string names *//* freed in mdef_free */
     m->ciphone = (ciphone_t *) ckd_calloc(n_ci, sizeof(ciphone_t));     /* freed in mdef_free */
 
     /* Initialize phones info (ciphones + triphones) */

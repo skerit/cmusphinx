@@ -285,7 +285,7 @@ srch_WST_init(kb_t * kb, void *srch)
 
 
 
-    wstg->active_word = hash_table_new(wstg->n_static_lextree, 1);
+    wstg->active_word = hash_table_new(wstg->n_static_lextree, HASH_CASE_YES);
 
     /* Glue the graph structure */
     s->grh->graph_struct = wstg;

@@ -289,7 +289,7 @@ corpus_load_tailid(const char *file,
     }
     rewind(fp);
 
-    corp->ht = hash_table_new(n, 0 /* Not no-case */ );
+    corp->ht = hash_table_new(n, HASH_CASE_YES);
     corp->n = 0;
     corp->str = (char **) ckd_calloc(n, sizeof(char *));
 

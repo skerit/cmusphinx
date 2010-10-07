@@ -368,13 +368,13 @@ dict_init(mdef_t * mdef, const char *dictfile, const char *fillerfile,
         d->ciphone_str = NULL;
     }
     else {
-        d->pht = hash_table_new(DEFAULT_NUM_PHONE, 1 /* No case */ );
+        d->pht = hash_table_new(DEFAULT_NUM_PHONE, HASH_CASE_YES);
         d->ciphone_str = (char **) ckd_calloc(DEFAULT_NUM_PHONE, sizeof(char *));       /* freed in dict_free() */
     }
     d->n_ciphone = 0;
 
     /* Create new hash table for word strings; case-insensitive word strings */
-    d->ht = hash_table_new(d->max_words, 1 /* no-case */ );
+    d->ht = hash_table_new(d->max_words, HASH_CASE_YES);
 
     d->lts_rules = NULL;
     if (useLTS)

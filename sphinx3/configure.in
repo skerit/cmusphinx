@@ -78,7 +78,7 @@ tidigitsdata=`(cd $srcdir/model/hmm/tidigits && find . -type f -print | egrep -v
 tidigitsdata=`echo $tidigitsdata`
 AC_SUBST(tidigitsdata)
 
-lmdata=`(cd $srcdir/model/lm/an4 && find . -type f -print | egrep -v '(Makefile|\.svn)' | sed 's/\.in//g')`
+lmdata=`(cd $srcdir/model/lm/an4 && find . -type f -print | egrep -v '(Makefile|\.svn)' | sed 's/\.in//g' | sort | uniq)`
 lmdata=`echo $lmdata`
 AC_SUBST(lmdata)
 
