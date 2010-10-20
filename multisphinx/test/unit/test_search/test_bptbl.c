@@ -2,6 +2,8 @@
 #include <string.h>
 #include <time.h>
 
+#include <sphinxbase/strfuncs.h>
+
 #include "pocketsphinx_internal.h"
 #include "bptbl.h"
 #include "test_macros.h"
@@ -11,7 +13,9 @@ main(int argc, char *argv[])
 {
 	ps_decoder_t *ps;
 	cmd_ln_t *config;
+	ps_seg_t *seg;
 	bptbl_t *bptbl;
+	char *hyp;
 	bp_t *bp;
 	int fi;
 	int i;
@@ -135,6 +139,24 @@ main(int argc, char *argv[])
 	/* Find the best exit with wid 42 (which does not exist) */
 	bp = bptbl_find_exit(bptbl, 42);
 	TEST_ASSERT(bp == NULL);
+	hyp = bptbl_hyp(bptbl, NULL, BAD_S3WID);
+	printf("HYP: %s\n", hyp);
+	string_trim(hyp, STRING_BOTH);
+	TEST_ASSERT(0 == strcmp(hyp, "achieved acts cochran achieved acts"));
+
+	/* FIXME: assert the correct values here. */
+	for (seg = bptbl_seg_iter(bptbl, NULL, BAD_S3WID); seg;
+	     seg = ps_seg_next(seg)) {
+		char const *word;
+		int sf, ef;
+		int32 post, lscr, ascr, lback;
+
+		word = ps_seg_word(seg);
+		ps_seg_frames(seg, &sf, &ef);
+		post = ps_seg_prob(seg, &ascr, &lscr, &lback);
+		printf("%s (%d:%d) P(w|o) = %f ascr = %d lscr = %d lback = %d\n", word, sf, ef,
+		       logmath_exp(ps_get_logmath(ps), post), ascr, lscr, lback);
+	}
 
 	bptbl_free(bptbl);
 	ps_free(ps);
