@@ -442,9 +442,8 @@ fwdflat_search_start(ps_search_t *base)
 
     memset(ffs->input_words, 0, ps_search_n_words(ffs) * sizeof(*ffs->input_words));
     ffs->input_first_sf = 0;
-    ffs->input_last_sf = 0;
-    ffs->input_first_bp = 0;
-    ffs->input_last_bp = 0;
+    ffs->input_n_sf = 0;
+    ffs->input_next_bp = 0;
 
     ffs->best_score = 0;
     ffs->renormalized = FALSE;
@@ -865,52 +864,13 @@ fwdflat_dump_active_words(fwdflat_search_t *ffs)
     E_INFO("%d active words\n", j);
 }
 
-/* FIXME: Would like to unit test this but not sure how... */
 static int
-fwdflat_update_active_words(fwdflat_search_t *ffs, int frame_idx)
+fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
 {
-    int new_first_sf, new_last_sf;
-    bpidx_t i;
-
-    /* Check if there are new backpointers to be scanned. */
-    if (ffs->input_bptbl->first_invert_bp == ffs->input_last_bp)
-        return 0;
-
-    
-    new_first_sf = 999999;
-    new_last_sf = 0;
-    for (i = ffs->input_last_bp; i < ffs->input_bptbl->first_invert_bp; ++i) {
-        int sf = bptbl_sf(ffs->input_bptbl, i);
-        if (sf > new_last_sf)
-            new_last_sf = sf;
-        if (sf < new_first_sf)
-            new_first_sf = sf;
-        E_INFO("bp %i sf %d\n", i, sf);
-    }
-    E_INFO("start frames %d:%d => %d:%d\n",
-           ffs->input_first_sf, ffs->input_last_sf,
-           new_first_sf, new_last_sf);
-    ffs->input_first_sf = new_first_sf;
-    ffs->input_last_sf = new_last_sf;
-    ffs->input_last_bp = ffs->input_bptbl->first_invert_bp;
-
-    fwdflat_dump_active_words(ffs);
-    return 0;
-}
-
-static int
-fwdflat_search_step(ps_search_t *base, int frame_idx)
-{
-    fwdflat_search_t *ffs = (fwdflat_search_t *)base;
     int16 const *senscr;
     int32 nf, i, j;
     int32 *nawl;
     int fi;
-
-    /* Update the active word list. */
-    fwdflat_update_active_words(ffs, frame_idx);
-
-    /* Decide whether we can actually go ahead and search again. */
 
     /* Activate our HMMs for the current frame if need be. */
     if (!ps_search_acmod(ffs)->compallsen)
@@ -958,6 +918,51 @@ fwdflat_search_step(ps_search_t *base, int frame_idx)
 
     /* Return the number of frames processed. */
     return 1;
+}
+
+static int
+fwdflat_search_step(ps_search_t *base, int frame_idx)
+{
+    fwdflat_search_t *ffs = (fwdflat_search_t *)base;
+
+    if (ffs->input_bptbl) {
+        int next_input_sf;
+        bpidx_t next_input_next_bp;
+
+        /* Calculate the first start frame that is still generating
+         * arcs. */
+        if (ffs->input_bptbl->oldest_bp == NO_BP)
+            next_input_sf = 0;
+        else
+            next_input_sf = bptbl_ent(ffs->input_bptbl,
+                                      ffs->input_bptbl->oldest_bp)->frame + 1;
+        if (next_input_sf == ffs->input_first_sf + ffs->input_n_sf)
+            return 0;
+
+        /* Determine how many new arcs there are. */
+        for (next_input_next_bp = ffs->input_next_bp;
+             next_input_next_bp < ffs->input_bptbl->first_invert_bp;
+             ++next_input_next_bp) {
+            if (bptbl_sf(ffs->input_bptbl, next_input_next_bp)
+                >= next_input_sf)
+                break;
+        }
+        E_INFO("input_first_sf %d next_input_sf %d input_next_bp %d -> %d\n",
+               ffs->input_first_sf, next_input_sf,
+               ffs->input_next_bp, next_input_next_bp);
+        ffs->input_next_bp = next_input_next_bp;
+        /* Update the input word list. */
+
+        /* Determine whether we have any frames to search. */
+
+        /* If so, search as many as we can and return the number that
+           were searched. */
+        return 0;
+    }
+    else {
+        /* Search one frame. */
+        return fwdflat_search_one_frame(ffs, frame_idx);
+    }
 }
 
 static int

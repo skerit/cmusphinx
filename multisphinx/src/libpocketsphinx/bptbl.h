@@ -103,6 +103,17 @@ typedef struct bptbl_s {
      */
     int32 active_fr;
     /**
+     * Oldest retired backpointer referenced by active backpointers.
+     * This bp's endpoint plus one is the first start frame of active
+     * backpointers.  Although no new backpointers will be generated
+     * with starting frames before active_fr, and thus all
+     * backpointers before active_fr can be retired, existing active
+     * backpointers will still have starting frames before it.  This
+     * marks the first backpointer which can not be removed entirely
+     * from the bptbl.
+     */
+    int32 oldest_bp;
+    /**
      * Index of first bptbl entry to be reordered by compaction.  Also
      * marks the end of the region of retired bptbl entries.  FIXME:
      * This is really the wrong name for it.

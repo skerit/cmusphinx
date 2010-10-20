@@ -41,3 +41,4 @@ python/setup.py
 test/unit/testfuncs.sh
 test/unit/test_search/test_fwdflat
 test/unit/test_search/test_fwdtree
+test/unit/test_search/test_fwdtree_fwdflat

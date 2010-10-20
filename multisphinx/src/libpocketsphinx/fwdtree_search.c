@@ -1468,7 +1468,7 @@ bptable_maxwpf(fwdtree_search_t *fts, int frame_idx)
     bp_t *bpe, *bestbpe, *worstbpe;
 
     /* Don't prune if no pruing. */
-    if (fts->maxwpf == -1 || fts->maxwpf == ps_search_n_words(fts))
+    if (fts->maxwpf == -1 || fts->maxwpf >= ps_search_n_words(fts))
         return;
 
     /* Allow only one filler word exit (the best) per frame */

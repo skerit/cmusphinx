@@ -87,6 +87,15 @@ typedef struct first_node_s {
 } first_node_t;
 
 /**
+ * Word arcs from input bptbl
+ */
+typedef struct fwdflat_arc_s {
+    int32 wid;
+    int16 sf;
+    int16 ef;
+} fwdflat_arc_t;
+
+/**
  * Various statistics for profiling.
  */
 typedef struct fwdflat_stats_s {
@@ -123,12 +132,23 @@ typedef struct fwdflat_search_s {
     int16 min_ef_width;   /**< Minimum number of active endpoints. */
     int16 max_sf_win;     /**< Lookahead window for active words */
 
+    /**
+     * Next bp to be scanned for input arcs.
+     */
+    bpidx_t input_next_bp;
+    /**
+     * Currently active input arcs sorted by start frame.
+     */
+    fwdflat_arc_t *input_arcs;
+    int32 n_input_arcs_alloc;
+    /**
+     * Start frame indices in input_arcs, used for radix sort.
+     */
+    int32 *input_sf_idx;
+    int32 n_input_sf_alloc;
+    int16 input_first_sf;
+    int16 input_n_sf;
     uint8 *input_words;     /**< Active words (end frame counts) */
-    int16 input_first_sf; /**< First frame of current lookahead window. */
-    int16 input_last_sf;  /**< Last start frame found in the input. */
-
-    bpidx_t input_first_bp;
-    bpidx_t input_last_bp;
 
     /**
      * First HMMs for multiple-phone words.

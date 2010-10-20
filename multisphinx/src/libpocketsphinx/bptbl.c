@@ -53,7 +53,7 @@
 
 static int bptbl_rcsize(bptbl_t *bptbl, bp_t *be);
 
-#if 0
+#if 1
 #undef E_DEBUG
 #define E_DEBUG(level,x) E_INFO x
 #undef E_DEBUGCONT
@@ -135,6 +135,7 @@ bptbl_reset(bptbl_t *bptbl)
     bptbl->n_retired = 0;
     bptbl->bss_head = 0;
     bptbl->active_fr = 0;
+    bptbl->oldest_bp = NO_BP;
 }
 
 void
@@ -364,6 +365,8 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
  * range from first_invert_bp to last_retired_bp) as well as in still
  * active backpointers, which range from first_active_bp to bptbl->n_ent.
  *
+ * This has the side effect of setting bptbl->oldest_bp
+ *
  * @param bptbl Backpointer table.
  * @param last_retired_bp Index of last retired backpointer plus one
  * @param last_remapped_bp Last backpointer index to be remapped
@@ -399,7 +402,8 @@ bptbl_remap(bptbl_t *bptbl, int last_retired_bp,
     }
     /* Now remap backpointers in still-active bps (which point to the
      * newly retired ones) */
-    for (i = first_active_bp - bptbl->ef_idx[0];
+    bptbl->oldest_bp = last_retired_bp - 1;
+     for (i = first_active_bp - bptbl->ef_idx[0];
          i < bptbl->n_ent - bptbl->ef_idx[0]; ++i) {
         if (bptbl->ent[i].bp >= bptbl->ef_idx[0]
             && bptbl->ent[i].bp < last_remapped_bp) {
@@ -412,8 +416,10 @@ bptbl_remap(bptbl_t *bptbl, int last_retired_bp,
                            i + bptbl->ef_idx[0]));
             bptbl->ent[i].bp
                 = bptbl->permute[bptbl->ent[i].bp - bptbl->ef_idx[0]];
-            assert(bptbl_sf(bptbl, i + bptbl->ef_idx[0]) < bptbl->ent[i].frame);
+            assert(bptbl_sf(bptbl, i + bptbl->ef_idx[0]) <= bptbl->ent[i].frame);
         }
+        if (bptbl->ent[i].bp < bptbl->oldest_bp)
+            bptbl->oldest_bp = bptbl->ent[i].bp;
     }
 }
 
@@ -501,8 +507,9 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
                 bptbl_ef_idx(bptbl, active_fr),
                 bptbl_ef_idx(bptbl, active_fr));
     bptbl_update_active(bptbl, active_fr, last_retired_bp);
-    E_INFO("Retired %d bps: now %d retired, %d active\n", n_retired,
-           bptbl->first_invert_bp, bptbl->n_ent - bptbl->ef_idx[0]);
+    E_INFO("Retired %d bps: now %d retired, %d active, first_active_sf %d\n", n_retired,
+           bptbl->first_invert_bp, bptbl->n_ent - bptbl->ef_idx[0],
+           bptbl->oldest_bp == NO_BP ? 0 : bptbl->retired[bptbl->oldest_bp].frame + 1);
 }
 
 int
@@ -548,8 +555,9 @@ bptbl_finalize(bptbl_t *bptbl)
     bptbl->first_invert_bp = last_retired_bp;
     bptbl->active_fr = bptbl->n_frame;
     bptbl->ef_idx[0] = bptbl->n_ent;
-    E_INFO("Retired %d bps: now %d retired, %d active\n", n_retired,
-           bptbl->first_invert_bp, bptbl->n_ent - bptbl->ef_idx[0]);
+    E_INFO("Retired %d bps: now %d retired, %d active, first_active_sf %d\n", n_retired,
+           bptbl->first_invert_bp, bptbl->n_ent - bptbl->ef_idx[0],
+           bptbl->oldest_bp == NO_BP ? 0 : bptbl->retired[bptbl->oldest_bp].frame + 1);
     return n_retired;
 }
 

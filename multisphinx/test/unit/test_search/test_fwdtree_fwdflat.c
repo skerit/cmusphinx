@@ -55,10 +55,8 @@ main(int argc, char *argv[])
 		while (acmod->n_feat_frame > 0) {
 			nfr = ps_search_step(fwdtree, ftfr);
 			ftfr += nfr;
-			//E_INFO("fwdtree searched %d frames => %d\n", nfr, ftfr);
-			//nfr = ps_search_step(fwdflat, fffr);
-			//fffr += nfr;
-			//E_INFO("fwdflat searched %d frames => %d\n", nfr, fffr);
+			nfr = ps_search_step(fwdflat, fffr);
+			fffr += nfr;
 			acmod_advance(acmod);
 		}
 	}
