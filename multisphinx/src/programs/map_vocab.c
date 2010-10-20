@@ -140,6 +140,18 @@ prune_dict(dict_t *fulldict, ngram_model_t *fulllm, cmd_ln_t *config, acmod_t *a
     return NULL;
 }
 
+/**
+ * Find exact matches between two dictionaries.
+ */
+
+/**
+ * Construct a word lattice for a single unknown word.
+ */
+
+/**
+ * Construct a 
+ */
+
 int
 main(int argc, char *argv[])
 {
@@ -158,8 +170,6 @@ main(int argc, char *argv[])
     cmd_ln_set_boolean_r(config, "-bestpath", FALSE);
     ps = ps_init(config);
     acmod = ps->acmod;
-    fwdflat = fwdflat_search_init(config, acmod, ps->dict, ps->d2p, NULL);
-
     /* Decide how to construct the background dictionary. */
     if ((str = cmd_ln_str_r(config, "-bgdict"))) {
         cmd_ln_t *c2 = cmd_ln_init(NULL, ps_args_def, TRUE,
@@ -173,6 +183,15 @@ main(int argc, char *argv[])
         bgdict = prune_dict(ps->dict, fulllm, config, acmod);
         ngram_model_free(fulllm);
     }
+
+    /* Construct the fwdflat search for background. */
+    fwdflat = fwdflat_search_init(config, acmod, ps->dict, ps->d2p, NULL);
+
+    /* Compute intersection of the two vocabularies.  We first do a
+     * one-to-one match on orthography (case insensitive) and then on
+     * pronunciation.  Exact matches are recorded in a table.  */
+
+    /* For non-exact matches we construct word lattices. */
     
     ps_search_free(fwdflat);
     ps_free(ps);
