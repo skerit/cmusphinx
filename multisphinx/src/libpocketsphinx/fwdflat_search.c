@@ -976,14 +976,24 @@ fwdflat_search_step(ps_search_t *base)
 
         /* Now pull things from the arc buffer - everything above this
          * line will be done in a separate thread in the near
-         * future.
-         */
-        E_INFO("Looking for arcs in frame %d\n", frame_idx + ffs->max_sf_win - 1);
+         * future. */
+        if (acmod_available(acmod) <= 0)
+            return 0;
+        /* We do something different depending on whether the input
+         * bptbl has been finalized or not.  If it has, we just run
+         * out the clock, otherwise we only search forward as far as
+         * the arc buffer goes. */
         nfr = 0;
-        while (fwdflat_arc_buffer_iter(ffs->input_arcs,
-                                       frame_idx + ffs->max_sf_win - 1) != NULL) {
-            fwdflat_search_expand_arcs(ffs, frame_idx, frame_idx + ffs->max_sf_win);
-            E_INFO("Searching frame %d\n", frame_idx);
+        while (acmod_available(acmod) > 0) {
+            int end_win = frame_idx + ffs->max_sf_win;
+            if (ffs->input_bptbl->active_fr < ffs->input_bptbl->n_frame /* not final */
+                && fwdflat_arc_buffer_iter(ffs->input_arcs, end_win - 1) == NULL)
+                break;
+            if (end_win > ffs->input_bptbl->n_frame)
+                end_win = ffs->input_bptbl->n_frame;
+            E_INFO("Searching frame %d window end %d\n",
+                   frame_idx, end_win);
+            fwdflat_search_expand_arcs(ffs, frame_idx, end_win);
             if ((k = fwdflat_search_one_frame(ffs)) <= 0)
                 break;
             frame_idx += k;
@@ -1008,51 +1018,14 @@ fwdflat_search_finish(ps_search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
     acmod_t *acmod = ps_search_acmod(ffs);
-    int32 cf, next_sf, frame_idx, narc, k;
+    int cf;
     
     bitvec_clear_all(ffs->word_active, ps_search_n_words(ffs));
 
     /* This is the number of frames of input. */
     cf = acmod->output_frame;
 
-    /* Add final bps to the arc buffer. */
-    if (ffs->input_bptbl) {
-        frame_idx = bptbl_frame_idx(ffs->bptbl);
-        next_sf = bptbl_ent(ffs->input_bptbl,
-                            ffs->input_bptbl->oldest_bp)->frame + 1;
-        E_INFO("next_sf %d cf %d\n", next_sf, cf);
-
-        /* Extend the arc buffer the appropriate number of frames. */
-        fwdflat_arc_buffer_extend(ffs->input_arcs, next_sf);
-
-        /* Add the next chunk of bps to the arc buffer.  FIXME: For the
-         * time being we just try to add them all, the arc buffer code
-         * will filter out the irrelevant ones. */
-        narc = fwdflat_arc_buffer_add_bps(ffs->input_arcs, ffs->input_bptbl,
-                                          0, ffs->input_bptbl->first_invert_bp);
-        fwdflat_arc_buffer_commit(ffs->input_arcs);
-        E_INFO("narc %d\n", narc);
-        //E_INFO("Final input bptbl:\n");
-        //bptbl_dump(ffs->input_bptbl);
-        //E_INFO("Final arc buffer:\n");
-        //fwdflat_arc_buffer_dump(ffs->input_arcs);
-        /* Step through all remaining frames. */
-        E_INFO("Looking for arcs in frame %d\n", frame_idx + ffs->max_sf_win - 1);
-        while (fwdflat_arc_buffer_iter(ffs->input_arcs,
-                                       frame_idx + ffs->max_sf_win - 1) != NULL) {
-            fwdflat_search_expand_arcs(ffs, frame_idx, frame_idx + ffs->max_sf_win);
-            E_INFO("Searching frame %d\n", frame_idx);
-            if ((k = fwdflat_search_one_frame(ffs)) <= 0)
-                break;
-            frame_idx += k;
-        }
-        while (frame_idx < cf) {
-            E_INFO("Searching frame %d\n", frame_idx);
-            if ((k = fwdflat_search_one_frame(ffs)) <= 0)
-                break;
-            frame_idx += k;
-        }
-    }
+    /* FIXME: Might need to keep searching a bit?! */
 
     /* Finalize the backpointer table. */
     bptbl_finalize(ffs->bptbl);
