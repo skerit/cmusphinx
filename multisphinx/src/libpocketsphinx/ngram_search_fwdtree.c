@@ -732,9 +732,10 @@ prune_root_chan(ngram_search_t *ngs, int frame_idx)
             continue;
 
         if (hmm_bestscore(&rhmm->hmm) BETTER_THAN thresh) {
+            int j;
             hmm_frame(&rhmm->hmm) = nf;  /* rhmm will be active in next frame */
             E_DEBUG(3, ("Preserving root channel %d score %d\n", i, hmm_bestscore(&rhmm->hmm)));
-            int j;
+            /* Track oldest backpointer in this active HMM. */
             for (j = 0; j < rhmm->hmm.n_emit_state; ++j)
                 if (hmm_score(&rhmm->hmm, j) BETTER_THAN WORST_SCORE)
                     if (hmm_history(&rhmm->hmm, j) < ngs->oldest_bp)
@@ -813,13 +814,14 @@ prune_nonroot_chan(ngram_search_t *ngs, int frame_idx)
         assert(hmm_frame(&hmm->hmm) >= frame_idx);
 
         if (hmm_bestscore(&hmm->hmm) BETTER_THAN thresh) {
+            int j;
             /* retain this channel in next frame */
             if (hmm_frame(&hmm->hmm) != nf) {
                 hmm_frame(&hmm->hmm) = nf;
                 *(nacl++) = hmm;
             }
 
-            int j;
+            /* Track oldest backpointer in this active HMM. */
             for (j = 0; j < hmm->hmm.n_emit_state; ++j)
                 if (hmm_score(&hmm->hmm, j) BETTER_THAN WORST_SCORE)
                     if (hmm_history(&hmm->hmm, j) < ngs->oldest_bp)
@@ -1063,12 +1065,13 @@ prune_word_chan(ngram_search_t *ngs, int frame_idx)
 
             thmm = hmm->next;
             if (hmm_bestscore(&hmm->hmm) BETTER_THAN lastphn_thresh) {
+                int j;
                 /* retain this channel in next frame */
                 hmm_frame(&hmm->hmm) = nf;
                 k++;
                 phmmp = &(hmm->next);
 
-                int j;
+                /* Track oldest backpointer in this active HMM. */
                 for (j = 0; j < hmm->hmm.n_emit_state; ++j)
                     if (hmm_score(&hmm->hmm, j) BETTER_THAN WORST_SCORE)
                         if (hmm_history(&hmm->hmm, j) < ngs->oldest_bp)
@@ -1133,7 +1136,7 @@ prune_word_chan(ngram_search_t *ngs, int frame_idx)
 static void
 prune_channels(ngram_search_t *ngs, int frame_idx)
 {
-    /* Reset the oldest backpointer. */
+    /* Reset the oldest active backpointer. */
     ngs->oldest_bp = ngs->bpidx;
     /* Clear last phone candidate list. */
     ngs->n_lastphn_cand = 0;
@@ -1452,6 +1455,15 @@ deactivate_channels(ngram_search_t *ngs, int frame_idx)
     }
 }
 
+/**
+ * Order backpointer table entries according to start frame and remove
+ * invalid paths.
+ */
+static void
+bptable_gc(ngram_search_t *ngs, int frame_idx)
+{
+}
+
 int
 ngram_fwdtree_search(ngram_search_t *ngs, int frame_idx)
 {
@@ -1490,6 +1502,8 @@ ngram_fwdtree_search(ngram_search_t *ngs, int frame_idx)
     word_transition(ngs, frame_idx);
     /* Deactivate pruned HMMs. */
     deactivate_channels(ngs, frame_idx);
+    /* Sort and garbage collect backpointer table. */
+    bptable_gc(ngs, frame_idx);
 
     ++ngs->n_frame;
     /* Return the number of frames processed. */
