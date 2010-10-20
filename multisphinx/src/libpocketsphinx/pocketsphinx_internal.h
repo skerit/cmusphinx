@@ -112,7 +112,6 @@ struct ps_decoder_s {
      * this will change very soon. */
     ps_search_t *fwdtree;
     ps_search_t *fwdflat;
-
 };
 
 #endif /* __POCKETSPHINX_INTERNAL_H__ */

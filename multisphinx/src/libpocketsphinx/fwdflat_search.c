@@ -129,7 +129,8 @@ fwdflat_search_update_widmap(fwdflat_search_t *ffs)
 ps_search_t *
 fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
                     dict_t *dict, dict2pid_t *d2p,
-                    bptbl_t *input_bptbl)
+                    bptbl_t *input_bptbl,
+                    ngram_model_t *lmset)
 {
     fwdflat_search_t *ffs;
     const char *path;
@@ -144,6 +145,8 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     }
     ffs->chan_alloc = listelem_alloc_init(sizeof(internal_node_t));
     ffs->root_chan_alloc = listelem_alloc_init(sizeof(first_node_t));
+    ffs->rcss = ckd_calloc(bin_mdef_n_ciphone(acmod->mdef),
+                           sizeof(*ffs->rcss));
 
     /* Calculate various beam widths and such. */
     fwdflat_search_calc_beams(ffs);
@@ -176,7 +179,10 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
             + ps_search_n_words(ffs) * sizeof(*ffs->active_word_list)) / 1024);
 
     /* Load language model(s) */
-    if ((path = cmd_ln_str_r(config, "-lmctl"))) {
+    if (lmset) {
+        ffs->lmset = ngram_model_retain(lmset);
+    }
+    else if ((path = cmd_ln_str_r(config, "-lmctl"))) {
         ffs->lmset = ngram_model_set_read(config, path, acmod->lmath);
         if (ffs->lmset == NULL) {
             E_ERROR("Failed to read language model control file: %s\n",
@@ -217,7 +223,7 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     return (ps_search_t *)ffs;
 
 error_out:
-    fwdflat_search_free((ps_search_t *)ffs);
+    ps_search_free((ps_search_t *)ffs);
     return NULL;
 }
 
@@ -272,6 +278,11 @@ fwdflat_search_free(ps_search_t *base)
     ckd_free(ffs->expand_word_list);
     bptbl_free(ffs->bptbl);
     ckd_free_2d(ffs->active_word_list);
+    ckd_free(ffs->rcss);
+
+    fwdflat_arc_buffer_free(ffs->input_arcs);
+    garray_free(ffs->word_list);
+    bitvec_free(ffs->utt_vocab);
 
     return 0;
 }
@@ -666,7 +677,6 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
 {
     int32 cf, nf, b, thresh, pip, i, w, newscore;
     int32 best_silrc_score = 0, best_silrc_bp = 0;      /* FIXME: good defaults? */
-    int32 *rcss;
     first_node_t *rhmm;
     int32 *awl;
     dict_t *dict = ps_search_dict(ffs);
@@ -693,7 +703,7 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
 
         /* Get the mapping from right context phone ID to index in the
          * right context table and the bptbl->bscore_stack. */
-        rcss = bptbl_rcscores(ffs->bptbl, ent);
+        bptbl_rcscores(ffs->bptbl, ent, ffs->rcss);
         if (ent->last2_phone == -1)
             rssid = NULL;
         else
@@ -711,9 +721,9 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
             /* Get the exit score we recorded in save_bwd_ptr(), or
              * something approximating it. */
             if (rssid)
-                newscore = rcss[rssid->cimap[dict_first_phone(dict, w)]];
+                newscore = ffs->rcss[rssid->cimap[dict_first_phone(dict, w)]];
             else
-                newscore = rcss[0];
+                newscore = ffs->rcss[0];
             if (newscore == WORST_SCORE)
                 continue;
             newscore += ngram_tg_score(ffs->lmset,
@@ -741,9 +751,9 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
 
         /* Get the best exit into silence. */
         if (rssid)
-            silscore = rcss[rssid->cimap[ps_search_acmod(ffs)->mdef->sil]];
+            silscore = ffs->rcss[rssid->cimap[ps_search_acmod(ffs)->mdef->sil]];
         else
-            silscore = rcss[0];
+            silscore = ffs->rcss[0];
         if (silscore BETTER_THAN best_silrc_score) {
             best_silrc_score = silscore;
             best_silrc_bp = b;
@@ -1023,7 +1033,7 @@ fwdflat_search_decode(ps_search_t *base)
     if (ffs->input_bptbl)
         return fwdflat_search_decode_2ndpass(ffs, ps_search_acmod(base));
 
-    nfr = 0;
+    nfr = k = 0;
     fwdflat_search_start(base);
     while ((frame_idx = acmod_wait(acmod, -1)) >= 0) {
         if ((k = fwdflat_search_one_frame(ffs, frame_idx)) <= 0)

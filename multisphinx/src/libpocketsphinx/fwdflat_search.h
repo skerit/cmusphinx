@@ -227,6 +227,7 @@ typedef struct fwdflat_search_s {
 
     int32 *word_idx;     /**< BPTable index for any word in current frame;
                             cleared before each frame */
+    int32 *rcss; /**< Temporary storage for right context scores. */
 
     /**
      * Cumulative vocabulary for current utterance.
@@ -280,6 +281,7 @@ typedef struct fwdflat_search_s {
  */
 ps_search_t *fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
                                  dict_t *dict, dict2pid_t *d2p,
-                                 bptbl_t *input_bptbl);
+                                 bptbl_t *input_bptbl,
+                                 ngram_model_t *lmset);
 
 #endif /* __FWDFLAT_SEARCH_H__ */

@@ -418,7 +418,8 @@ featbuf_process_full_raw(featbuf_t *fb,
     int nfr, ntail;
 
     if (fe_process_frames(fb->fe, NULL, &n_samps, NULL, &nfr) < 0)
-        goto error_out;
+        return -1;
+
     cepbuf = ckd_calloc_2d(nfr + 1, fe_get_output_size(fb->fe),
                            sizeof(**cepbuf));
     fe_start_utt(fb->fe);
@@ -430,10 +431,10 @@ featbuf_process_full_raw(featbuf_t *fb,
 
     if (featbuf_process_full_cep(fb, cepbuf, nfr) < 0)
         goto error_out;
+    ckd_free_2d(cepbuf);
     return 0;
 error_out:
-    if (cepbuf)
-        ckd_free_2d(cepbuf);
+    ckd_free_2d(cepbuf);
     return -1;
 }
 

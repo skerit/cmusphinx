@@ -129,6 +129,8 @@ fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
     }
     fts->chan_alloc = listelem_alloc_init(sizeof(nonroot_node_t));
     fts->root_chan_alloc = listelem_alloc_init(sizeof(root_node_t));
+    fts->rcss = ckd_calloc(bin_mdef_n_ciphone(acmod->mdef),
+                           sizeof(*fts->rcss));
 
     /* Calculate various beam widths and such. */
     fwdtree_search_calc_beams(fts);
@@ -197,7 +199,7 @@ fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
     return (ps_search_t *)fts;
 
 error_out:
-    fwdtree_search_free((ps_search_t *)fts);
+    ps_search_free((ps_search_t *)fts);
     return NULL;
 }
 
@@ -628,6 +630,7 @@ fwdtree_search_free(ps_search_t *base)
     listelem_alloc_free(fts->root_chan_alloc);
     ngram_model_free(fts->lmset);
 
+    ckd_free(fts->rcss);
     ckd_free(fts->word_idx);
     ckd_free(fts->word_chan);
     bitvec_free(fts->word_active);
@@ -1491,7 +1494,6 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
 {
     int32 i, k, bp, w, nf;
     int32 rc;
-    int32 *rcss;                /* right context score stack */
     int32 thresh, newscore;
     bp_t *bpe;
     root_node_t *rhmm;
@@ -1525,13 +1527,15 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
         /* Array of HMM scores corresponding to all the possible right
          * context expansions of the final phone.  It's likely that a
          * lot of these are going to be missing, actually. */
-        rcss = bptbl_rcscores(fts->bptbl, bpe);
+        bptbl_rcscores(fts->bptbl, bpe, fts->rcss);
         if (bpe->last2_phone == -1) {
             /* No right context expansion. */
-            for (rc = 0; rc < bin_mdef_n_ciphone(ps_search_acmod(fts)->mdef); ++rc) {
-                if (rcss[0] BETTER_THAN fts->bestbp_rc[rc].score) {
-                    E_DEBUG(4,("bestbp_rc[0] = %d lc %d\n", rcss[0], bpe->last_phone));
-                    fts->bestbp_rc[rc].score = rcss[0];
+            for (rc = 0;
+                 rc < bin_mdef_n_ciphone(ps_search_acmod(fts)->mdef); ++rc) {
+                if (fts->rcss[0] BETTER_THAN fts->bestbp_rc[rc].score) {
+                    E_DEBUG(4,("bestbp_rc[0] = %d lc %d\n",
+                               fts->rcss[0], bpe->last_phone));
+                    fts->bestbp_rc[rc].score = fts->rcss[0];
                     fts->bestbp_rc[rc].path = bp;
                     fts->bestbp_rc[rc].lc = bpe->last_phone;
                 }
@@ -1540,10 +1544,10 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
         else {
             xwdssid_t *rssid = dict2pid_rssid(d2p, bpe->last_phone, bpe->last2_phone);
             for (rc = 0; rc < bin_mdef_n_ciphone(ps_search_acmod(fts)->mdef); ++rc) {
-                if (rcss[rssid->cimap[rc]] BETTER_THAN fts->bestbp_rc[rc].score) {
+                if (fts->rcss[rssid->cimap[rc]] BETTER_THAN fts->bestbp_rc[rc].score) {
                     E_DEBUG(4,("bestbp_rc[%d] = %d lc %d\n",
-                               rc, rcss[rssid->cimap[rc]], bpe->last_phone));
-                    fts->bestbp_rc[rc].score = rcss[rssid->cimap[rc]];
+                               rc, fts->rcss[rssid->cimap[rc]], bpe->last_phone));
+                    fts->bestbp_rc[rc].score = fts->rcss[rssid->cimap[rc]];
                     fts->bestbp_rc[rc].path = bp;
                     fts->bestbp_rc[rc].lc = bpe->last_phone;
                 }
@@ -1822,7 +1826,7 @@ fwdtree_search_finish(ps_search_t *base)
         E_INFO("%8d candidate words for entering last phone (%d/fr)\n",
                fts->st.n_lastphn_cand_utt, fts->st.n_lastphn_cand_utt / (cf + 1));
     }
-    bptbl_dump(fts->bptbl);
+    /* bptbl_dump(fts->bptbl); */
 
     return 0;
 }
@@ -1907,28 +1911,27 @@ fwdtree_search_exit_score(fwdtree_search_t *fts, bp_t *pbe, int rcphone)
     E_DEBUG(99,("fwdtree_search_exit_score(%d,%d)\n", bptbl_idx(fts->bptbl, pbe), rcphone));
     assert(pbe->valid);
     if (pbe->last2_phone == -1) {
-        int32 *bss = bptbl_rcscores(fts->bptbl, pbe);
+        bptbl_rcscores(fts->bptbl, pbe, fts->rcss);
         /* No right context for single phone predecessor words. */
         E_DEBUG(99,("last2_phone = %d s_idx = %d bscore = %d\n", -1,
-                    pbe->s_idx, bss[0]));
-        assert(bss[0] != WORST_SCORE);
-        return bss[0];
+                    pbe->s_idx, fts->rcss[0]));
+        assert(fts->rcss[0] != WORST_SCORE);
+        return fts->rcss[0];
     }
     else {
         xwdssid_t *rssid;
-        int32 *bss;
         /* Find the index for the last diphone of the previous word +
          * the first phone of the current word. */
         rssid = dict2pid_rssid(ps_search_dict2pid(fts),
                                pbe->last_phone, pbe->last2_phone);
-        bss = bptbl_rcscores(fts->bptbl, pbe);
+        bptbl_rcscores(fts->bptbl, pbe, fts->rcss);
         E_DEBUG(99,("last2_phone = %d s_idx = %d rc = %d n_rc = %d bscore = %d\n",
                     pbe->last2_phone, pbe->s_idx, rssid->cimap[rcphone],
                     rssid->n_ssid,
-                    bss[rssid->cimap[rcphone]]));
+                    fts->rcss[rssid->cimap[rcphone]]));
         /* This may be WORST_SCORE, which means that there was no exit
          * with rcphone as right context. */
-        return bss[rssid->cimap[rcphone]];
+        return fts->rcss[rssid->cimap[rcphone]];
     }
 }
 
@@ -2000,4 +2003,18 @@ fwdtree_search_seg_iter(ps_search_t *base, int32 *out_score)
 {
     fwdtree_search_t *fts = (fwdtree_search_t *)base;
     return bptbl_seg_iter(fts->bptbl, out_score, ps_search_finish_wid(fts));
+}
+
+bptbl_t *
+fwdtree_search_bptbl(ps_search_t *base)
+{
+    fwdtree_search_t *fts = (fwdtree_search_t *)base;
+    return fts->bptbl;
+}
+
+ngram_model_t *
+fwdtree_search_lmset(ps_search_t *base)
+{
+    fwdtree_search_t *fts = (fwdtree_search_t *)base;
+    return fts->lmset;
 }

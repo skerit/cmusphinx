@@ -283,7 +283,7 @@ void bptbl_set_rcscore(bptbl_t *bptbl, bp_t *bpe, int rc, int32 score);
 /**
  * Get the array of right context scores for a backpointer entry.
  */
-int32 *bptbl_rcscores(bptbl_t *bptbl, bp_t *bpe);
+void bptbl_rcscores(bptbl_t *bptbl, bp_t *bpe, int32 *out_rcscores);
 
 /**
  * Update language model state for a backpointer table entry.

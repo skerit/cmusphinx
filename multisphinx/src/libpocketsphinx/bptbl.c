@@ -632,20 +632,20 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
     bpidx_t base_idx;
     bp_t *ent;
 
-#if 1 /* For debugging purposes... */
+#if 0 /* For debugging purposes... */
     return 0;
 #endif
 
     sbmtx_lock(bptbl->mtx);
     if (first_idx > bptbl_retired_idx(bptbl)) {
-        E_DEBUG(2,("%d outside retired, releasing up to %d\n",
-                   first_idx, bptbl_retired_idx(bptbl)));
+        E_INFO("%d outside retired, releasing up to %d\n",
+               first_idx, bptbl_retired_idx(bptbl));
         first_idx = bptbl_retired_idx(bptbl);
     }
 
     base_idx = garray_base(bptbl->retired);
-    E_DEBUG(2,("Releasing bptrs from %d to %d\n",
-               base_idx, first_idx));
+    E_INFO("Releasing bptrs from %d to %d\n",
+           base_idx, first_idx);
     if (first_idx < base_idx) {
         sbmtx_unlock(bptbl->mtx);
         return 0;
@@ -833,12 +833,14 @@ bptbl_set_rcscore(bptbl_t *bptbl, bp_t *bpe, int rc, int32 score)
     sbmtx_unlock(bptbl->mtx);
 }
 
-/* FIXME: Ugh, potentially awful locking issues here, we should copy
- * these instead... */
-int32 *
-bptbl_rcscores(bptbl_t *bptbl, bp_t *bpe)
+void
+bptbl_rcscores(bptbl_t *bptbl, bp_t *bpe, int32 *out_rcscores)
 {
-    return garray_ptr(bptbl->rc, int32, bpe->s_idx);
+    sbmtx_lock(bptbl->mtx);
+    memcpy(out_rcscores,
+           garray_ptr(bptbl->rc, int32, bpe->s_idx),
+           bptbl_rcsize(bptbl, bpe) * sizeof(int32));
+    sbmtx_unlock(bptbl->mtx);
 }
 
 

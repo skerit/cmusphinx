@@ -193,6 +193,7 @@ acmod_copy(acmod_t *other)
     acmod_t *acmod;
 
     acmod = ckd_calloc(1, sizeof(*acmod));
+    acmod->refcount = 1;
     acmod->config = cmd_ln_retain(other->config);
     acmod->lmath = logmath_retain(other->lmath);
     acmod->mdef = bin_mdef_retain(other->mdef);

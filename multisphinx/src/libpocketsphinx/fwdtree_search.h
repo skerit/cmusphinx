@@ -184,6 +184,7 @@ typedef struct fwdtree_search_s {
 
     int32 *word_idx;     /**< BPTable index for any word in current frame;
                             cleared before each frame */
+    int32 *rcss; /**< Temporary storage for right context scores. */
 
     /**
      * Search structure of HMM instances.
@@ -318,5 +319,15 @@ typedef struct fwdtree_search_s {
  */
 ps_search_t *fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
                                  dict_t *dict, dict2pid_t *d2p);
+
+/**
+ * Get the output backpointer table.
+ */
+bptbl_t *fwdtree_search_bptbl(ps_search_t *base);
+
+/**
+ * Get the language model set.
+ */
+ngram_model_t *fwdtree_search_lmset(ps_search_t *base);
 
 #endif /* __FWDTREE_SEARCH_H__ */

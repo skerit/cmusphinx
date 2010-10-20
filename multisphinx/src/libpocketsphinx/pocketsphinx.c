@@ -214,13 +214,18 @@ ps_init(cmd_ln_t *config)
     if ((d2p = dict2pid_build(ps->acmod->mdef, dict)) == NULL)
         goto error_out;
 
+    /* FIXME: And a single language model, although this may be less
+     * likely to change (since we will use different subsets of its
+     * vocabulary) */
     ps->fwdtree = fwdtree_search_init(config, ps->acmod, dict, d2p);
     ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-      ((fwdtree_search_t *)ps->fwdtree)->bptbl);
+                                      fwdtree_search_bptbl(ps->fwdtree),
+                                      fwdtree_search_lmset(ps->fwdtree));
 
     /* Release pointers to things now owned by the searches. */
     dict_free(dict);
     dict2pid_free(d2p);
+    acmod_free(acmod2);
 
     /* Initialize performance timer (but each search has its own). */
     ps->perf.name = "decode";
@@ -263,10 +268,11 @@ ps_free(ps_decoder_t *ps)
 
     featbuf_shutdown(ps->fb);
     ps_search_free(ps->fwdtree);
-    /*ps_search_free(ps->fwdflat); */
+    ps_search_free(ps->fwdflat);
     featbuf_free(ps->fb);
     logmath_free(ps->lmath);
     cmd_ln_free_r(ps->config);
+    acmod_free(ps->acmod);
     ckd_free(ps->uttid);
     ckd_free(ps);
     return 0;
