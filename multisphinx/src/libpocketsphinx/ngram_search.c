@@ -312,19 +312,20 @@ ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
     /* Look for an existing exit for this word in this frame. */
     bp = ngs->bptbl->word_idx[w];
     if (bp != NO_BP) {
+        bp_t *bpe = bptbl_ent(ngs->bptbl, bp);
         /* Keep only the best scoring one (this is a potential source
          * of search errors...) */
-        if (ngs->bptbl->ent[bp].score WORSE_THAN score) {
-            if (ngs->bptbl->ent[bp].bp != path) {
-                ngs->bptbl->ent[bp].bp = path;
+        if (bpe->score WORSE_THAN score) {
+            if (bpe->bp != path) {
+                bpe->bp = path;
                 bptbl_fake_lmstate(ngs->bptbl, bp);
             }
-            ngs->bptbl->ent[bp].score = score;
+            bpe->score = score;
         }
         /* But do keep track of scores for all right contexts, since
          * we need them to determine the starting path scores for any
          * successors of this word exit. */
-        ngs->bptbl->bscore_stack[ngs->bptbl->ent[bp].s_idx + rc] = score;
+        ngs->bptbl->bscore_stack[bpe->s_idx + rc] = score;
     }
     else {
         bptbl_enter(ngs->bptbl, w, frame_idx, path, score, rc);
@@ -360,13 +361,13 @@ ngram_search_find_exit(ngram_search_t *ngs, int frame_idx, int32 *out_best_score
     /* Now find the entry for </s> OR the best scoring entry. */
     assert(end_bpidx < ngs->bptbl->n_alloc);
     for (bp = bptbl_ef_idx(ngs->bptbl, frame_idx); bp < end_bpidx; ++bp) {
-        bp_t *ent = bptbl_ent(ngs->bptbl, bp);
-        if (ent->wid == ps_search_finish_wid(ngs)
-            || ent->score BETTER_THAN best_score) {
-            best_score = ent->score;
+        bp_t *bpe = bptbl_ent(ngs->bptbl, bp);
+        if (bpe->wid == ps_search_finish_wid(ngs)
+            || bpe->score BETTER_THAN best_score) {
+            best_score = bpe->score;
             best_exit = bp;
         }
-        if (ent->wid == ps_search_finish_wid(ngs))
+        if (bpe->wid == ps_search_finish_wid(ngs))
             break;
     }
 
@@ -388,8 +389,7 @@ ngram_search_bp_hyp(ngram_search_t *ngs, int bpidx)
     bp = bpidx;
     len = 0;
     while (bp != NO_BP) {
-        bp_t *be = &ngs->bptbl->ent[bp];
-        E_INFO("bp %d -> %d\n", bp, be->bp);
+        bp_t *be = bptbl_ent(ngs->bptbl, bp);
         assert(be->valid);
         bp = be->bp;
         if (dict_real_word(ps_search_dict(ngs), be->wid))
@@ -406,7 +406,7 @@ ngram_search_bp_hyp(ngram_search_t *ngs, int bpidx)
     bp = bpidx;
     c = base->hyp_str + len - 1;
     while (bp != NO_BP) {
-        bp_t *be = &ngs->bptbl->ent[bp];
+        bp_t *be = bptbl_ent(ngs->bptbl, bp);
         size_t len;
 
         bp = be->bp;
@@ -525,9 +525,10 @@ ngram_compute_seg_score(ngram_search_t *ngs, bp_t *be, float32 lwf,
     }
 
     /* Otherwise, calculate lscr and ascr. */
-    pbe = ngs->bptbl->ent + be->bp;
+    pbe = bptbl_ent(ngs->bptbl, be->bp);
     start_score = ngram_search_exit_score(ngs, pbe,
-                                 dict_first_phone(ps_search_dict(ngs),be->wid));
+                                          dict_first_phone(ps_search_dict(ngs),
+                                                           be->wid));
     assert(start_score BETTER_THAN WORST_SCORE);
 
     /* FIXME: These result in positive acoustic scores when filler
@@ -538,7 +539,7 @@ ngram_compute_seg_score(ngram_search_t *ngs, bp_t *be, float32 lwf,
         /* FIXME: Nasty action at a distance here to deal with the
          * silence length limiting stuff in ngram_search_fwdtree.c */
         if (be->bp != NO_BP
-            && (dict_first_phone(ps_search_dict(ngs), ngs->bptbl->ent[be->bp].wid)
+            && (dict_first_phone(ps_search_dict(ngs), pbe->wid)
                 == ps_search_acmod(ngs)->mdef->sil))
             *out_lscr = 0;
         else
@@ -682,8 +683,8 @@ ngram_search_bp2itor(ps_seg_t *seg, int bp)
     ngram_search_t *ngs = (ngram_search_t *)seg->search;
     bp_t *be, *pbe;
 
-    be = &ngs->bptbl->ent[bp];
-    pbe = be->bp == -1 ? NULL : &ngs->bptbl->ent[be->bp];
+    be = bptbl_ent(ngs->bptbl, bp);
+    pbe = bptbl_ent(ngs->bptbl, be->bp);
     seg->word = dict_wordstr(ps_search_dict(ngs), be->wid);
     seg->ef = be->frame;
     seg->sf = pbe ? pbe->frame + 1 : 0;
@@ -704,10 +705,8 @@ ngram_search_bp2itor(ps_seg_t *seg, int bp)
         if (be->wid == ps_search_silence_wid(ngs)) {
             /* FIXME: Nasty action at a distance here to deal with the
              * silence length limiting stuff in ngram_search_fwdtree.c */
-            if (be->bp != NO_BP
-                && (dict_first_phone(ps_search_dict(ngs),
-                                     ngs->bptbl->ent[be->bp].wid)
-                    == ps_search_acmod(ngs)->mdef->sil))
+            if (dict_first_phone(ps_search_dict(ngs), be->wid)
+                == ps_search_acmod(ngs)->mdef->sil)
                 seg->lscr = 0;
             else
                 seg->lscr = ngs->silpen;
@@ -771,7 +770,7 @@ ngram_search_bp_iter(ngram_search_t *ngs, int bpidx, float32 lwf)
     itor->n_bpidx = 0;
     bp = bpidx;
     while (bp != NO_BP) {
-        bp_t *be = &ngs->bptbl->ent[bp];
+        bp_t *be = bptbl_ent(ngs->bptbl, bp);
         bp = be->bp;
         ++itor->n_bpidx;
     }
@@ -783,7 +782,7 @@ ngram_search_bp_iter(ngram_search_t *ngs, int bpidx, float32 lwf)
     cur = itor->n_bpidx - 1;
     bp = bpidx;
     while (bp != NO_BP) {
-        bp_t *be = &ngs->bptbl->ent[bp];
+        bp_t *be = bptbl_ent(ngs->bptbl, bp);
         itor->bpidx[cur] = bp;
         bp = be->bp;
         --cur;
@@ -862,7 +861,7 @@ create_dag_nodes(ngram_search_t *ngs, ps_lattice_t *dag)
         if (!bp_ptr->valid)
             continue;
 
-        sf = (bp_ptr->bp < 0) ? 0 : ngs->bptbl->ent[bp_ptr->bp].frame + 1;
+        sf = bp_sf(ngs->bptbl, i);
         ef = bp_ptr->frame;
         wid = bp_ptr->wid;
 
@@ -930,7 +929,8 @@ find_end_node(ngram_search_t *ngs, ps_lattice_t *dag, float32 lwf)
 
     /* Find final node </s>.last_frame; nothing can follow this node */
     for (node = dag->nodes; node; node = node->next) {
-        int32 lef = ngs->bptbl->ent[node->lef].frame;
+        bp_t *bpe = bptbl_ent(ngs->bptbl, node->lef);
+        int32 lef = bpe->frame;
         if ((node->wid == ps_search_finish_wid(ngs))
             && (lef == dag->n_frames - 1))
             break;
@@ -990,7 +990,7 @@ find_end_node(ngram_search_t *ngs, ps_lattice_t *dag, float32 lwf)
 ps_lattice_t *
 ngram_search_lattice(ps_search_t *search)
 {
-    int32 i, ef, lef, score, ascr, lscr;
+    int32 ef, lef, score, ascr, lscr;
     ps_latnode_t *node, *from, *to;
     ngram_search_t *ngs;
     ps_lattice_t *dag;
@@ -1025,7 +1025,7 @@ ngram_search_lattice(ps_search_t *search)
            dict_wordstr(search->dict, dag->start->wid), dag->start->sf,
            dict_wordstr(search->dict, dag->end->wid), dag->end->sf);
 
-    ngram_compute_seg_score(ngs, ngs->bptbl->ent + dag->end->lef, lwf,
+    ngram_compute_seg_score(ngs, bptbl_ent(ngs->bptbl, dag->end->lef), lwf,
                             &dag->final_node_ascr, &lscr);
 
     /*
@@ -1043,10 +1043,14 @@ ngram_search_lattice(ps_search_t *search)
 
         /* Find predecessors of to : from->fef+1 <= to->sf <= from->lef+1 */
         for (from = to->next; from; from = from->next) {
-            bp_t *from_bpe;
+            bp_t *from_bpe, *lef_bpe;
 
-            ef = ngs->bptbl->ent[from->fef].frame;
-            lef = ngs->bptbl->ent[from->lef].frame;
+            from_bpe = bptbl_ent(ngs->bptbl, from->fef);
+            lef_bpe = bptbl_ent(ngs->bptbl, from->lef);
+            assert(from_bpe != NULL);
+            assert(lef_bpe != NULL);
+            ef = from_bpe->frame;
+            lef = lef_bpe->frame;
 
             if ((to->sf <= ef) || (to->sf > lef + 1))
                 continue;
@@ -1057,16 +1061,14 @@ ngram_search_lattice(ps_search_t *search)
                 continue;
 
             /* Find bptable entry for "from" that exactly precedes "to" */
-            i = from->fef;
-            from_bpe = ngs->bptbl->ent + i;
-            for (; i <= from->lef; i++, from_bpe++) {
+            for (; from_bpe <= lef_bpe; ++from_bpe) {
                 if (from_bpe->wid != from->wid)
                     continue;
                 if (from_bpe->frame >= to->sf - 1)
                     break;
             }
 
-            if ((i > from->lef) || (from_bpe->frame != to->sf - 1))
+            if (from_bpe->frame != to->sf - 1)
                 continue;
 
             /* Find acoustic score from.sf->to.sf-1 with right context = to */
@@ -1107,9 +1109,15 @@ ngram_search_lattice(ps_search_t *search)
     }
 
     for (node = dag->nodes; node; node = node->next) {
+        bp_t *fef_bpe, *lef_bpe;
+
         /* Change node->{fef,lef} from bptbl indices to frames. */
-        node->fef = ngs->bptbl->ent[node->fef].frame;
-        node->lef = ngs->bptbl->ent[node->lef].frame;
+        fef_bpe = bptbl_ent(ngs->bptbl, node->fef);
+        lef_bpe = bptbl_ent(ngs->bptbl, node->lef);
+        assert(fef_bpe != NULL);
+        assert(lef_bpe != NULL);
+        node->fef = fef_bpe->frame;
+        node->lef = lef_bpe->frame;
         /* Find base wid for nodes. */
         node->basewid = dict_basewid(search->dict, node->wid);
     }

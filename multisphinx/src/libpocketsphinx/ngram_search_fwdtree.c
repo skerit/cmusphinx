@@ -921,7 +921,7 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
         if (candp->bp == -1)
             continue;
         /* Backpointer entry for it. */
-        bpe = &(ngs->bptbl->ent[candp->bp]);
+        bpe = bptbl_ent(ngs->bptbl, candp->bp);
 
         /* Subtract starting score for candidate, leave it with only word score */
         start_score = ngram_search_exit_score
@@ -1380,8 +1380,8 @@ word_transition(ngram_search_t *ngs, int frame_idx)
     }
     for (bp = bptbl_ef_idx(ngs->bptbl, frame_idx);
          bp < bptbl_ef_idx(ngs->bptbl, frame_idx + 1); bp++) {
-        bpe = &(ngs->bptbl->ent[bp]);
-        if (!bpe->valid)
+        bpe = bptbl_ent(ngs->bptbl, bp);
+        if (bpe == NULL || !bpe->valid)
             continue;
 
         for (i = 0; i < ngs->n_1ph_LMwords; i++) {
@@ -1418,7 +1418,7 @@ word_transition(ngram_search_t *ngs, int frame_idx)
         newscore = ngs->last_ltrans[w].dscr + ngs->pip
             + phone_loop_search_score(pls, rhmm->ciphone);
         if (newscore BETTER_THAN thresh) {
-            bpe = ngs->bptbl->ent + ngs->last_ltrans[w].bp;
+            bpe = bptbl_ent(ngs->bptbl, ngs->last_ltrans[w].bp);
             if ((hmm_frame(&rhmm->hmm) < frame_idx)
                 || (newscore BETTER_THAN hmm_in_score(&rhmm->hmm))) {
                 hmm_enter(&rhmm->hmm,
