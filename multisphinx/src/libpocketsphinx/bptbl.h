@@ -78,25 +78,27 @@ typedef struct bp_s {
  * Back pointer table
  */
 typedef struct bptbl_s {
-    bp_t *ent;       /* Forward pass lattice */
-    dict2pid_t *d2p; /* Tied state mapping. */
-    int32 n_ent;             /* First free BPTable entry */
-    int32 n_alloc;
-    int32 window_sf;      /**< Start of elastic window of end-sorted arcs */
-    int32 swindow_sf;     /**< Start of elastic window of start-sorted arcs */
-    int32 *bscore_stack;     /* Score stack for all possible right contexts */
-    int32 bss_head;          /* First free BScoreStack entry */
-    int32 bscore_stack_size;
-    int32 n_frame_alloc; /**< Number of frames allocated in bp_table_idx and friends. */
-    int32 n_frame;       /**< Number of frames actually present. */
+    dict2pid_t *d2p;     /**< Tied state mapping. */
+    bp_t *ent;           /**< Backpointer entries. */
+    int32 n_ent;         /**< First free BPTable entry. */
+    int32 n_alloc;       /**< Number of entries allocated for entry-based arrays (ent, permute) */
+    int32 active_sf;     /**< First frame containing active backpointers. */
     int32 *permute;      /**< Current permutation of entries (used for gc/sorting). */
+    int32 first_invert_bp; /**< First reordered backpointer (used in gc) */
+
+    int32 *bscore_stack;     /**< Array containing right context scores for word exits. */
+    int32 bss_head;          /**< First free BScoreStack entry */
+    int32 bscore_stack_size; /**< Number of entries allocated in bscore_stack. */
+
+    int32 n_frame_alloc; /**< Number of frames allocated for frame-based arrays. */
+    int32 n_frame;       /**< Number of frames actually present. */
     int32 *ef_idx;       /**< First BPTable entry exiting in each frame */
     int32 *sf_idx;       /**< First BPTable entry entering in each frame */
+    bitvec_t *valid_fr;  /**< Set of accessible frames (used in gc) */
+    ps_latnode_t **frm_wordlist;   /**< List of active words in each frame. */
+
     int32 *word_idx;     /**< BPTable index for any word in current frame;
                             cleared before each frame */
-    bitvec_t *valid_fr;  /**< Set of accessible frames (used in gc) */
-    int32 first_invert_bp; /**< First reordered backpointer (used in gc) */
-    ps_latnode_t **frm_wordlist;   /**< List of active words in each frame. */
 } bptbl_t;
 
 

@@ -111,8 +111,7 @@ bptbl_reset(bptbl_t *bptbl)
     bptbl->n_frame = 0;
     bptbl->n_ent = 0;
     bptbl->bss_head = 0;
-    bptbl->window_sf = 0;
-    bptbl->swindow_sf = 0;
+    bptbl->active_sf = 0;
 }
 
 void
@@ -158,8 +157,8 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
 {
     int i, j, n_active_fr, last_gc_fr;
 
-    /* Invalidate all backpointer entries up to window_sf - 1. */
-    /* FIXME: actually anything behind window_sf - 1 is fair game. */
+    /* Invalidate all backpointer entries up to active_sf - 1. */
+    /* FIXME: actually anything behind active_sf - 1 is fair game. */
     E_INFO("Garbage collecting from %d to %d (%d to %d):\n",
            bptbl->ef_idx[sf], bptbl->ef_idx[ef], sf, ef);
     for (i = bptbl->ef_idx[sf];
@@ -302,37 +301,37 @@ bptbl_invert(bptbl_t *bptbl, int eidx)
 static void
 bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
 {
-    int prev_window_sf, window_sf;
+    int prev_active_sf, active_sf;
 
-    /* window_sf is the first frame which is still active in search
+    /* active_sf is the first frame which is still active in search
      * (i.e. for which outgoing word arcs can still be generated).
      * Therefore, any future backpointer table entries will not point
-     * backwards to any backpointers before (window_sf - 1), and thus
+     * backwards to any backpointers before (active_sf - 1), and thus
      * any backpointers which are not reachable from those exiting in
-     * (window_sf - 1) will never be reachable. */
-    prev_window_sf = bptbl->window_sf;
-    window_sf = bptbl->ent[oldest_bp].frame + 1;
-    assert(window_sf >= prev_window_sf);
-    if (window_sf <= prev_window_sf + 1)
+     * (active_sf - 1) will never be reachable. */
+    prev_active_sf = bptbl->active_sf;
+    active_sf = bptbl->ent[oldest_bp].frame + 1;
+    assert(active_sf >= prev_active_sf);
+    if (active_sf <= prev_active_sf + 1)
         return;
     /* If there is nothing to GC then finish up */
-    if (bptbl->ef_idx[prev_window_sf - 1] == bptbl->ef_idx[window_sf - 1]) {
-        bptbl->window_sf = window_sf;
+    if (bptbl->ef_idx[prev_active_sf - 1] == bptbl->ef_idx[active_sf - 1]) {
+        bptbl->active_sf = active_sf;
         return;
     }
 
-    bptbl_mark(bptbl, prev_window_sf - 1, window_sf - 1, frame_idx);
+    bptbl_mark(bptbl, prev_active_sf - 1, active_sf - 1, frame_idx);
     E_INFO("before compaction\n");
     dump_bptable(bptbl, 0, -1);
-    bptbl_compact(bptbl, bptbl->ef_idx[window_sf - 1]);
+    bptbl_compact(bptbl, bptbl->ef_idx[active_sf - 1]);
     E_INFO("after compaction\n");
     dump_bptable(bptbl, 0, -1);
-    bptbl_forward_sort(bptbl, bptbl->ef_idx[prev_window_sf - 1],
-                       bptbl->ef_idx[window_sf - 1]);
-    bptbl_invert(bptbl, bptbl->ef_idx[window_sf - 1]);
+    bptbl_forward_sort(bptbl, bptbl->ef_idx[prev_active_sf - 1],
+                       bptbl->ef_idx[active_sf - 1]);
+    bptbl_invert(bptbl, bptbl->ef_idx[active_sf - 1]);
     E_INFO("after inversion\n");
     dump_bptable(bptbl, 0, -1);
-    bptbl->window_sf = window_sf;
+    bptbl->active_sf = active_sf;
 }
 
 int
@@ -417,9 +416,9 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx, int32 path,
     for (i = rcsize, bss = bptbl->bscore_stack + bptbl->bss_head; i > 0; --i, bss++)
         *bss = WORST_SCORE;
     bptbl->bscore_stack[bptbl->bss_head + rc] = score;
-    E_INFO("Entered bp %d sf %d ef %d window_sf %d\n", bptbl->n_ent,
-           bp_sf(bptbl, bptbl->n_ent), frame_idx, bptbl->window_sf);
-    assert(bp_sf(bptbl, bptbl->n_ent) >= bptbl->window_sf);
+    E_INFO("Entered bp %d sf %d ef %d active_sf %d\n", bptbl->n_ent,
+           bp_sf(bptbl, bptbl->n_ent), frame_idx, bptbl->active_sf);
+    assert(bp_sf(bptbl, bptbl->n_ent) >= bptbl->active_sf);
 
     bptbl->n_ent++;
     bptbl->bss_head += rcsize;

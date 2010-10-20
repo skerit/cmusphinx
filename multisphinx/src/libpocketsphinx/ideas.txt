@@ -106,3 +106,25 @@ clear its path scores and re-enter it.
 Note that if the threshold is too small this can cause errors at the
 beginning of the sentence - not sure why this happens (something to do
 with scores i guess) but it should be fixable somehow.
+
+---
+
+In practice when we garbage collect the bp table, we obtain a compact
+portion followed by a growing gap, then the elastic 'scratchpad'
+window.  The backpointer indices before the gap grow much slower than
+the ones after it, and can be reassigned as necessary.
+
+We would like to separate these two parts of the bptbl, and use a
+rotating buffer for the working window with an expandable vector (or
+even a tree) for the compact, static portion.
+
+Also we want the infinitely growable parts such as ef_idx and permute
+to, well, not be infinitely growable, instead having a base index that
+corresponds to their respective region of applicability.
+
+Another important question is, how important is it to have sequential,
+numeric backpointer IDs that directly correspond to memory locations?
+If looking up backpointers is not particularly frequent then we could
+add a layer of indirection between them and the actual backpointer
+table, at which point there is no longer any need to compact it - we
+can just use a freelist to allocate new backpointers as needed.
