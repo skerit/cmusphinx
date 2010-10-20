@@ -80,77 +80,77 @@ hmmdir_exists(const char *path)
 }
 
 static void
-ps_add_file(ps_decoder_t *ps, const char *arg,
+ps_add_file(cmd_ln_t *config, const char *arg,
             const char *hmmdir, const char *file)
 {
     char *tmp = string_join(hmmdir, "/", file, NULL);
 
-    if (cmd_ln_str_r(ps->config, arg) == NULL && file_exists(tmp))
-        cmd_ln_set_str_r(ps->config, arg, tmp);
+    if (cmd_ln_str_r(config, arg) == NULL && file_exists(tmp))
+        cmd_ln_set_str_r(config, arg, tmp);
     ckd_free(tmp);
 }
 
-static void
-ps_init_defaults(ps_decoder_t *ps)
+void
+ps_init_defaults(cmd_ln_t *config)
 {
     char const *hmmdir, *lmfile, *dictfile;
 
     /* Disable memory mapping on Blackfin (FIXME: should be uClinux in general). */
 #ifdef __ADSPBLACKFIN__
     E_INFO("Will not use mmap() on uClinux/Blackfin.");
-    cmd_ln_set_boolean_r(ps->config, "-mmap", FALSE);
+    cmd_ln_set_boolean_r(config, "-mmap", FALSE);
 #endif
 
 #ifdef MODELDIR
     /* Set default acoustic and language models. */
-    hmmdir = cmd_ln_str_r(ps->config, "-hmm");
-    lmfile = cmd_ln_str_r(ps->config, "-lm");
-    dictfile = cmd_ln_str_r(ps->config, "-dict");
+    hmmdir = cmd_ln_str_r(config, "-hmm");
+    lmfile = cmd_ln_str_r(config, "-lm");
+    dictfile = cmd_ln_str_r(config, "-dict");
     if (hmmdir == NULL && hmmdir_exists(MODELDIR "/hmm/en_US/hub4wsj_sc_8k")) {
         hmmdir = MODELDIR "/hmm/en_US/hub4wsj_sc_8k";
-        cmd_ln_set_str_r(ps->config, "-hmm", hmmdir);
+        cmd_ln_set_str_r(config, "-hmm", hmmdir);
     }
-    if (lmfile == NULL && !cmd_ln_str_r(ps->config, "-fsg")
-        && !cmd_ln_str_r(ps->config, "-jsgf")
+    if (lmfile == NULL && !cmd_ln_str_r(config, "-fsg")
+        && !cmd_ln_str_r(config, "-jsgf")
         && file_exists(MODELDIR "/lm/en_US/hub4.5000.DMP")) {
         lmfile = MODELDIR "/lm/en_US/hub4.5000.DMP";
-        cmd_ln_set_str_r(ps->config, "-lm", lmfile);
+        cmd_ln_set_str_r(config, "-lm", lmfile);
     }
     if (dictfile == NULL && file_exists(MODELDIR "/lm/en_US/cmu07a.dic")) {
         dictfile = MODELDIR "/lm/en_US/cmu07a.dic";
-        cmd_ln_set_str_r(ps->config, "-dict", dictfile);
+        cmd_ln_set_str_r(config, "-dict", dictfile);
     }
 
     /* Expand acoustic and language model filenames relative to installation path. */
     if (hmmdir && !path_is_absolute(hmmdir) && !hmmdir_exists(hmmdir)) {
         char *tmphmm = string_join(MODELDIR "/hmm/", hmmdir, NULL);
-        cmd_ln_set_str_r(ps->config, "-hmm", tmphmm);
+        cmd_ln_set_str_r(config, "-hmm", tmphmm);
         ckd_free(tmphmm);
     }
     if (lmfile && !path_is_absolute(lmfile) && !file_exists(lmfile)) {
         char *tmplm = string_join(MODELDIR "/lm/", lmfile, NULL);
-        cmd_ln_set_str_r(ps->config, "-lm", tmplm);
+        cmd_ln_set_str_r(config, "-lm", tmplm);
         ckd_free(tmplm);
     }
     if (dictfile && !path_is_absolute(dictfile) && !file_exists(dictfile)) {
         char *tmpdict = string_join(MODELDIR "/lm/", dictfile, NULL);
-        cmd_ln_set_str_r(ps->config, "-dict", tmpdict);
+        cmd_ln_set_str_r(config, "-dict", tmpdict);
         ckd_free(tmpdict);
     }
 #endif
 
     /* Get acoustic model filenames and add them to the command-line */
-    if ((hmmdir = cmd_ln_str_r(ps->config, "-hmm")) != NULL) {
-        ps_add_file(ps, "-mdef", hmmdir, "mdef");
-        ps_add_file(ps, "-mean", hmmdir, "means");
-        ps_add_file(ps, "-var", hmmdir, "variances");
-        ps_add_file(ps, "-tmat", hmmdir, "transition_matrices");
-        ps_add_file(ps, "-mixw", hmmdir, "mixture_weights");
-        ps_add_file(ps, "-sendump", hmmdir, "sendump");
-        ps_add_file(ps, "-fdict", hmmdir, "noisedict");
-        ps_add_file(ps, "-lda", hmmdir, "feature_transform");
-        ps_add_file(ps, "-featparams", hmmdir, "feat.params");
-        ps_add_file(ps, "-senmgau", hmmdir, "senmgau");
+    if ((hmmdir = cmd_ln_str_r(config, "-hmm")) != NULL) {
+        ps_add_file(config, "-mdef", hmmdir, "mdef");
+        ps_add_file(config, "-mean", hmmdir, "means");
+        ps_add_file(config, "-var", hmmdir, "variances");
+        ps_add_file(config, "-tmat", hmmdir, "transition_matrices");
+        ps_add_file(config, "-mixw", hmmdir, "mixture_weights");
+        ps_add_file(config, "-sendump", hmmdir, "sendump");
+        ps_add_file(config, "-fdict", hmmdir, "noisedict");
+        ps_add_file(config, "-lda", hmmdir, "feature_transform");
+        ps_add_file(config, "-featparams", hmmdir, "feat.params");
+        ps_add_file(config, "-senmgau", hmmdir, "senmgau");
     }
 }
 
@@ -161,6 +161,7 @@ ps_reinit(ps_decoder_t *ps, cmd_ln_t *config)
      * (really, we will) */
     return 0;
 }
+
 ps_decoder_t *
 ps_init(cmd_ln_t *config)
 {
@@ -185,7 +186,7 @@ ps_init(cmd_ln_t *config)
     ps->senlogdir = cmd_ln_str_r(ps->config, "-senlogdir");
 
     /* Fill in some default arguments. */
-    ps_init_defaults(ps);
+    ps_init_defaults(ps->config);
 
     /* Logmath computation.  We share this between all acmods and
      * search models, otherwise the scores will never make sense.

@@ -12,7 +12,10 @@
 int
 main(int argc, char *argv[])
 {
-	ps_decoder_t *ps;
+	bin_mdef_t *mdef;
+	dict2pid_t *d2p;
+	dict_t *dict;
+	logmath_t *lmath;
 	cmd_ln_t *config;
 	acmod_t *acmod;
 	ps_search_t *fwdflat;
@@ -23,16 +26,17 @@ main(int argc, char *argv[])
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
+			     "-lm", TESTDATADIR "/hub4.5000.DMP",
 			     "-dict", TESTDATADIR "/hub4.5000.dic",
-			     "-fwdtree", "no",
-			     "-fwdflat", "no",
-			     "-bestpath", "no", NULL);
-
-	/* Get the API to initialize a bunch of stuff for us (but not the search). */
-	ps = ps_init(config);
-	acmod = ps->acmod;
-	cmd_ln_set_str_r(config, "-lm", TESTDATADIR "/hub4.5000.DMP");
-	fwdflat = fwdflat_search_init(config, acmod, ps->dict, ps->d2p, NULL);
+			     NULL);
+	ps_init_defaults(config);
+	lmath = logmath_init(cmd_ln_float32_r(config, "-logbase"),
+			     0, FALSE);
+	acmod = acmod_init(config, lmath, NULL, NULL);
+	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));
+	dict = dict_init(config, mdef);
+	d2p = dict2pid_build(mdef, dict);
+	fwdflat = fwdflat_search_init(config, acmod, dict, d2p, NULL);
 
 	nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
 			      ".mfc", 0, -1, NULL, -1);
@@ -50,7 +54,10 @@ main(int argc, char *argv[])
 	printf("hyp: %s (%d)\n", hyp, score);
 
 	ps_search_free(fwdflat);
-	ps_free(ps);
+	feat_array_free(feat);
+	acmod_free(acmod);
+	logmath_free(lmath);
+	cmd_ln_free_r(config);
 
 	return 0;
 }

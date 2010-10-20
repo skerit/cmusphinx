@@ -12,7 +12,9 @@
 int
 main(int argc, char *argv[])
 {
-	ps_decoder_t *ps;
+	bin_mdef_t *mdef;
+	dict2pid_t *d2p;
+	dict_t *dict;
 	cmd_ln_t *config;
 	acmod_t *acmod, *acmod2;
 	ps_search_t *fwdtree, *fwdtree2;
@@ -20,23 +22,26 @@ main(int argc, char *argv[])
 	int nfr, i;
 	char const *hyp, *hyp2;
 	int32 score, score2;
+	logmath_t *lmath;
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
+			     "-lm", TESTDATADIR "/hub4.5000.DMP",
 			     "-dict", TESTDATADIR "/hub4.5000.dic",
-			     "-fwdtree", "no",
-			     "-fwdflat", "no",
-			     "-bestpath", "no", NULL);
+			     NULL);
+	ps_init_defaults(config);
+	lmath = logmath_init(cmd_ln_float32_r(config, "-logbase"),
+			     0, FALSE);
 
-	/* Get the API to initialize a bunch of stuff for us (but not the search). */
-	ps = ps_init(config);
 	/* FIXME: This actually only tests s2_semi_mgau for now. */
-	acmod = ps->acmod;
+	acmod = acmod_init(config, lmath, NULL, NULL);
 	acmod2 = acmod_copy(acmod);
+	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));
+	dict = dict_init(config, mdef);
+	d2p = dict2pid_build(mdef, dict);
 
-	cmd_ln_set_str_r(config, "-lm", TESTDATADIR "/hub4.5000.DMP");
-	fwdtree = fwdtree_search_init(config, acmod, ps->dict, ps->d2p);
-	fwdtree2 = fwdtree_search_init(config, acmod2, ps->dict, ps->d2p);
+	fwdtree = fwdtree_search_init(config, acmod, dict, d2p);
+	fwdtree2 = fwdtree_search_init(config, acmod2, dict, d2p);
 
 	nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
 			      ".mfc", 0, -1, NULL, -1);
@@ -50,14 +55,10 @@ main(int argc, char *argv[])
 	for (i = 0; i < nfr; ++i) {
 		acmod_process_feat(acmod, feat[i]);
 		acmod_process_feat(acmod2, feat[i]);
-		while (acmod->n_feat_frame > 0) {
-			ps_search_step(fwdtree, acmod->output_frame);
-			acmod_advance(acmod);
-		}
-		while (acmod2->n_feat_frame > 0) {
-			ps_search_step(fwdtree2, acmod2->output_frame);
-			acmod_advance(acmod2);
-		}
+		ps_search_step(fwdtree);
+		acmod_advance(acmod);
+		ps_search_step(fwdtree2);
+		acmod_advance(acmod2);
 	}
 	ps_search_finish(fwdtree);
 	hyp = ps_search_hyp(fwdtree, &score);
@@ -72,8 +73,10 @@ main(int argc, char *argv[])
 	ps_search_free(fwdtree);
 	ps_search_free(fwdtree2);
 	feat_array_free(feat);
+	acmod_free(acmod);
 	acmod_free(acmod2);
-	ps_free(ps);
+	logmath_free(lmath);
+	cmd_ln_free_r(config);
 
 	return 0;
 }

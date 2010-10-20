@@ -5,9 +5,11 @@
 int
 main(int argc, char *argv[])
 {
+	bin_mdef_t *mdef;
+	dict2pid_t *d2p;
+	dict_t *dict;
 	fwdflat_arc_buffer_t *arcs;
 	fwdflat_arc_t *a;
-	ps_decoder_t *ps;
 	cmd_ln_t *config;
 	bptbl_t *bptbl;
 	int fi, i, next_sf;
@@ -16,12 +18,15 @@ main(int argc, char *argv[])
 	/* Get the API to initialize a bunch of stuff for us (but not the search). */
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
+			     "-lm", TESTDATADIR "/hub4.5000.DMP",
 			     "-dict", TESTDATADIR "/hub4.5000.dic",
-			     "-fwdtree", "no",
-			     "-fwdflat", "no",
-			     "-bestpath", "no", NULL);
-	ps = ps_init(config);
-	bptbl = bptbl_init(ps->d2p, 10, 10);
+			     NULL);
+	ps_init_defaults(config);
+	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));
+	dict = dict_init(config, mdef);
+	d2p = dict2pid_build(mdef, dict);
+
+	bptbl = bptbl_init(d2p, 10, 10);
 
 	arcs = fwdflat_arc_buffer_init();
 
@@ -53,7 +58,7 @@ main(int argc, char *argv[])
 	E_INFO("next_sf %d\n", next_sf);
 	fwdflat_arc_buffer_extend(arcs, next_sf);
 	i = fwdflat_arc_buffer_add_bps(arcs, bptbl,
-				       0, bptbl->first_invert_bp);
+				       0, bptbl_retired_idx(bptbl));
 	E_INFO("Added %d arcs\n", i);
 	fwdflat_arc_buffer_commit(arcs);
 
@@ -72,7 +77,7 @@ main(int argc, char *argv[])
 	E_INFO("next_sf %d\n", next_sf);
 	fwdflat_arc_buffer_extend(arcs, next_sf);
 	i = fwdflat_arc_buffer_add_bps(arcs, bptbl,
-				       0, bptbl->first_invert_bp);
+				       0, bptbl_retired_idx(bptbl));
 	E_INFO("Added %d arcs\n", i);
 	fwdflat_arc_buffer_commit(arcs);
 
@@ -86,7 +91,7 @@ main(int argc, char *argv[])
 	E_INFO("next_sf %d\n", next_sf);
 	fwdflat_arc_buffer_extend(arcs, next_sf);
 	i = fwdflat_arc_buffer_add_bps(arcs, bptbl,
-				       0, bptbl->first_invert_bp);
+				       0, bptbl_retired_idx(bptbl));
 	E_INFO("Added %d arcs\n", i);
 	fwdflat_arc_buffer_commit(arcs);
 
@@ -116,6 +121,9 @@ main(int argc, char *argv[])
 	fwdflat_arc_buffer_dump(arcs);
 	fwdflat_arc_buffer_free(arcs);
 	bptbl_free(bptbl);
-	ps_free(ps);
+	dict2pid_free(d2p);
+	dict_free(dict);
+	bin_mdef_free(mdef);
+
 	return 0;
 }

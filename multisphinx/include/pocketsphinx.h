@@ -120,6 +120,16 @@ POCKETSPHINX_EXPORT
 arg_t const *ps_args(void);
 
 /**
+ * Set up default arguments in a command-line object.
+ *
+ * This function initializes a command-line with default acoustic and
+ * language models if not already set.  It also finds the relevant
+ * acoustic model files if only -hmm is provided.
+ */
+void
+ps_init_defaults(cmd_ln_t *config);
+
+/**
  * Retain a pointer to the decoder.
  *
  * This increments the reference count on the decoder, allowing it to

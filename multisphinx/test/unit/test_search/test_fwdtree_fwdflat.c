@@ -14,7 +14,10 @@
 int
 main(int argc, char *argv[])
 {
-	ps_decoder_t *ps;
+	bin_mdef_t *mdef;
+	dict2pid_t *d2p;
+	dict_t *dict;
+	logmath_t *lmath;
 	cmd_ln_t *config;
 	acmod_t *acmod, *acmod2;
 	ps_search_t *fwdtree;
@@ -31,22 +34,24 @@ main(int argc, char *argv[])
 	ckd_set_jump(NULL, TRUE);
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
+			     "-lm", TESTDATADIR "/hub4.5000.DMP",
 			     "-dict", TESTDATADIR "/hub4.5000.dic",
-			     "-fwdtree", "no",
-			     "-fwdflat", "no",
 			     "-fwdflatefwid", "3",
 			     "-maxwpf", maxwpf,
-			     "-latsize", "512",
-			     "-bestpath", "no", NULL);
+			     "-latsize", "512", NULL);
 
-	/* Get the API to initialize a bunch of stuff for us (but not the search). */
-	ps = ps_init(config);
-	acmod = ps->acmod;
+	ps_init_defaults(config);
+	lmath = logmath_init(cmd_ln_float32_r(config, "-logbase"),
+			     0, FALSE);
+
+	acmod = acmod_init(config, lmath, NULL, NULL);
 	acmod2 = acmod_copy(acmod);
+	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));
+	dict = dict_init(config, mdef);
+	d2p = dict2pid_build(mdef, dict);
 
-	cmd_ln_set_str_r(config, "-lm", TESTDATADIR "/hub4.5000.DMP");
-	fwdtree = fwdtree_search_init(config, acmod, ps->dict, ps->d2p);
-	fwdflat = fwdflat_search_init(config, acmod2, ps->dict, ps->d2p,
+	fwdtree = fwdtree_search_init(config, acmod, dict, d2p);
+	fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
 				      ((fwdtree_search_t *)fwdtree)->bptbl);
 
 	input_nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
@@ -88,11 +93,13 @@ main(int argc, char *argv[])
 	hyp = ps_search_hyp(fwdflat, &score);
 	printf("fwdflat: %s (%d)\n", hyp, score);
 
+	acmod_free(acmod);
 	acmod_free(acmod2);
 	ps_search_free(fwdtree);
 	ps_search_free(fwdflat);
 	feat_array_free(feat);
-	ps_free(ps);
+	logmath_free(lmath);
+	cmd_ln_free_r(config);
 
 	return 0;
 }

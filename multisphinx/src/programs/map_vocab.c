@@ -155,6 +155,7 @@ prune_dict(dict_t *fulldict, ngram_model_t *fulllm, cmd_ln_t *config, acmod_t *a
 int
 main(int argc, char *argv[])
 {
+#if 0
     ps_decoder_t *ps;
     cmd_ln_t *config;
     acmod_t *acmod;
@@ -195,6 +196,6 @@ main(int argc, char *argv[])
     
     ps_search_free(fwdflat);
     ps_free(ps);
-
+#endif
     return 0;
 }

@@ -13,7 +13,8 @@ INCLUDES = \
 	-I$(top_srcdir)/include/sphinxbase \
 	-I$(top_srcdir)/src/libpocketsphinx \
 	-I$(top_builddir)/include \
-	-DTESTDATADIR=\"$(top_srcdir)/test/data\"
+	-DTESTDATADIR=\"$(top_srcdir)/test/data\" \
+	-DMODELDIR=\"$(top_srcdir)/model\"
 
 LDADD = ${top_builddir}/src/libsphinxbase/libsphinxbase.la \
 	 ${top_builddir}/src/libpocketsphinx/libpocketsphinx.la

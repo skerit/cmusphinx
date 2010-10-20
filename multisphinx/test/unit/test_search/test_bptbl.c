@@ -25,12 +25,15 @@ main(int argc, char *argv[])
 	/* Get the API to initialize a bunch of stuff for us (but not the search). */
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
+			     "-lm", TESTDATADIR "/hub4.5000.DMP",
 			     "-dict", TESTDATADIR "/hub4.5000.dic",
-			     "-fwdtree", "no",
-			     "-fwdflat", "no",
-			     "-bestpath", "no", NULL);
-	ps = ps_init(config);
-	bptbl = bptbl_init(ps->d2p, 10, 10);
+			     NULL);
+	ps_init_defaults(config);
+	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));
+	dict = dict_init(config, mdef);
+	d2p = dict2pid_build(mdef, dict);
+
+	bptbl = bptbl_init(d2p, 10, 10);
 
 	/* Enter a few bps starting at frame zero. */
 	fi = bptbl_push_frame(bptbl, NO_BP);
@@ -156,12 +159,15 @@ main(int argc, char *argv[])
 		word = ps_seg_word(seg);
 		ps_seg_frames(seg, &sf, &ef);
 		post = ps_seg_prob(seg, &ascr, &lscr, &lback);
-		printf("%s (%d:%d) P(w|o) = %f ascr = %d lscr = %d lback = %d\n", word, sf, ef,
-		       logmath_exp(ps_get_logmath(ps), post), ascr, lscr, lback);
+		printf("%s (%d:%d) ascr = %d lscr = %d lback = %d\n",
+		       word, sf, ef,
+		       ascr, lscr, lback);
 	}
 
 	bptbl_free(bptbl);
-	ps_free(ps);
+	dict2pid_free(d2p);
+	dict_free(dict);
+	bin_mdef_free(mdef);
 
 	return 0;
 }
