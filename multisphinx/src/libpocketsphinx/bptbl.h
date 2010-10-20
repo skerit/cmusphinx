@@ -80,9 +80,11 @@ typedef struct bp_s {
 typedef struct bptbl_s {
     dict2pid_t *d2p;     /**< Tied state mapping. */
     bp_t *retired;       /**< Retired backpointer entries. */
-    bp_t *ent;           /**< Active backpointer entries. */
+    int32 n_retired;     /**< Number of retired entries. */
 
+    bp_t *ent;           /**< Active backpointer entries. */
     int32 n_ent;         /**< First free BPTable entry. */
+
     int32 n_alloc;       /**< Number of entries allocated for entry-based arrays (ent, permute) */
 
     int32 *bscore_stack;     /**< Array containing right context scores for word exits. */
