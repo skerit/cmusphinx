@@ -53,7 +53,7 @@
 
 static int bptbl_rcsize(bptbl_t *bptbl, bp_t *be);
 
-#if 1
+#if 0
 #undef E_DEBUG
 #define E_DEBUG(level,x) E_INFO x
 #undef E_DEBUGCONT
@@ -515,6 +515,8 @@ bptbl_finalize(bptbl_t *bptbl)
         return 0;
     /* Mark and GC everything from the last frame. */
     n_retired = bptbl_mark(bptbl, bptbl->n_frame - 1, bptbl->n_frame);
+    /* Include the last frame in the retired count. */
+    n_retired += bptbl_ef_count(bptbl, bptbl->n_frame - 1);
     E_DEBUG(2,("About to retire %d bps\n", n_retired));
     last_retired_bp = bptbl_retire(bptbl, n_retired, bptbl->n_ent);
     /* Last retired bp should be the same as bptbl->n_ent */

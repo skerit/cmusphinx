@@ -111,6 +111,10 @@ main(int argc, char *argv[])
 	for (i = 0; i < 6; ++i) {
 		bp = bptbl_enter(bptbl, 42, 5, 6 + i, 0);
 	}
+	fi = bptbl_push_frame(bptbl, 6);
+	for (i = 0; i < 3; ++i) {
+		bp = bptbl_enter(bptbl, 69, 6, 12 + i, 0);
+	}
 
 	/* Finalize the backpointer table (i.e. retire all active) */
 	dump_bptable(bptbl);
