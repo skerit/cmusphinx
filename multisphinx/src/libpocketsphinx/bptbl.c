@@ -200,6 +200,7 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
     /* Mark everything immediately reachable from (ef..cf) */
     bitvec_clear_all(bptbl->valid_fr, cf - bptbl_active_frame(bptbl));
     n_active_fr = 0;
+#if 1
     /* NOTE: This for statement can be sped up at the cost of being
      * less obvious. */
     for (i = bptbl_ef_idx(bptbl, ef);
@@ -212,13 +213,20 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
         if (prev != NULL) {
             int frame = prev->frame;
             if (frame >= bptbl_active_frame(bptbl)
-                && bitvec_is_clear(bptbl->valid_fr, frame - bptbl_active_frame(bptbl))) {
+                && bitvec_is_clear(bptbl->valid_fr,
+                                   frame - bptbl_active_frame(bptbl))) {
                 E_DEBUG(5,("Validate frame %d\n", frame - bptbl_active_frame(bptbl)));
                 bitvec_set(bptbl->valid_fr, frame - bptbl_active_frame(bptbl));
                 ++n_active_fr;
             }
         }
     }
+#else
+    for (i = bptbl_active_frame(bptbl); i < cf; ++i)
+        bitvec_set(bptbl->valid_fr, i - bptbl_active_frame(bptbl));
+    n_active_fr = i - bptbl_active_frame(bptbl);
+#endif
+    
     /* Track the last frame with outgoing backpointers for gc */
     last_gc_fr = ef - 1;
     /* Walk back from every frame marked active up to the last one

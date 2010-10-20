@@ -59,6 +59,13 @@
 #define chan_v_eval(chan) hmm_vit_eval(&(chan)->hmm)
 #endif
 
+#if 0
+#undef E_DEBUG
+#define E_DEBUG(level,x) E_INFO x
+#undef E_DEBUGCONT
+#define E_DEBUGCONT(level,x) E_INFOCONT x
+#endif
+
 static int fwdtree_search_decode(ps_search_t *base);
 static int fwdtree_search_free(ps_search_t *base);
 static char const *fwdtree_search_hyp(ps_search_t *base, int32 *out_score);

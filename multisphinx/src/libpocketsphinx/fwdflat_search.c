@@ -59,6 +59,13 @@
 #define chan_v_eval(chan) hmm_vit_eval(&(chan)->hmm)
 #endif
 
+#if 0
+#undef E_DEBUG
+#define E_DEBUG(level,x) E_INFO x
+#undef E_DEBUGCONT
+#define E_DEBUGCONT(level,x) E_INFOCONT x
+#endif
+
 static int fwdflat_search_start(ps_search_t *base);
 static int fwdflat_search_decode(ps_search_t *base);
 static int fwdflat_search_finish(ps_search_t *base);
@@ -830,7 +837,7 @@ fwdflat_create_expand_word_list(fwdflat_search_t *ffs)
 }
 
 static void
-fwdflat_dump_expand_words(fwdflat_search_t *ffs, int sf, int ef)
+fwdflat_dump_expand_words(fwdflat_search_t *ffs, int sf)
 {
     int i;
 
@@ -901,6 +908,7 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
 
     /* Do word transitions. */
     fwdflat_create_expand_word_list(ffs);
+    /* fwdflat_dump_expand_words(ffs, frame_idx); */
     fwdflat_word_transition(ffs, frame_idx);
     fwdflat_create_active_word_list(ffs, frame_idx + 1);
 
@@ -984,17 +992,21 @@ fwdflat_search_decode_2ndpass(fwdflat_search_t *ffs, acmod_t *acmod)
         while (final
                || fwdflat_arc_buffer_iter(ffs->input_arcs,
                                           end_win - 1) != NULL) {
+            int start_win;
+
             if ((frame_idx = acmod_wait(acmod, timeout)) < 0)
                 break;
             end_win = frame_idx + ffs->max_sf_win;
+            start_win = frame_idx - ffs->max_sf_win;
+            if (start_win < 0) start_win = 0;
             /* We are going to use the window so truncate it. */
             if (end_win > bptbl_frame_idx(ffs->input_bptbl))
                 end_win = bptbl_frame_idx(ffs->input_bptbl);
-            fwdflat_search_expand_arcs(ffs, frame_idx, end_win);
+            fwdflat_search_expand_arcs(ffs, start_win, end_win);
             if ((k = fwdflat_search_one_frame(ffs, frame_idx)) <= 0)
                 break;
             frame_idx += k;
-            fwdflat_arc_buffer_release(ffs->input_arcs, frame_idx);
+            fwdflat_arc_buffer_release(ffs->input_arcs, start_win);
         }
     }
     fwdflat_search_finish(ps_search_base(ffs));
@@ -1061,6 +1073,7 @@ fwdflat_search_finish(ps_search_t *base)
            garray_next_idx(ffs->word_list));
     /* Reset the utterance vocabulary. */
     destroy_fwdflat_chan(ffs);
+    /* bptbl_dump(ffs->bptbl); */
 
     return 0;
 }
