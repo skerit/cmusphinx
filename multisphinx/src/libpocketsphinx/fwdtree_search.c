@@ -144,6 +144,7 @@ fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
                                   sizeof(*fts->last_ltrans));
 
     fts->bptbl = bptbl_init(d2p, cmd_ln_int32_r(config, "-latsize"), 256);
+    fts->word_idx = ckd_calloc(dict_size(dict), sizeof(*fts->word_idx));
 
     /* Allocate active word list array */
     fts->active_word_list = ckd_calloc_2d(2, dict_size(dict),
@@ -618,6 +619,7 @@ fwdtree_search_free(ps_search_t *base)
     listelem_alloc_free(fts->root_chan_alloc);
     ngram_model_free(fts->lmset);
 
+    ckd_free(fts->word_idx);
     ckd_free(fts->word_chan);
     bitvec_free(fts->word_active);
     bptbl_free(fts->bptbl);
@@ -637,13 +639,13 @@ fwdtree_search_reinit(ps_search_t *base, dict_t *dict, dict2pid_t *d2p)
     if (old_n_words != dict_size(dict)) {
         base->n_words = dict_size(dict);
         /* Reallocate these temporary arrays. */
-        ckd_free(fts->bptbl->word_idx);
+        ckd_free(fts->word_idx);
         ckd_free(fts->word_active);
         ckd_free(fts->last_ltrans);
         ckd_free_2d(fts->active_word_list);
         ckd_free(fts->lastphn_cand);
         ckd_free(fts->word_chan);
-        fts->bptbl->word_idx = ckd_calloc(base->n_words, sizeof(*fts->bptbl->word_idx));
+        fts->word_idx = ckd_calloc(base->n_words, sizeof(*fts->word_idx));
         fts->word_active = bitvec_alloc(base->n_words);
         fts->last_ltrans = ckd_calloc(base->n_words, sizeof(*fts->last_ltrans));
         fts->active_word_list
@@ -690,11 +692,11 @@ fwdtree_search_start(ps_search_t *base)
 
     /* Reset backpointer table. */
     bptbl_reset(fts->bptbl);
-    fts->oldest_bp = -1;
+    fts->oldest_bp = NO_BP;
 
     /* Reset word lattice. */
     for (i = 0; i < n_words; ++i)
-        fts->bptbl->word_idx[i] = NO_BP;
+        fts->word_idx[i] = NO_BP;
 
     /* Reset active HMM and word lists. */
     fts->n_active_chan[0] = fts->n_active_chan[1] = 0;
@@ -1141,7 +1143,7 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
         int32 start_score;
 
         /* This can happen if recognition fails. */
-        if (candp->bp == -1)
+        if (candp->bp == NO_BP)
             continue;
         /* Backpointer entry for it. */
         bpe = bptbl_ent(fts->bptbl, candp->bp);
@@ -1526,7 +1528,7 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
     for (bp = bptbl_ef_idx(fts->bptbl, frame_idx);
          bp < bptbl_ef_idx(fts->bptbl, frame_idx + 1); bp++) {
         bpe = bptbl_ent(fts->bptbl, bp);
-        fts->bptbl->word_idx[bpe->wid] = NO_BP;
+        fts->word_idx[bpe->wid] = NO_BP;
 
         /* No transitions from the finish word for obvious reasons. */
         if (bpe->wid == ps_search_finish_wid(fts))
@@ -2028,7 +2030,7 @@ fwdtree_search_save_bp(fwdtree_search_t *fts, int frame_idx,
     int32 bp;
 
     /* Look for an existing exit for this word in this frame. */
-    bp = fts->bptbl->word_idx[w];
+    bp = fts->word_idx[w];
     if (bp != NO_BP) {
         bp_t *bpe = bptbl_ent(fts->bptbl, bp);
         /* Keep only the best scoring one (this is a potential source
@@ -2046,7 +2048,8 @@ fwdtree_search_save_bp(fwdtree_search_t *fts, int frame_idx,
         fts->bptbl->bscore_stack[bpe->s_idx + rc] = score;
     }
     else {
-        bptbl_enter(fts->bptbl, w, frame_idx, path, score, rc);
+        bp_t *bpe = bptbl_enter(fts->bptbl, w, frame_idx, path, score, rc);
+        fts->word_idx[w] = bptbl_idx(fts->bptbl, bpe);
     }
 }
 

@@ -76,8 +76,6 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
     bptbl->permute = ckd_calloc(bptbl->n_permute_alloc, sizeof(*bptbl->permute));
 
     bptbl->retired = ckd_calloc(bptbl->n_retired_alloc, sizeof(*bptbl->retired));
-    bptbl->word_idx = ckd_calloc(dict_size(d2p->dict),
-                                 sizeof(*bptbl->word_idx));
     bptbl->bscore_stack_size = bptbl->n_ent_alloc * 20;
     bptbl->bscore_stack = ckd_calloc(bptbl->bscore_stack_size,
                                      sizeof(*bptbl->bscore_stack));
@@ -96,7 +94,6 @@ bptbl_free(bptbl_t *bptbl)
     if (bptbl == NULL)
         return;
     dict2pid_free(bptbl->d2p);
-    ckd_free(bptbl->word_idx);
     ckd_free(bptbl->ent);
     ckd_free(bptbl->retired);
     ckd_free(bptbl->permute);
@@ -517,7 +514,6 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx, int32 path,
         E_INFO("Resized score stack to %d entries\n", bptbl->bscore_stack_size);
     }
 
-    bptbl->word_idx[w] = bptbl->n_ent;
     be = bptbl_ent(bptbl, bptbl->n_ent);
     be->wid = w;
     be->frame = frame_idx;

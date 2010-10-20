@@ -119,6 +119,9 @@ typedef struct fwdflat_search_s {
     bptbl_t *bptbl;
     int32 oldest_bp; /**< Oldest bptable entry active in decoding graph. */
 
+    int32 *word_idx;     /**< BPTable index for any word in current frame;
+                            cleared before each frame */
+
     /**
      * First HMMs for multiple-phone words.
      */

@@ -145,6 +145,8 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     ffs->word_chan = ckd_calloc(dict_size(dict),
                                 sizeof(*ffs->word_chan));
     ffs->word_active = bitvec_alloc(dict_size(dict));
+    ffs->word_idx = ckd_calloc(dict_size(dict),
+                               sizeof(*ffs->word_idx));
 
     ffs->bptbl = bptbl_init(d2p, cmd_ln_int32_r(config, "-latsize"), 256);
 
@@ -243,6 +245,7 @@ fwdflat_search_free(ps_search_t *base)
     listelem_alloc_free(ffs->root_chan_alloc);
     ngram_model_free(ffs->lmset);
 
+    ckd_free(ffs->word_idx);
     ckd_free(ffs->word_chan);
     bitvec_free(ffs->word_active);
     bptbl_free(ffs->bptbl);
@@ -260,13 +263,13 @@ fwdflat_search_reinit(ps_search_t *base, dict_t *dict, dict2pid_t *d2p)
     old_n_words = ps_search_n_words(ffs);
     if (old_n_words != dict_size(dict)) {
         base->n_words = dict_size(dict);
-        ckd_free(ffs->bptbl->word_idx);
+        ckd_free(ffs->word_idx);
         ckd_free(ffs->word_active);
         ckd_free_2d(ffs->active_word_list);
         ckd_free(ffs->word_chan);
 
-        ffs->bptbl->word_idx = ckd_calloc(base->n_words,
-                                          sizeof(*ffs->bptbl->word_idx));
+        ffs->word_idx = ckd_calloc(base->n_words,
+                                   sizeof(*ffs->word_idx));
         ffs->word_active = bitvec_alloc(base->n_words);
         ffs->active_word_list
             = ckd_calloc_2d(2, base->n_words,
@@ -407,7 +410,7 @@ fwdflat_search_start(ps_search_t *base)
     bptbl_reset(ffs->bptbl);
     ffs->oldest_bp = -1;
     for (i = 0; i < ps_search_n_words(ffs); i++)
-        ffs->bptbl->word_idx[i] = NO_BP;
+        ffs->word_idx[i] = NO_BP;
 
     /* Start search with <s> */
     rhmm = (first_node_t *) ffs->word_chan[ps_search_start_wid(ffs)];
@@ -518,7 +521,7 @@ fwdflat_search_save_bp(fwdflat_search_t *ffs, int frame_idx,
     int32 bp;
 
     /* Look for an existing exit for this word in this frame. */
-    bp = ffs->bptbl->word_idx[w];
+    bp = ffs->word_idx[w];
     if (bp != NO_BP) {
         bp_t *bpe = bptbl_ent(ffs->bptbl, bp);
         /* Keep only the best scoring one (this is a potential source
@@ -536,7 +539,8 @@ fwdflat_search_save_bp(fwdflat_search_t *ffs, int frame_idx,
         ffs->bptbl->bscore_stack[bpe->s_idx + rc] = score;
     }
     else {
-        bptbl_enter(ffs->bptbl, w, frame_idx, path, score, rc);
+        bp_t *bpe = bptbl_enter(ffs->bptbl, w, frame_idx, path, score, rc);
+        ffs->word_idx[w] = bptbl_idx(ffs->bptbl, bpe);
     }
 }
 
@@ -685,7 +689,7 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
         bp_t *ent;
 
         ent = bptbl_ent(ffs->bptbl, b);
-        ffs->bptbl->word_idx[ent->wid] = NO_BP;
+        ffs->word_idx[ent->wid] = NO_BP;
 
         if (ent->wid == ps_search_finish_wid(ffs))
             continue;

@@ -4,6 +4,11 @@
 * Give fwdflat its own bptbl - DONE
 * Figure out bscorestack problems - DONE (apparently)
 
+Places where retiring backpointers might trip us up
+ * fake_lmstate - potentially has to crawl a long way back across lots
+   of silence/noise words.
+ * last_ltrans - 
+
 * Split bptbl into active and retired
   - Retire bps to separate table
     * Partition the permute array into retired and active indices
