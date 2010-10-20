@@ -19,7 +19,7 @@ main(int argc, char *argv[])
 	ps_search_t *fwdtree;
 	ps_search_t *fwdflat;
 	mfcc_t ***feat;
-	int nfr, i;
+	int input_nfr, nfr, i;
 	char const *hyp;
 	int32 score;
 	int fffr;
@@ -29,6 +29,7 @@ main(int argc, char *argv[])
 			     "-dict", TESTDATADIR "/hub4.5000.dic",
 			     "-fwdtree", "no",
 			     "-fwdflat", "no",
+			     "-fwdflatefwid", "3",
 			     "-bestpath", "no", NULL);
 
 	/* Get the API to initialize a bunch of stuff for us (but not the search). */
@@ -41,16 +42,16 @@ main(int argc, char *argv[])
 	fwdflat = fwdflat_search_init(config, acmod2, ps->dict, ps->d2p,
 				      ((fwdtree_search_t *)fwdtree)->bptbl);
 
-	nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
+	input_nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
 			      ".mfc", 0, -1, NULL, -1);
-	feat = feat_array_alloc(acmod->fcb, nfr);
-	if ((nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
+	feat = feat_array_alloc(acmod->fcb, input_nfr);
+	if ((input_nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
 				   ".mfc", 0, -1, feat, -1)) < 0)
 		E_FATAL("Failed to read mfc file\n");
 	ps_search_start(fwdtree);
 	ps_search_start(fwdflat);
 	fffr = 0;
-	for (i = 0; i < 200; ++i) {
+	for (i = 0; i < input_nfr; ++i) {
 		acmod_process_feat(acmod, feat[i]);
 		ps_search_step(fwdtree);
 		fffr += acmod_process_feat(acmod2, feat[fffr]);
@@ -63,7 +64,7 @@ main(int argc, char *argv[])
 	hyp = ps_search_hyp(fwdtree, &score);
 	printf("fwdtree: %s (%d)\n", hyp, score);
 
-	while (fffr < 200) {
+	while (fffr < input_nfr) {
 		fffr += acmod_process_feat(acmod2, feat[fffr]);
 		if ((nfr = ps_search_step(fwdflat)) <= 0)
 			break;

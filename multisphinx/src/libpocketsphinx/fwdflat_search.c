@@ -731,8 +731,10 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
         for (w = 0; w < ps_search_n_words(ffs); w++) {
             int32 n_used;
 
-            if (!ngram_model_set_known_wid(ffs->lmset,
-                                           dict_basewid(ps_search_dict(ffs),w)))
+            if (!ngram_model_set_known_wid(ffs->lmset, dict_basewid(dict,w)))
+                continue;
+            if (ffs->input_bptbl != NULL
+                && ffs->input_words[w] < ffs->min_ef_width)
                 continue;
 
             /* Get the exit score we recorded in save_bwd_ptr(), or
@@ -907,11 +909,11 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs)
 }
 
 static void
-fwdflat_dump_active_words(fwdflat_search_t *ffs)
+fwdflat_dump_active_words(fwdflat_search_t *ffs, int sf, int ef)
 {
     int i, j;
 
-    E_INFO("Active words from input:\n");
+    E_INFO("Active words in %d:%d:\n", sf, ef);
     for (i = 0; i < ps_search_n_words(ffs); ++i) {
         if (ffs->input_words[i] >= ffs->min_ef_width) {
             E_INFO_NOFN("%s (%d exits)\n",
@@ -927,16 +929,19 @@ static int
 fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
 {
     fwdflat_arc_t *arc_start, *arc_end, *arc;
+    dict_t *dict = ps_search_dict(ffs);
 
-    //E_INFO("Expanding arcs from %d to %d\n", sf, ef);
     arc_start = fwdflat_arc_buffer_iter(ffs->input_arcs, sf);
     arc_end = fwdflat_arc_buffer_iter(ffs->input_arcs, ef);
     memset(ffs->input_words, 0, ps_search_n_words(ffs) * sizeof(*ffs->input_words));
     for (arc = arc_start; arc != arc_end;
          arc = fwdflat_arc_next(ffs->input_arcs, arc)) {
-        ++ffs->input_words[arc->wid];
+        /* As before, only count things to which transitions can be
+         * made in the language model. */
+        if (!(dict_filler_word(dict, arc->wid) || arc->wid == dict->startwid))
+            ++ffs->input_words[arc->wid];
     }
-    //fwdflat_dump_active_words(ffs);
+    fwdflat_dump_active_words(ffs, sf, ef);
     return 0;
 }
 
