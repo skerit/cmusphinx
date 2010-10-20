@@ -1,4 +1,5 @@
 check_PROGRAMS = \
+	test_bptbl \
 	test_fwdtree \
 	test_fwdflat
 
