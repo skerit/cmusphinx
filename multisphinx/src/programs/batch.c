@@ -277,52 +277,6 @@ process_mllrctl_line(ps_decoder_t *ps, cmd_ln_t *config, char const *file)
 }
 
 static int
-process_fsgctl_line(ps_decoder_t *ps, cmd_ln_t *config, char const *file)
-{
-    fsg_set_t *fsgset = ps_get_fsgset(ps);
-    fsg_model_t *fsg;
-    char const *fsgdir, *fsgext;
-    char *infile = NULL;
-    static char *lastfile;
-
-    if (file == NULL)
-        return 0;
-
-    if (lastfile && 0 == strcmp(file, lastfile))
-        return 0;
-
-    fsgext = cmd_ln_str_r(config, "-fsgext");
-    if ((fsgdir = cmd_ln_str_r(config, "-fsgdir")))
-        infile = string_join(fsgdir, "/", file,
-                             fsgext ? fsgext : "", NULL);
-    else if (fsgext)
-        infile = string_join(file, fsgext, NULL);
-    else
-        infile = ckd_salloc(file);
-
-    if ((fsg = fsg_model_readfile(infile, ps_get_logmath(ps),
-                                  cmd_ln_float32_r(config, "-lw"))) == NULL)
-        goto error_out;
-
-    if (fsgset == NULL)
-        fsgset = ps_update_fsgset(ps);
-    if (lastfile)
-        fsg_set_remove_byname(fsgset, lastfile);
-
-    ckd_free(lastfile);
-    lastfile = ckd_salloc(file);
-
-    E_INFO("Using FSG: %s\n", lastfile);
-    fsg_set_add(fsgset, lastfile, fsg);
-    fsg_set_select(fsgset, lastfile);
-
-    ps_update_fsgset(ps);
-error_out:
-    ckd_free(infile);
-    return 0;
-}
-
-static int
 process_lmnamectl_line(ps_decoder_t *ps, cmd_ln_t *config, char const *lmname)
 {
     ngram_model_t *lmset = ps_get_lmset(ps);
@@ -437,41 +391,6 @@ process_ctl_line(ps_decoder_t *ps, cmd_ln_t *config,
 }
 
 static int
-write_lattice(ps_decoder_t *ps, char const *latdir, char const *uttid)
-{
-    ps_lattice_t *lat;
-    logmath_t *lmath;
-    cmd_ln_t *config;
-    char *outfile;
-    int32 beam;
-
-    if ((lat = ps_get_lattice(ps)) == NULL) {
-        E_ERROR("Failed to obtain word lattice for utterance %s\n", uttid);
-        return -1;
-    }
-    config = ps_get_config(ps);
-    outfile = string_join(latdir, "/", uttid,
-                          cmd_ln_str_r(config, "-outlatext"), NULL);
-    /* Prune lattice. */
-    lmath = ps_get_logmath(ps);
-    beam = logmath_log(lmath, cmd_ln_float64_r(config, "-outlatbeam"));
-    ps_lattice_posterior_prune(lat, beam);
-    if (0 == strcmp("htk", cmd_ln_str_r(config, "-outlatfmt"))) {
-        if (ps_lattice_write_htk(lat, outfile) < 0) {
-            E_ERROR("Failed to write lattice to %s\n", outfile);
-            return -1;
-        }
-    }
-    else {
-        if (ps_lattice_write(lat, outfile) < 0) {
-            E_ERROR("Failed to write lattice to %s\n", outfile);
-            return -1;
-        }
-    }
-    return 0;
-}
-
-static int
 write_hypseg(FILE *fh, ps_decoder_t *ps, char const *uttid)
 {
     int32 score, lscr, sf, ef;
@@ -542,8 +461,8 @@ write_ctm(FILE *fh, ps_decoder_t *ps, ps_seg_t *itor, char const *uttid, int32 f
         /* Skip things that aren't "real words" (FIXME: currently
          * requires s3kr3t h34d3rz...) */
         w = ps_seg_word(itor);
-        wid = dict_wordid(ps->dict, w);
-        if (wid >= 0 && dict_real_word(ps->dict, wid)) {
+        wid = dict_wordid(ps->fwdtree->dict, w);
+        if (wid >= 0 && dict_real_word(ps->fwdtree->dict, wid)) {
             prob = ps_seg_prob(itor, NULL, NULL, NULL);
             ps_seg_frames(itor, &sf, &ef);
         
@@ -553,7 +472,7 @@ write_ctm(FILE *fh, ps_decoder_t *ps, ps_seg_t *itor, char const *uttid, int32 f
                     ustart + (double)sf / frate,
                     (double)(ef - sf) / frate,
                     /* FIXME: More s3kr3tz */
-                    dict_basestr(ps->dict, wid),
+                    dict_basestr(ps->fwdtree->dict, wid),
                     logmath_exp(lmath, prob));
         }
         itor = ps_seg_next(itor);
@@ -701,7 +620,6 @@ process_ctl(ps_decoder_t *ps, cmd_ln_t *config, FILE *ctlfh)
             /* Do actual decoding. */
             process_mllrctl_line(ps, config, mllrfile);
             process_lmnamectl_line(ps, config, lmname);
-            process_fsgctl_line(ps, config, fsgfile);
             process_ctl_line(ps, config, file, uttid, sf, ef);
             hyp = ps_get_hyp(ps, &score, &uttid);
             
@@ -717,7 +635,6 @@ process_ctl(ps_decoder_t *ps, cmd_ln_t *config, FILE *ctlfh)
                 write_ctm(ctmfh, ps, itor, uttid, frate);
             }
             if (outlatdir) {
-                write_lattice(ps, outlatdir, uttid);
             }
             if (nbestdir) {
             }

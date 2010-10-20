@@ -150,11 +150,11 @@
       "Print results and backtraces to log file." },                                            \
 { "-latsize",                                                                                   \
       ARG_INT32,                                                                                \
-      "5000",                                                                                   \
+      "512",                                                                                    \
       "Initial backpointer table size" },                                                       \
 { "-maxwpf",                                                                                    \
       ARG_INT32,                                                                                \
-      "-1",                                                                                     \
+      "50",                                                                                     \
       "Maximum number of distinct word exits at each frame (or -1 for no pruning)" },           \
 { "-maxhmmpf",                                                                                  \
       ARG_INT32,                                                                                \

@@ -11,7 +11,9 @@
 int
 main(int argc, char *argv[])
 {
-	ps_decoder_t *ps;
+	bin_mdef_t *mdef;
+	dict2pid_t *d2p;
+	dict_t *dict;
 	cmd_ln_t *config;
 	ps_seg_t *seg;
 	bptbl_t *bptbl;

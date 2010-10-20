@@ -10,12 +10,8 @@ libpocketsphinx_la_SOURCES =			\
 	acmod.c					\
 	bin_mdef.c				\
 	bptbl.c					\
-	blkarray_list.c				\
 	dict.c					\
 	dict2pid.c				\
-	fsg_history.c				\
-	fsg_lextree.c				\
-	fsg_search.c				\
 	fwdtree_search.c			\
 	fwdflat_search.c			\
 	hmm.c					\
@@ -23,11 +19,7 @@ libpocketsphinx_la_SOURCES =			\
 	ms_gauden.c				\
 	ms_mgau.c				\
 	ms_senone.c				\
-	ngram_search.c				\
-	ngram_search_fwdtree.c			\
-	ngram_search_fwdflat.c			\
 	ps_alignment.c				\
-	ps_lattice.c				\
 	ps_mllr.c				\
 	ptm_mgau.c				\
 	sendump.c				\
@@ -41,14 +33,9 @@ noinst_HEADERS =				\
 	pocketsphinx_internal.h			\
 	acmod.h					\
 	bptbl.h					\
-	ngram_search.h				\
 	bin_mdef.h				\
-	blkarray_list.h				\
 	dict.h					\
 	dict2pid.h				\
-	fsg_history.h				\
-	fsg_lextree.h				\
-	fsg_search_internal.h			\
 	fwdtree_search.h			\
 	fwdflat_search.h			\
 	hmm.h					\
@@ -56,9 +43,6 @@ noinst_HEADERS =				\
 	ms_gauden.h				\
 	ms_mgau.h				\
 	ms_senone.h				\
-	ngram_search.h				\
-	ngram_search_fwdtree.h			\
-	ngram_search_fwdflat.h			\
 	ps_alignment.h				\
 	ps_lattice_internal.h			\
 	posixwin32.h				\

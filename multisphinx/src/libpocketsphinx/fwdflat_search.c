@@ -36,7 +36,7 @@
  */
 
 /**
- * @file ngram_search_fwdflat.c Flat lexicon search.
+ * @file fwdflat_search.c Flat lexicon search.
  */
 
 /* System headers. */

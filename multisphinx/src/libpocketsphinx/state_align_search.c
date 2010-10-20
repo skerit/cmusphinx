@@ -123,6 +123,7 @@ phone_transition(state_align_search_t *sas, int frame_idx)
     }
 }
 
+/* FIXME: Use garray_t for this. */
 #define TOKEN_STEP 20
 static void
 extend_tokenstack(state_align_search_t *sas, int frame_idx)
@@ -165,12 +166,15 @@ record_transitions(state_align_search_t *sas, int frame_idx)
 }
 
 static int
-state_align_search_step(ps_search_t *search, int frame_idx)
+state_align_search_step(ps_search_t *search)
 {
     state_align_search_t *sas = (state_align_search_t *)search;
     acmod_t *acmod = ps_search_acmod(search);
     int16 const *senscr;
-    int i;
+    int i, frame_idx;
+
+    /* FIXME: actually we should consume as many frames as available. */
+    frame_idx = acmod_frame(acmod);
 
     /* Calculate senone scores. */
     for (i = 0; i < sas->n_phones; ++i)

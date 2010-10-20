@@ -85,7 +85,6 @@ typedef struct ps_searchfuncs_s {
  */
 struct ps_search_s {
     ps_searchfuncs_t *vt;  /**< V-table of search methods. */
-    ps_search_t *pls;      /**< Phoneme loop for lookahead. */
     cmd_ln_t *config;      /**< Configuration. */
     acmod_t *acmod;        /**< Acoustic model. */
     dict_t *dict;        /**< Pronunciation dictionary. */
@@ -184,19 +183,13 @@ struct ps_decoder_s {
     cmd_ln_t *config;  /**< Configuration. */
     int refcount;      /**< Reference count. */
 
-    /* Basic units of computation. */
-    acmod_t *acmod;    /**< Acoustic model. */
-    dict_t *dict;    /**< Pronunciation dictionary. */
-    dict2pid_t *d2p;   /**< Dictionary to senone mapping. */
     logmath_t *lmath;  /**< Log math computation. */
+    acmod_t *acmod;    /**< Basic acoustic model (cloned for secondary searches) */
 
-    /* Search modules. */
-    glist_t searches;        /**< List of search modules. */
-    /* TODO: Convert this to a stack of searches each with their own
-     * lookahead value. */
-    ps_search_t *search;     /**< Currently active search module. */
-    ps_search_t *phone_loop; /**< Phone loop search for lookahead. */
-    int pl_window;           /**< Window size for phoneme lookahead. */
+    /* Search modules.  FIXME: Currently the fwdtree->fwdflat topology
+     * is hardwired, this will change very soon. */
+    ps_search_t *fwdtree;
+    ps_search_t *fwdflat;
 
     /* Utterance-processing related stuff. */
     uint32 uttno;       /**< Utterance counter. */

@@ -228,6 +228,7 @@ acmod_init(cmd_ln_t *config, logmath_t *lmath, fe_t *fe, feat_t *fcb)
     char const *featparams;
 
     acmod = ckd_calloc(1, sizeof(*acmod));
+    acmod->refcount = 1;
     acmod->config = cmd_ln_retain(config);
     acmod->lmath = logmath_retain(lmath);
     acmod->state = ACMOD_IDLE;
@@ -297,11 +298,13 @@ error_out:
     return NULL;
 }
 
-void
+int
 acmod_free(acmod_t *acmod)
 {
     if (acmod == NULL)
-        return;
+        return 0;
+    if (--acmod->refcount > 0)
+        return acmod->refcount;
 
     feat_free(acmod->fcb);
     fe_free(acmod->fe);
@@ -335,6 +338,14 @@ acmod_free(acmod_t *acmod)
     logmath_free(acmod->lmath);
     cmd_ln_free_r(acmod->config);
     ckd_free(acmod);
+    return 0;
+}
+
+acmod_t *
+acmod_retain(acmod_t *acmod)
+{
+    ++acmod->refcount;
+    return acmod;
 }
 
 acmod_t *

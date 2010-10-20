@@ -144,7 +144,9 @@ struct ps_mgau_s {
  * correspond to the last piece of data input.
  */
 struct acmod_s {
-    /* Global objects, not retained. */
+    int refcount;
+
+    /* Global objects, not retained (FIXME: unsure if that's wise or not). */
     cmd_ln_t *config;          /**< Configuration. */
     logmath_t *lmath;          /**< Log-math computation. */
     glist_t strings;           /**< Temporary acoustic model filenames. */
@@ -219,6 +221,19 @@ acmod_t *acmod_init(cmd_ln_t *config, logmath_t *lmath, fe_t *fe, feat_t *fcb);
 acmod_t *acmod_copy(acmod_t *acmod);
 
 /**
+ * Retain a pointer to an acoustic model.
+ *
+ * Unlike in acmod_copy() this is simply a reference to the same acoustic model.
+ */
+acmod_t *acmod_retain(acmod_t *acmod);
+
+
+/**
+ * Release a pointer to an acoustic model.
+ */
+int acmod_free(acmod_t *acmod);
+
+/**
  * Adapt acoustic model using a linear transform.
  *
  * FIXME: The semantics of this with respect to copied acoustic models
@@ -260,11 +275,6 @@ int acmod_set_mfcfh(acmod_t *acmod, FILE *logfh);
  * @return 0 for success, <0 on error.
  */
 int acmod_set_rawfh(acmod_t *acmod, FILE *logfh);
-
-/**
- * Finalize an acoustic model.
- */
-void acmod_free(acmod_t *acmod);
 
 /**
  * Mark the start of an utterance.

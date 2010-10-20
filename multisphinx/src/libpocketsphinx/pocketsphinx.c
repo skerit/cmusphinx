@@ -48,11 +48,8 @@
 /* Local headers. */
 #include "cmdln_macro.h"
 #include "pocketsphinx_internal.h"
-#include "ps_lattice_internal.h"
-#include "fsg_search_internal.h"
-#include "ngram_search.h"
-#include "ngram_search_fwdtree.h"
-#include "ngram_search_fwdflat.h"
+#include "fwdtree_search.h"
+#include "fwdflat_search.h"
 
 static const arg_t ps_args_def[] = {
     POCKETSPHINX_OPTIONS,
@@ -157,42 +154,26 @@ ps_init_defaults(ps_decoder_t *ps)
     }
 }
 
-static void
-ps_free_searches(ps_decoder_t *ps)
-{
-    gnode_t *gn;
-
-    if (ps->searches == NULL)
-        return;
-
-    for (gn = ps->searches; gn; gn = gnode_next(gn))
-        ps_search_free(gnode_ptr(gn));
-    glist_free(ps->searches);
-    ps->searches = NULL;
-    ps->search = NULL;
-}
-
-static ps_search_t *
-ps_find_search(ps_decoder_t *ps, char const *name)
-{
-    gnode_t *gn;
-
-    for (gn = ps->searches; gn; gn = gnode_next(gn)) {
-        if (0 == strcmp(ps_search_name(gnode_ptr(gn)), name))
-            return (ps_search_t *)gnode_ptr(gn);
-    }
-    return NULL;
-}
-
 int
 ps_reinit(ps_decoder_t *ps, cmd_ln_t *config)
 {
-    char const *lmfile, *lmctl = NULL;
+    /* No longer does anything because we will add words dynamically
+     * (really, we will) */
+    return 0;
+}
+ps_decoder_t *
+ps_init(cmd_ln_t *config)
+{
+    ps_decoder_t *ps = NULL;
+    acmod_t *acmod2 = NULL;
+    dict_t *dict = NULL;
+    dict2pid_t *d2p = NULL;
 
-    if (config && config != ps->config) {
-        cmd_ln_free_r(ps->config);
-        ps->config = config;
-    }
+    ps = ckd_calloc(1, sizeof(*ps));
+    ps->refcount = 1;
+
+    ps->config = config;
+
 #ifndef _WIN32_WCE
     /* Set up logging. */
     if (cmd_ln_str_r(ps->config, "-logfn"))
@@ -206,92 +187,51 @@ ps_reinit(ps_decoder_t *ps, cmd_ln_t *config)
     /* Fill in some default arguments. */
     ps_init_defaults(ps);
 
-    /* Free old searches (do this before other reinit) */
-    ps_free_searches(ps);
+    /* Logmath computation.  We share this between all acmods and
+     * search models, otherwise the scores will never make sense.
+     * This might change. */
+    ps->lmath = logmath_init
+        ((float64)cmd_ln_float32_r(ps->config, "-logbase"), 0,
+         cmd_ln_boolean_r(ps->config, "-bestpath"));
 
-    /* Free old acmod. */
-    acmod_free(ps->acmod);
-    ps->acmod = NULL;
-
-    /* Free old dictionary (must be done after the two things above) */
-    dict_free(ps->dict);
-    ps->dict = NULL;
-
-
-    /* Logmath computation (used in acmod and search) */
-    if (ps->lmath == NULL
-        || (logmath_get_base(ps->lmath) != 
-            (float64)cmd_ln_float32_r(ps->config, "-logbase"))) {
-        if (ps->lmath)
-            logmath_free(ps->lmath);
-        ps->lmath = logmath_init
-            ((float64)cmd_ln_float32_r(ps->config, "-logbase"), 0,
-             cmd_ln_boolean_r(ps->config, "-bestpath"));
-    }
-
-    /* Acoustic model (this is basically everything that
-     * uttproc.c, senscr.c, and others used to do) */
+    /* FIXME: For the time being we will just clone a single acmod
+     * between search passes.  We may use different models in the
+     * future (would require good posterior probability calculation). */
     if ((ps->acmod = acmod_init(ps->config, ps->lmath, NULL, NULL)) == NULL)
-        return -1;
-    /* Make the acmod's feature buffer growable if we are doing two-pass search. */
-    if (cmd_ln_boolean_r(ps->config, "-fwdflat")
-        && cmd_ln_boolean_r(ps->config, "-fwdtree"))
-        acmod_set_grow(ps->acmod, TRUE);
+        goto error_out;
 
-    /* Dictionary and triphone mappings (depends on acmod). */
-    /* FIXME: pass config, change arguments, implement LTS, etc. */
-    if ((ps->dict = dict_init(ps->config, ps->acmod->mdef)) == NULL)
-        return -1;
+    /* FIXME: For the time being we share a single dict (and dict2pid)
+     * between search passes, but this will change in the future. */
+    if ((dict = dict_init(config, ps->acmod->mdef)) == NULL)
+        goto error_out;
+    if ((d2p = dict2pid_build(ps->acmod->mdef, dict)) == NULL)
+        goto error_out;
 
-    /* Determine whether we are starting out in FSG or N-Gram search mode. */
-    if (cmd_ln_str_r(ps->config, "-fsg") || cmd_ln_str_r(ps->config, "-jsgf")) {
-        ps_search_t *fsgs;
+    /* FIXME: For the time being hardcode fwdflat and fwdtree as the
+     * two searches. */
+    ps->fwdtree = fwdtree_search_init(config, ps->acmod, dict, d2p);
+    acmod2 = acmod_copy(ps->acmod);
+    ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
+                                      ((fwdtree_search_t *)ps->fwdtree)->bptbl);
 
-        if ((ps->d2p = dict2pid_build(ps->acmod->mdef, ps->dict)) == NULL)
-            return -1;
-        if ((fsgs = fsg_search_init(ps->config, ps->acmod, ps->dict, ps->d2p)) == NULL)
-            return -1;
-        ps->searches = glist_add_ptr(ps->searches, fsgs);
-        ps->search = fsgs;
-    }
-    else if ((lmfile = cmd_ln_str_r(ps->config, "-lm"))
-             || (lmctl = cmd_ln_str_r(ps->config, "-lmctl"))) {
-        ps_search_t *ngs;
+    /* Release pointers to things now owned by the searches. */
+    acmod_free(acmod2);
+    dict_free(dict);
+    dict2pid_free(d2p);
 
-        if ((ps->d2p = dict2pid_build(ps->acmod->mdef, ps->dict)) == NULL)
-            return -1;
-        if ((ngs = ngram_search_init(ps->config, ps->acmod, ps->dict, ps->d2p)) == NULL)
-            return -1;
-        ps->searches = glist_add_ptr(ps->searches, ngs);
-        ps->search = ngs;
-    }
-    /* Otherwise, we will initialize the search whenever the user
-     * decides to load an FSG or a language model. */
-    else {
-        if ((ps->d2p = dict2pid_build(ps->acmod->mdef, ps->dict)) == NULL)
-            return -1;
-    }
-
-    /* Initialize performance timer. */
+    /* Initialize performance timer (but each search has its own). */
     ps->perf.name = "decode";
     ptmr_init(&ps->perf);
 
-    return 0;
-}
-
-ps_decoder_t *
-ps_init(cmd_ln_t *config)
-{
-    ps_decoder_t *ps;
-
-    ps = ckd_calloc(1, sizeof(*ps));
-    ps->refcount = 1;
-    if (ps_reinit(ps, config) < 0) {
-        ps_free(ps);
-        return NULL;
-    }
     return ps;
+error_out:
+    acmod_free(acmod2);
+    dict_free(dict);
+    dict2pid_free(d2p);
+    ps_free(ps);
+    return NULL;
 }
+
 
 arg_t const *
 ps_args(void)
@@ -309,17 +249,13 @@ ps_retain(ps_decoder_t *ps)
 int
 ps_free(ps_decoder_t *ps)
 {
-    gnode_t *gn;
-
     if (ps == NULL)
         return 0;
     if (--ps->refcount > 0)
         return ps->refcount;
-    for (gn = ps->searches; gn; gn = gnode_next(gn))
-        ps_search_free(gnode_ptr(gn));
-    glist_free(ps->searches);
-    dict_free(ps->dict);
-    dict2pid_free(ps->d2p);
+
+    ps_search_free(ps->fwdtree);
+    ps_search_free(ps->fwdflat);
     acmod_free(ps->acmod);
     logmath_free(ps->lmath);
     cmd_ln_free_r(ps->config);
@@ -361,139 +297,45 @@ ps_get_feat(ps_decoder_t *ps)
 ps_mllr_t *
 ps_update_mllr(ps_decoder_t *ps, ps_mllr_t *mllr)
 {
-    return acmod_update_mllr(ps->acmod, mllr);
+    return NULL;
 }
 
 ngram_model_t *
 ps_get_lmset(ps_decoder_t *ps)
 {
-    if (ps->search == NULL
-        || 0 != strcmp(ps_search_name(ps->search), "ngram"))
-        return NULL;
-    return ((ngram_search_t *)ps->search)->lmset;
+    return NULL;
 }
 
 ngram_model_t *
 ps_update_lmset(ps_decoder_t *ps, ngram_model_t *lmset)
 {
-    ngram_search_t *ngs;
-    ps_search_t *search;
-
-    /* Look for N-Gram search. */
-    search = ps_find_search(ps, "ngram");
-    if (search == NULL) {
-        /* Initialize N-Gram search. */
-        search = ngram_search_init(ps->config, ps->acmod, ps->dict, ps->d2p);
-        if (search == NULL)
-            return NULL;
-        ps->searches = glist_add_ptr(ps->searches, search);
-        ngs = (ngram_search_t *)search;
-    }
-    else {
-        ngs = (ngram_search_t *)search;
-        /* Free any previous lmset if this is a new one. */
-        if (ngs->lmset != NULL && ngs->lmset != lmset)
-            ngram_model_free(ngs->lmset);
-        ngs->lmset = lmset;
-        /* Tell N-Gram search to update its view of the world. */
-        if (ps_search_reinit(search, ps->dict, ps->d2p) < 0)
-            return NULL;
-    }
-    ps->search = search;
-    return ngs->lmset;
+    return NULL;
 }
 
 fsg_set_t *
 ps_get_fsgset(ps_decoder_t *ps)
 {
-    if (ps->search == NULL
-        || 0 != strcmp(ps_search_name(ps->search), "fsg"))
-        return NULL;
-    return (fsg_set_t *)ps->search;
+    return NULL;
 }
 
 fsg_set_t *
 ps_update_fsgset(ps_decoder_t *ps)
 {
-    ps_search_t *search;
-
-    /* Look for FSG search. */
-    search = ps_find_search(ps, "fsg");
-    if (search == NULL) {
-        /* Initialize FSG search. */
-        search = fsg_search_init(ps->config,
-                                 ps->acmod, ps->dict, ps->d2p);
-        ps->searches = glist_add_ptr(ps->searches, search);
-    }
-    else {
-        /* Tell FSG search to update its view of the world. */
-        if (ps_search_reinit(search, ps->dict, ps->d2p) < 0)
-            return NULL;
-    }
-    ps->search = search;
-    return (fsg_set_t *)search;
+    return NULL;
 }
 
 int
 ps_load_dict(ps_decoder_t *ps, char const *dictfile,
              char const *fdictfile, char const *format)
 {
-    cmd_ln_t *newconfig;
-    dict2pid_t *d2p;
-    dict_t *dict;
-    gnode_t *gn;
-    int rv;
-
-    /* Create a new scratch config to load this dict (so existing one
-     * won't be affected if it fails) */
-    newconfig = cmd_ln_init(NULL, ps_args(), TRUE, NULL);
-    cmd_ln_set_boolean_r(newconfig, "-dictcase",
-                         cmd_ln_boolean_r(ps->config, "-dictcase"));
-    cmd_ln_set_str_r(newconfig, "-dict", dictfile);
-    if (fdictfile)
-        cmd_ln_set_str_r(newconfig, "-fdict", fdictfile);
-    else
-        cmd_ln_set_str_r(newconfig, "-fdict",
-                         cmd_ln_str_r(ps->config, "-fdict"));
-
-    /* Try to load it. */
-    if ((dict = dict_init(newconfig, ps->acmod->mdef)) == NULL) {
-        cmd_ln_free_r(newconfig);
-        return -1;
-    }
-
-    /* Reinit the dict2pid. */
-    if ((d2p = dict2pid_build(ps->acmod->mdef, dict)) == NULL) {
-        cmd_ln_free_r(newconfig);
-        return -1;
-    }
-
-    /* Success!  Update the existing config to reflect new dicts and
-     * drop everything into place. */
-    cmd_ln_free_r(newconfig);
-    cmd_ln_set_str_r(ps->config, "-dict", dictfile);
-    if (fdictfile)
-        cmd_ln_set_str_r(ps->config, "-fdict", fdictfile);
-    dict_free(ps->dict);
-    ps->dict = dict;
-    dict2pid_free(ps->d2p);
-    ps->d2p = d2p;
-
-    /* And tell all searches to reconfigure themselves. */
-    for (gn = ps->searches; gn; gn = gnode_next(gn)) {
-        ps_search_t *search = gnode_ptr(gn);
-        if ((rv = ps_search_reinit(search, dict, d2p)) < 0)
-            return rv;
-    }
-
-    return 0;
+    return -1;
 }
 
 int
 ps_save_dict(ps_decoder_t *ps, char const *dictfile,
              char const *format)
 {
-    return dict_write(ps->dict, dictfile, format);
+    return -1;
 }
 
 int
@@ -502,59 +344,7 @@ ps_add_word(ps_decoder_t *ps,
             char const *phones,
             int update)
 {
-    int32 wid, lmwid;
-    ngram_model_t *lmset;
-    s3cipid_t *pron;
-    char **phonestr, *tmp;
-    int np, i, rv;
-
-    /* Parse phones into an array of phone IDs. */
-    tmp = ckd_salloc(phones);
-    np = str2words(tmp, NULL, 0);
-    phonestr = ckd_calloc(np, sizeof(*phonestr));
-    str2words(tmp, phonestr, np);
-    pron = ckd_calloc(np, sizeof(*pron));
-    for (i = 0; i < np; ++i) {
-        pron[i] = bin_mdef_ciphone_id(ps->acmod->mdef, phonestr[i]);
-        if (pron[i] == -1) {
-            E_ERROR("Unknown phone %s in phone string %s\n",
-                    phonestr[i], tmp);
-            ckd_free(phonestr);
-            ckd_free(tmp);
-            ckd_free(pron);
-            return -1;
-        }
-    }
-    /* No longer needed. */
-    ckd_free(phonestr);
-    ckd_free(tmp);
-
-    /* Add it to the dictionary. */
-    if ((wid = dict_add_word(ps->dict, word, pron, np)) == -1) {
-        ckd_free(pron);
-        return -1;
-    }
-    /* No longer needed. */
-    ckd_free(pron);
-
-    /* Now we also have to add it to dict2pid. */
-    dict2pid_add_word(ps->d2p, wid);
-
-    if ((lmset = ps_get_lmset(ps)) != NULL) {
-        /* Add it to the LM set (meaning, the current LM).  In a perfect
-         * world, this would result in the same WID, but because of the
-         * weird way that word IDs are handled, it doesn't. */
-        if ((lmwid = ngram_model_add_word(lmset, word, 1.0))
-            == NGRAM_INVALID_WID)
-            return -1;
-    }
- 
-    /* Rebuild the widmap and search tree if requested. */
-    if (update) {
-        if ((rv = ps_search_reinit(ps->search, ps->dict, ps->d2p) < 0))
-            return rv;
-    }
-    return wid;
+    return -1;
 }
 
 int
@@ -600,14 +390,6 @@ ps_decode_raw(ps_decoder_t *ps, FILE *rawfh,
 int
 ps_start_utt(ps_decoder_t *ps, char const *uttid)
 {
-    int rv;
-
-    if (ps->search == NULL) {
-        E_ERROR("No search module is selected, did you forget to "
-                "specify a language model or grammar?\n");
-        return -1;
-    }
-
     ptmr_reset(&ps->perf);
     ptmr_start(&ps->perf);
 
@@ -622,18 +404,10 @@ ps_start_utt(ps_decoder_t *ps, char const *uttid)
         ps->uttid = ckd_salloc(nuttid);
         ++ps->uttno;
     }
-    /* Remove any residual word lattice and hypothesis. */
-    ps_lattice_free(ps->search->dag);
-    ps->search->dag = NULL;
-    ps->search->last_link = NULL;
-    ps->search->post = 0;
-    ckd_free(ps->search->hyp_str);
-    ps->search->hyp_str = NULL;
-
-    if ((rv = acmod_start_utt(ps->acmod)) < 0)
-        return rv;
 
     /* Start logging features and audio if requested. */
+    /* FIXME: In theory ps->acmod is owned by fwdflat search so we
+     * shouldn't be screwing with it here. */
     if (ps->mfclogdir) {
         char *logfn = string_join(ps->mfclogdir, "/",
                                   ps->uttid, ".mfc", NULL);
@@ -674,7 +448,9 @@ ps_start_utt(ps_decoder_t *ps, char const *uttid)
         acmod_set_senfh(ps->acmod, senfh);
     }
 
-    return ps_search_start(ps->search);
+    if (ps_search_start(ps->fwdtree) < 0)
+        return -1;
+    return ps_search_start(ps->fwdflat);
 }
 
 int
@@ -686,8 +462,9 @@ ps_decode_senscr(ps_decoder_t *ps, FILE *senfh,
     ps_start_utt(ps, uttid);
     n_searchfr = 0;
     acmod_set_insenfh(ps->acmod, senfh);
+    /* FIXME: It doesn't work this way anymore. */
     while ((nfr = acmod_read_scores(ps->acmod)) > 0) {
-        if ((nfr = ps_search_step(ps->search)) < 0) {
+        if ((nfr = ps_search_step(ps->fwdtree)) < 0) {
             ps_end_utt(ps);
             return nfr;
         }
@@ -723,7 +500,8 @@ ps_process_raw(ps_decoder_t *ps,
         /* Score and search as much data as possible */
         if (no_search)
             continue;
-        if ((nfr = ps_search_step(ps->search)) < 0)
+        /* FIXME: It doesn't work this way anymore. */
+        if ((nfr = ps_search_step(ps->fwdtree)) < 0)
             return nfr;
         ps->n_frame += nfr;
         n_searchfr += nfr;
@@ -755,7 +533,8 @@ ps_process_cep(ps_decoder_t *ps,
         /* Score and search as much data as possible */
         if (no_search)
             continue;
-        if ((nfr = ps_search_step(ps->search)) < 0)
+        /* FIXME: It doesn't work this way anymore. */
+        if ((nfr = ps_search_step(ps->fwdtree)) < 0)
             return nfr;
         ps->n_frame += nfr;
         n_searchfr += nfr;
@@ -771,14 +550,15 @@ ps_end_utt(ps_decoder_t *ps)
 
     acmod_end_utt(ps->acmod);
 
+    /* FIXME: It doesn't work this way anymore. */
     /* Search any remaining frames. */
-    if ((rv = ps_search_step(ps->search)) < 0) {
+    if ((rv = ps_search_step(ps->fwdtree)) < 0) {
         ptmr_stop(&ps->perf);
         return rv;
     }
     ps->n_frame += rv;
     /* Finish search. */
-    if ((rv = ps_search_finish(ps->search)) < 0) {
+    if ((rv = ps_search_finish(ps->fwdtree)) < 0) {
         ptmr_stop(&ps->perf);
         return rv;
     }
@@ -817,7 +597,8 @@ ps_get_hyp(ps_decoder_t *ps, int32 *out_best_score, char const **out_uttid)
     char const *hyp;
 
     ptmr_start(&ps->perf);
-    hyp = ps_search_hyp(ps->search, out_best_score);
+    /* FIXME: Nope. */
+    hyp = ps_search_hyp(ps->fwdtree, out_best_score);
     if (out_uttid)
         *out_uttid = ps->uttid;
     ptmr_stop(&ps->perf);
@@ -830,7 +611,8 @@ ps_get_prob(ps_decoder_t *ps, char const **out_uttid)
     int32 prob;
 
     ptmr_start(&ps->perf);
-    prob = ps_search_prob(ps->search);
+    /* FIXME: Nope. */
+    prob = ps_search_prob(ps->fwdtree);
     if (out_uttid)
         *out_uttid = ps->uttid;
     ptmr_stop(&ps->perf);
@@ -843,7 +625,8 @@ ps_seg_iter(ps_decoder_t *ps, int32 *out_best_score)
     ps_seg_t *itor;
 
     ptmr_start(&ps->perf);
-    itor = ps_search_seg_iter(ps->search, out_best_score);
+    /* FIXME: Nope. */
+    itor = ps_search_seg_iter(ps->fwdtree, out_best_score);
     ptmr_stop(&ps->perf);
     return itor;
 }
@@ -885,78 +668,37 @@ ps_seg_free(ps_seg_t *seg)
 ps_lattice_t *
 ps_get_lattice(ps_decoder_t *ps)
 {
-    return ps_search_lattice(ps->search);
+    return NULL;
 }
 
 ps_nbest_t *
 ps_nbest(ps_decoder_t *ps, int sf, int ef,
          char const *ctx1, char const *ctx2)
 {
-    ps_lattice_t *dag;
-    ngram_model_t *lmset;
-    ps_astar_t *nbest;
-    float32 lwf;
-    int32 w1, w2;
-
-    if (ps->search == NULL)
-        return NULL;
-    if ((dag = ps_get_lattice(ps)) == NULL)
-        return NULL;
-
-    /* FIXME: This is all quite specific to N-Gram search.  Either we
-     * should make N-best a method for each search module or it needs
-     * to be abstracted to work for N-Gram and FSG. */
-    if (0 != strcmp(ps_search_name(ps->search), "ngram")) {
-        lmset = NULL;
-        lwf = 1.0f;
-    }
-    else {
-        lmset = ((ngram_search_t *)ps->search)->lmset;
-        lwf = ((ngram_search_t *)ps->search)->bestpath_fwdtree_lw_ratio;
-    }
-
-    w1 = ctx1 ? dict_wordid(ps_search_dict(ps->search), ctx1) : -1;
-    w2 = ctx2 ? dict_wordid(ps_search_dict(ps->search), ctx2) : -1;
-    nbest = ps_astar_start(dag, lmset, lwf, sf, ef, w1, w2);
-
-    return (ps_nbest_t *)nbest;
+    return NULL;
 }
 
 void
 ps_nbest_free(ps_nbest_t *nbest)
 {
-    ps_astar_finish(nbest);
 }
 
 ps_nbest_t *
 ps_nbest_next(ps_nbest_t *nbest)
 {
-    ps_latpath_t *next;
-
-    next = ps_astar_next(nbest);
-    if (next == NULL) {
-        ps_nbest_free(nbest);
-        return NULL;
-    }
-    return nbest;
+    return NULL;
 }
 
 char const *
 ps_nbest_hyp(ps_nbest_t *nbest, int32 *out_score)
 {
-    if (nbest->top == NULL)
-        return NULL;
-    if (out_score) *out_score = nbest->top->score;
-    return ps_astar_hyp(nbest, nbest->top);
+    return NULL;
 }
 
 ps_seg_t *
 ps_nbest_seg(ps_nbest_t *nbest, int32 *out_score)
 {
-    if (nbest->top == NULL)
-        return NULL;
-    if (out_score) *out_score = nbest->top->score;
-    return ps_astar_seg_iter(nbest, nbest->top, 1.0);
+    return NULL;
 }
 
 int
@@ -995,8 +737,8 @@ ps_search_init(ps_search_t *search, ps_searchfuncs_t *vt,
                dict2pid_t *d2p)
 {
     search->vt = vt;
-    search->config = config;
-    search->acmod = acmod;
+    search->config = cmd_ln_retain(config);
+    search->acmod = acmod_retain(acmod);
     if (d2p)
         search->d2p = dict2pid_retain(d2p);
     else
@@ -1044,10 +786,9 @@ ps_search_base_reinit(ps_search_t *search, dict_t *dict,
 void
 ps_search_deinit(ps_search_t *search)
 {
-    /* FIXME: We will have refcounting on acmod, config, etc, at which
-     * point we will free them here too. */
+    cmd_ln_free_r(search->config);
+    acmod_free(search->acmod);
     dict_free(search->dict);
     dict2pid_free(search->d2p);
     ckd_free(search->hyp_str);
-    ps_lattice_free(search->dag);
 }
