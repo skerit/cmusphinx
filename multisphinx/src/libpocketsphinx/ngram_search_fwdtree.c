@@ -539,8 +539,10 @@ compute_sen_active(ngram_search_t *ngs, int frame_idx)
 
     /* Flag active senones for root channels */
     for (i = ngs->n_root_chan, rhmm = ngs->root_chan; i > 0; --i, rhmm++) {
-        if (hmm_frame(&rhmm->hmm) == frame_idx)
+        if (hmm_frame(&rhmm->hmm) == frame_idx) {
             acmod_activate_hmm(ps_search_acmod(ngs), &rhmm->hmm);
+            update_oldest_bp(ngs, &rhmm->hmm);
+        }
     }
 
     /* Flag active senones for nonroot channels in HMM tree */
@@ -548,6 +550,7 @@ compute_sen_active(ngram_search_t *ngs, int frame_idx)
     acl = ngs->active_chan_list[frame_idx & 0x1];
     for (hmm = *(acl++); i > 0; --i, hmm = *(acl++)) {
         acmod_activate_hmm(ps_search_acmod(ngs), &hmm->hmm);
+        update_oldest_bp(ngs, &hmm->hmm);
     }
 
     /* Flag active senones for individual word channels */
