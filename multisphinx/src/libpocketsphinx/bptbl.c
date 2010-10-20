@@ -62,6 +62,7 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
 
     bptbl->ent = ckd_calloc(bptbl->n_alloc, sizeof(*bptbl->ent));
     bptbl->permute = ckd_calloc(bptbl->n_alloc, sizeof(*bptbl->permute));
+    bptbl->orig_sf = ckd_calloc(bptbl->n_alloc, sizeof(*bptbl->orig_sf));
     bptbl->word_idx = ckd_calloc(dict_size(d2p->dict),
                                  sizeof(*bptbl->word_idx));
     bptbl->bscore_stack_size = bptbl->n_alloc * 20;
@@ -85,6 +86,7 @@ bptbl_free(bptbl_t *bptbl)
     ckd_free(bptbl->word_idx);
     ckd_free(bptbl->ent);
     ckd_free(bptbl->permute);
+    ckd_free(bptbl->orig_sf);
     ckd_free(bptbl->bscore_stack);
     ckd_free(bptbl->ef_idx);
     ckd_free(bptbl->frm_wordlist);
@@ -152,8 +154,7 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
 {
     int i, j, n_active_fr, last_gc_fr;
 
-    /* Invalidate all backpointer entries up to active_fr - 1. */
-    /* FIXME: actually anything behind active_fr - 1 is fair game. */
+    /* Invalidate all backpointer entries between sf and ef. */
     E_DEBUG(2,("Garbage collecting from %d to %d (%d to %d):\n",
                bptbl_ef_idx(bptbl, sf), bptbl_ef_idx(bptbl, ef), sf, ef));
     for (i = bptbl_ef_idx(bptbl, sf);
@@ -274,13 +275,52 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
 static int
 bptbl_forward_sort(bptbl_t *bptbl, int sidx, int eidx)
 {
+    int i;
+
     E_INFO("Sorting forward from %d to %d\n", sidx, eidx);
     /* Straightforward for now, we just insertion sort these dudes and
      * update the permutation table and first_invert_bp as necessary.
      * This could be done in conjunction with compaction but it
      * becomes very complicated and possibly slower. */
 
-    bptbl->first_invert_bp = eidx;
+    /* Reset the permutation table (for now we have to do the
+     * backpointer update twice, we'll fix it later by storing the
+     * reverse permutation table and explicitly inverting it) */
+    for (i = 0; i < bptbl->n_ent; ++i) {
+        bptbl->permute[i] = i;
+        bptbl->orig_sf[i] = bp_sf(bptbl, i);
+    }
+
+    /* Crawl from sidx to eidx inserting and updating the permutation
+     * table as necessary. */
+    for (i = sidx; i < eidx; ++i) {
+        bp_t ent;
+        int j, k, isf;
+        isf = bptbl->orig_sf[i];
+        for (j = i - 1; j >= 0; --j)
+            if (bptbl->orig_sf[j] <= isf)
+                break;
+        ++j;
+        if (j == i)
+            continue;
+        E_INFO("Inserting %d (sf %d) to %d (sf %d)\n",
+               i, isf, j, bptbl->orig_sf[j]);
+        ent = bptbl->ent[i];
+        memmove(bptbl->ent + j + 1, bptbl->ent + j,
+                (i - j) * sizeof(*bptbl->ent));
+        memmove(bptbl->orig_sf + j + 1, bptbl->orig_sf + j,
+                (i - j) * sizeof(*bptbl->orig_sf));
+        bptbl->ent[j] = ent;
+        bptbl->orig_sf[j] = isf;
+        bptbl->permute[i] = j;
+        E_INFO("permute %d => %d\n", i, j);
+        for (k = 0; k < i; ++k) {
+            if (bptbl->permute[k] >= j && bptbl->permute[k] < i) {
+                E_INFO("permute %d => %d\n", k, bptbl->permute[k]+1);
+                ++bptbl->permute[k];
+            }
+        }
+    }
 
     return 0;
 }
@@ -370,6 +410,28 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     E_INFO("after inversion\n");
     dump_bptable(bptbl, 0, -1);
     bptbl_forward_sort(bptbl, bptbl->first_invert_bp, last_compacted_bp);
+    E_INFO("after sort\n");
+    dump_bptable(bptbl, 0, -1);
+    bptbl_invert(bptbl, bptbl->first_invert_bp, last_compacted_bp,
+                 /* FIXME: don't actually have to start at 0. */
+                 0, bptbl_ef_idx(bptbl, active_fr));
+    bptbl_invert(bptbl, bptbl_ef_idx(bptbl, active_fr), bptbl->n_ent,
+                 /* FIXME: don't actually have to start at 0. */
+                 0, bptbl_ef_idx(bptbl, active_fr));
+    E_INFO("after inversion 2\n");
+    dump_bptable(bptbl, 0, -1);
+    int i;
+    for (i = bptbl->first_invert_bp; i < last_compacted_bp; ++i) {
+        E_INFO_NOFN("%d: orig_sf %d bp_sf %d\n",
+                    i, bptbl->orig_sf[i], bp_sf(bptbl, i));
+        assert(bptbl->orig_sf[i] == bp_sf(bptbl, i));
+    }
+    for (i = bptbl_ef_idx(bptbl, active_fr); i < bptbl->n_ent; ++i) {
+        E_INFO_NOFN("%d: orig_sf %d bp_sf %d\n",
+                    i, bptbl->orig_sf[i], bp_sf(bptbl, i));
+        assert(bptbl->orig_sf[i] == bp_sf(bptbl, i));
+    }
+    bptbl->first_invert_bp = last_compacted_bp;
     bptbl_update_active_fr(bptbl, active_fr);
 }
 
@@ -428,6 +490,9 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx, int32 path,
         bptbl->permute = ckd_realloc(bptbl->permute,
                                      bptbl->n_alloc
                                      * sizeof(*bptbl->permute));
+        bptbl->orig_sf = ckd_realloc(bptbl->orig_sf,
+                                     bptbl->n_alloc
+                                     * sizeof(*bptbl->orig_sf));
         E_INFO("Resized backpointer table to %d entries\n", bptbl->n_alloc);
     }
     if (bptbl->bss_head >= bptbl->bscore_stack_size

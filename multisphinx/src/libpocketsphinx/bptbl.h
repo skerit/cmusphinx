@@ -87,7 +87,9 @@ typedef struct bptbl_s {
                             is indexed by end frame.  ef_idx indices
                             should be added to this to get actual
                             frame indices. */
+    /* FIXME: These two are a bit wasteful. */
     int32 *permute;      /**< Current permutation of entries (used for gc/sorting). */
+    int16 *orig_sf;      /**< Start frame for each backpointer (used for sorting). */
     int32 first_invert_bp; /**< First reordered backpointer (used in gc) */
 
     int32 *bscore_stack;     /**< Array containing right context scores for word exits. */
