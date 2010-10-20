@@ -14,9 +14,9 @@
   - Backtraces and lattice gen then refer to the retired portion - DONE
   - Test this on standalone fwdtree first - DONE
 
-* Implement arc buffers - DONE (mostly)
+* Implement fwdflat arc buffers - DONE
   - Release old arcs - DONE
-  - Rewrite bptbl and friends to use the new garray_t
+  - Rewrite bptbl and friends to use the new garray_t - DONE
     * Need to extend garray_t to include a base index - DONE
     * Then update arcbuffer code for this - DONE
     * This will also make it easier to transition to circular buffers
@@ -25,11 +25,11 @@
 
 * Make fwdflat work properly with arc buffer input - DONE
 
-* Rewrite lattice generation to be incremental on retired bps
-  - This is pretty similar to the arc buffer code
-
 * Remove ngram_search_* and replace with new fwdflat and fwdtree
   - Hook these up to the pocketsphinx API
+
+* Rewrite lattice generation to be incremental on retired bps
+  - This is pretty similar to the arc buffer code
 
 * Implement synchronized and generic arc buffers
 
