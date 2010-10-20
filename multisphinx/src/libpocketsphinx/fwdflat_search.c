@@ -734,9 +734,6 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
                         dict2pid_ldiph_lc(d2p, rhmm->ciphone, rhmm->ci2phone,
                                           dict_last_phone(dict, ent->wid));
                     assert(IS_S3SSID(hmm_mpx_ssid(&rhmm->hmm, 0)));
-                    E_DEBUG(6,("ssid %d(%d,%d) = %d\n",
-                               rhmm->ciphone, dict_last_phone(dict, ent->wid), rhmm->ci2phone,
-                               hmm_mpx_ssid(&rhmm->hmm, 0)));
                     bitvec_set(ffs->word_active, w);
                 }
             }
@@ -864,17 +861,6 @@ fwdflat_search_step(ps_search_t *base, int frame_idx)
     nf = frame_idx + 1;
     nawl = ffs->active_word_list[nf & 0x1];
     for (i = 0, j = 0; i < ps_search_n_words(ffs); i++) {
-        if (!dict_real_word(ps_search_dict(ffs), i))
-            continue;
-        if (!ngram_model_set_known_wid(ffs->lmset,
-                                       dict_basewid(ps_search_dict(ffs),i)))
-            continue;
-        if (bitvec_is_set(ffs->word_active, i)) {
-            *(nawl++) = i;
-            j++;
-        }
-    }
-    for (i = ps_search_start_wid(ffs); i < ps_search_n_words(ffs); i++) {
         if (bitvec_is_set(ffs->word_active, i)) {
             *(nawl++) = i;
             j++;
