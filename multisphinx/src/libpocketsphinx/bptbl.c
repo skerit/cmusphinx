@@ -237,8 +237,8 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
     int sidx = bptbl->first_invert_bp;
 
     ef = bptbl->ent[sidx].frame;
-    E_INFO("compacting from %d to %d (%d to %d)\n",
-           sidx, eidx, ef, bptbl->ent[eidx].frame);
+    E_DEBUG(2,("compacting from %d to %d (%d to %d)\n",
+               sidx, eidx, ef, bptbl->ent[eidx].frame));
     for (dest = src = sidx; src < eidx; ++src) {
         /* Update all ef_idx including missing frames (there are many) */
         while (ef >= bptbl->active_fr && ef <= bptbl->ent[src].frame) {
@@ -277,7 +277,7 @@ bptbl_forward_sort(bptbl_t *bptbl, int sidx, int eidx)
 {
     int i;
 
-    E_INFO("Sorting forward from %d to %d\n", sidx, eidx);
+    E_DEBUG(2, ("Sorting forward from %d to %d\n", sidx, eidx));
     /* Straightforward for now, we just insertion sort these dudes and
      * update the permutation table and first_invert_bp as necessary.
      * This could be done in conjunction with compaction but it
@@ -303,8 +303,8 @@ bptbl_forward_sort(bptbl_t *bptbl, int sidx, int eidx)
         ++j;
         if (j == i)
             continue;
-        E_INFO("Inserting %d (sf %d) to %d (sf %d)\n",
-               i, isf, j, bptbl->orig_sf[j]);
+        E_DEBUG(3,("Inserting %d (sf %d) to %d (sf %d)\n",
+                   i, isf, j, bptbl->orig_sf[j]));
         ent = bptbl->ent[i];
         memmove(bptbl->ent + j + 1, bptbl->ent + j,
                 (i - j) * sizeof(*bptbl->ent));
@@ -313,10 +313,10 @@ bptbl_forward_sort(bptbl_t *bptbl, int sidx, int eidx)
         bptbl->ent[j] = ent;
         bptbl->orig_sf[j] = isf;
         bptbl->permute[i] = j;
-        E_INFO("permute %d => %d\n", i, j);
+        E_DEBUG(4,("permute %d => %d\n", i, j));
         for (k = 0; k < i; ++k) {
             if (bptbl->permute[k] >= j && bptbl->permute[k] < i) {
-                E_INFO("permute %d => %d\n", k, bptbl->permute[k]+1);
+                E_DEBUG(4,("permute %d => %d\n", k, bptbl->permute[k]+1));
                 ++bptbl->permute[k];
             }
         }
@@ -340,12 +340,12 @@ bptbl_invert(bptbl_t *bptbl, int sidx, int eidx,
 {
     int i;
 
-    E_INFO("inverting %d:%d from %d to %d\n", first_invert_bp, last_invert_bp, sidx, eidx);
+    E_DEBUG(2,("inverting %d:%d from %d to %d\n", first_invert_bp, last_invert_bp, sidx, eidx));
     for (i = sidx; i < eidx; ++i) {
         if (bptbl->ent[i].bp >= first_invert_bp && bptbl->ent[i].bp < last_invert_bp) {
             if (bptbl->ent[i].bp != bptbl->permute[bptbl->ent[i].bp])
-                E_INFO("invert %d => %d in %d\n",
-                       bptbl->ent[i].bp, bptbl->permute[bptbl->ent[i].bp], i);
+                E_DEBUG(4,("invert %d => %d in %d\n",
+                           bptbl->ent[i].bp, bptbl->permute[bptbl->ent[i].bp], i));
             bptbl->ent[i].bp = bptbl->permute[bptbl->ent[i].bp];
             assert(bp_sf(bptbl, i) < bptbl->ent[i].frame);
         }
@@ -393,44 +393,30 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
         bptbl_update_active_fr(bptbl, active_fr);
         return;
     }
-
+    /* Mark, compact, snap pointers, sort, snap 'em again. */
     bptbl_mark(bptbl, prev_active_fr, active_fr, frame_idx);
-#if 0
-    E_INFO("before compaction\n");
-    dump_bptable(bptbl, 0, -1);
-#endif
     last_compacted_bp = bptbl_compact(bptbl, bptbl_ef_idx(bptbl, active_fr));
-
-    E_INFO("after compaction\n");
-    dump_bptable(bptbl, 0, -1);
     bptbl_invert(bptbl, bptbl->first_invert_bp, last_compacted_bp,
                  bptbl->first_invert_bp, bptbl_ef_idx(bptbl, active_fr));
     bptbl_invert(bptbl, bptbl_ef_idx(bptbl, active_fr), bptbl->n_ent,
                  bptbl->first_invert_bp, bptbl_ef_idx(bptbl, active_fr));
-    E_INFO("after inversion\n");
-    dump_bptable(bptbl, 0, -1);
     bptbl_forward_sort(bptbl, bptbl->first_invert_bp, last_compacted_bp);
-    E_INFO("after sort\n");
-    dump_bptable(bptbl, 0, -1);
     bptbl_invert(bptbl, bptbl->first_invert_bp, last_compacted_bp,
                  /* FIXME: don't actually have to start at 0. */
                  0, bptbl_ef_idx(bptbl, active_fr));
     bptbl_invert(bptbl, bptbl_ef_idx(bptbl, active_fr), bptbl->n_ent,
                  /* FIXME: don't actually have to start at 0. */
                  0, bptbl_ef_idx(bptbl, active_fr));
-    E_INFO("after inversion 2\n");
-    dump_bptable(bptbl, 0, -1);
+#if 0
     int i;
     for (i = bptbl->first_invert_bp; i < last_compacted_bp; ++i) {
-        E_INFO_NOFN("%d: orig_sf %d bp_sf %d\n",
-                    i, bptbl->orig_sf[i], bp_sf(bptbl, i));
         assert(bptbl->orig_sf[i] == bp_sf(bptbl, i));
     }
     for (i = bptbl_ef_idx(bptbl, active_fr); i < bptbl->n_ent; ++i) {
-        E_INFO_NOFN("%d: orig_sf %d bp_sf %d\n",
-                    i, bptbl->orig_sf[i], bp_sf(bptbl, i));
         assert(bptbl->orig_sf[i] == bp_sf(bptbl, i));
     }
+#endif
+
     bptbl->first_invert_bp = last_compacted_bp;
     bptbl_update_active_fr(bptbl, active_fr);
 }
