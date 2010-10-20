@@ -234,6 +234,8 @@ featbuf_start_utt(featbuf_t *fb)
     fb->beginutt = TRUE;
     fb->endutt = FALSE;
 
+    fe_start_utt(fb->fe);
+
     return -1;
 }
 
@@ -266,8 +268,64 @@ featbuf_abort_utt(featbuf_t *fb)
 {
     sync_array_force_quit(fb->sa);
 
-    /* Wait for everybody to quit. */
+    /* Wait for everybody to quit (FIXME: can we do this?!) */
     return 0;
+}
+
+static int
+featbuf_process_full_cep(featbuf_t *fb,
+                         mfcc_t **cep,
+                         int n_frames)
+{
+    mfcc_t ***featbuf;
+    int nfr, i;
+
+    /* Make a whole utterance of dynamic features. */
+    featbuf = feat_array_alloc(fb->fcb, n_frames);
+    nfr = feat_s2mfc2feat_live(fb->fcb, cep, &n_frames,
+                               TRUE, TRUE, featbuf);
+
+    /* Queue them. */
+    for (i = 0; i < nfr; ++i) {
+        if (featbuf_process_feat(fb, featbuf[i]) < 0) {
+            feat_array_free(featbuf);
+            return -1;
+        }
+    }
+
+    /* Don't worry about this extra allocation, the overhead of doing
+     * this is almost certainly trivial compared to the cost of
+     * decoding (plus CMN works better). */
+    feat_array_free(featbuf);
+    return 0;
+}
+
+static int
+featbuf_process_full_raw(featbuf_t *fb,
+                         int16 const *raw,
+                         size_t n_samps)
+{
+    mfcc_t **cepbuf = NULL;
+    int nfr, ntail;
+
+    if (fe_process_frames(fb->fe, NULL, &n_samps, NULL, &nfr) < 0)
+        goto error_out;
+    cepbuf = ckd_calloc_2d(nfr + 1, fe_get_output_size(fb->fe),
+                           sizeof(**cepbuf));
+    fe_start_utt(fb->fe);
+    if (fe_process_frames(fb->fe, &raw, &n_samps,
+                          cepbuf, &nfr) < 0)
+        goto error_out;
+    fe_end_utt(fb->fe, cepbuf[nfr], &ntail);
+    nfr += ntail;
+
+    if (featbuf_process_full_cep(fb, cepbuf, nfr) < 0)
+        goto error_out;
+    return 0;
+error_out:
+    if (cepbuf)
+        ckd_free_2d(cepbuf);
+    return -1;
 }
 
 int
@@ -278,11 +336,11 @@ featbuf_process_raw(featbuf_t *fb,
 {
     int16 const *rptr;
 
-    /* Full utt, process it all (CMN, etc)... */
-    if (full_utt) {
-    }
-
     /* Write audio to log file. */
+
+    /* Full utt, process it all (CMN, etc)... */
+    if (full_utt)
+        return featbuf_process_full_raw(fb, raw, n_samps);
 
     /* Do fe_process_frames into our internal MFCC buffer until no
      * data remains. */
@@ -308,11 +366,11 @@ featbuf_process_cep(featbuf_t *fb,
 {
     mfcc_t **cptr;
 
-    /* Full utt, process it all (CMN, etc)... */
-    if (full_utt) {
-    }
-
     /* Write frames to log file. */
+
+    /* Full utt, process it all (CMN, etc)... */
+    if (full_utt)
+        return featbuf_process_full_cep(fb, cep, n_frames);
 
     /* Do s2mfc2feat_live on one frame at a time, appending the
      * resulting feature blocks. */
