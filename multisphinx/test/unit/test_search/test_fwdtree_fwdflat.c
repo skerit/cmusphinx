@@ -43,7 +43,8 @@ main(int argc, char *argv[])
 	dict = dict_init(config, mdef);
 	d2p = dict2pid_build(mdef, dict);
 	fwdtree = fwdtree_search_init(config, acmod, dict, d2p);
-	fwdflat = fwdflat_search_init(config, acmod2, dict, d2p, ((fwdtree_search_t *)fwdtree)->bptbl);
+	fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
+				      ((fwdtree_search_t *)fwdtree)->bptbl);
 
 	/* Launch search threads. */
 	ps_search_run(fwdtree);

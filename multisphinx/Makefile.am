@@ -1,7 +1,6 @@
 SUBDIRS = src \
 	  include \
-	  test \
-	  python
+	  test
 
 EXTRA_DIST = autogen.sh							\
 	swig/Makefile							\

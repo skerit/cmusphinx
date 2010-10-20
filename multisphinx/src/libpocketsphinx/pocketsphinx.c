@@ -167,14 +167,6 @@ ps_init_defaults(cmd_ln_t *config)
     }
 }
 
-int
-ps_reinit(ps_decoder_t *ps, cmd_ln_t *config)
-{
-    /* No longer does anything because we will add words dynamically
-     * (really, we will) */
-    return 0;
-}
-
 ps_decoder_t *
 ps_init(cmd_ln_t *config)
 {
@@ -227,13 +219,17 @@ ps_init(cmd_ln_t *config)
                                       ((fwdtree_search_t *)ps->fwdtree)->bptbl);
 
     /* Release pointers to things now owned by the searches. */
-    acmod_free(acmod2);
+    /* acmod_free(acmod2); */ /* WTF */
     dict_free(dict);
     dict2pid_free(d2p);
 
     /* Initialize performance timer (but each search has its own). */
     ps->perf.name = "decode";
     ptmr_init(&ps->perf);
+
+    /* Start search threads. */
+    ps_search_run(ps->fwdtree);
+    ps_search_run(ps->fwdflat);
 
     return ps;
 error_out:
@@ -266,6 +262,7 @@ ps_free(ps_decoder_t *ps)
     if (--ps->refcount > 0)
         return ps->refcount;
 
+    featbuf_shutdown(ps->fb);
     ps_search_free(ps->fwdtree);
     ps_search_free(ps->fwdflat);
     featbuf_free(ps->fb);
@@ -430,8 +427,7 @@ ps_get_hyp(ps_decoder_t *ps, int32 *out_best_score, char const **out_uttid)
     char const *hyp;
 
     ptmr_start(&ps->perf);
-    /* FIXME: Nope. */
-    hyp = ps_search_hyp(ps->fwdtree, out_best_score);
+    hyp = ps_search_hyp(ps->fwdflat, out_best_score);
     if (out_uttid)
         *out_uttid = ps->uttid;
     ptmr_stop(&ps->perf);
@@ -442,16 +438,6 @@ int32
 ps_get_prob(ps_decoder_t *ps, char const **out_uttid)
 {
     return 0;
-#if 0
-    int32 prob;
-    ptmr_start(&ps->perf);
-    /* FIXME: Nope. */
-    prob = ps_search_prob(ps->fwdtree);
-    if (out_uttid)
-        *out_uttid = ps->uttid;
-    ptmr_stop(&ps->perf);
-    return prob;
-#endif
 }
 
 ps_seg_t *
@@ -460,8 +446,7 @@ ps_seg_iter(ps_decoder_t *ps, int32 *out_best_score)
     ps_seg_t *itor;
 
     ptmr_start(&ps->perf);
-    /* FIXME: Nope. */
-    itor = ps_search_seg_iter(ps->fwdtree, out_best_score);
+    itor = ps_search_seg_iter(ps->fwdflat, out_best_score);
     ptmr_stop(&ps->perf);
     return itor;
 }
