@@ -56,25 +56,10 @@
 
 struct sbthread_s {
     cmd_ln_t *config;
-    sbmsgq_t *msgq;
     sbthread_main func;
     void *arg;
     HANDLE th;
     DWORD tid;
-};
-
-struct sbmsgq_s {
-    /* Ringbuffer for passing messages. */
-    char *data;
-    size_t depth;
-    size_t out;
-    size_t nbytes;
-
-    /* Current message is stored here. */
-    char *msg;
-    size_t msglen;
-    CRITICAL_SECTION mtx;
-    HANDLE evt;
 };
 
 struct sbevent_s {
@@ -106,7 +91,6 @@ sbthread_start(cmd_ln_t *config, sbthread_main func, void *arg)
     th->config = config;
     th->func = func;
     th->arg = arg;
-    th->msgq = sbmsgq_init(256);
     th->th = CreateThread(NULL, 0, sbthread_internal_main, th, 0, &th->tid);
     if (th->th == NULL) {
         sbthread_free(th);
@@ -231,163 +215,15 @@ sbmtx_free(sbmtx_t *mtx)
     ckd_free(mtx);
 }
 
-sbmsgq_t *
-sbmsgq_init(size_t depth)
-{
-    sbmsgq_t *msgq;
-
-    msgq = ckd_calloc(1, sizeof(*msgq));
-    msgq->depth = depth;
-    msgq->evt = CreateEventW(NULL, FALSE, FALSE, NULL);
-    if (msgq->evt == NULL) {
-        ckd_free(msgq);
-        return NULL;
-    }
-    InitializeCriticalSection(&msgq->mtx);
-    msgq->data = ckd_calloc(depth, 1);
-    msgq->msg = ckd_calloc(depth, 1);
-    return msgq;
-}
-
-void
-sbmsgq_free(sbmsgq_t *msgq)
-{
-    CloseHandle(msgq->evt);
-    ckd_free(msgq->data);
-    ckd_free(msgq->msg);
-    ckd_free(msgq);
-}
-
-int
-sbmsgq_send(sbmsgq_t *q, size_t len, void const *data)
-{
-    char const *cdata = (char const *)data;
-    size_t in;
-
-    /* Don't allow things bigger than depth to be sent! */
-    if (len + sizeof(len) > q->depth)
-        return -1;
-
-    if (q->nbytes + len + sizeof(len) > q->depth)
-        WaitForSingleObject(q->evt, INFINITE);
-
-    /* Lock things while we manipulate the buffer (FIXME: this
-       actually should have been atomic with the wait above ...) */
-    EnterCriticalSection(&q->mtx);
-    in = (q->out + q->nbytes) % q->depth;
-    /* First write the size of the message. */
-    if (in + sizeof(len) > q->depth) {
-        /* Handle the annoying case where the size field gets wrapped around. */
-        size_t len1 = q->depth - in;
-        memcpy(q->data + in, &len, len1);
-        memcpy(q->data, ((char *)&len) + len1, sizeof(len) - len1);
-        q->nbytes += sizeof(len);
-        in = sizeof(len) - len1;
-    }
-    else {
-        memcpy(q->data + in, &len, sizeof(len));
-        q->nbytes += sizeof(len);
-        in += sizeof(len);
-    }
-
-    /* Now write the message body. */
-    if (in + len > q->depth) {
-        /* Handle wraparound. */
-        size_t len1 = q->depth - in;
-        memcpy(q->data + in, cdata, len1);
-        q->nbytes += len1;
-        cdata += len1;
-        len -= len1;
-        in = 0;
-    }
-    memcpy(q->data + in, cdata, len);
-    q->nbytes += len;
-
-    /* Signal the condition variable. */
-    SetEvent(q->evt);
-    /* Unlock. */
-    LeaveCriticalSection(&q->mtx);
-
-    return 0;
-}
-
-void *
-sbmsgq_wait(sbmsgq_t *q, size_t *out_len, int sec, int nsec)
-{
-    char *outptr;
-    size_t len;
-
-    /* Wait for data to be available. */
-    if (q->nbytes == 0) {
-        if (cond_timed_wait(q->evt, sec, nsec) == WAIT_FAILED)
-            /* Timed out or something... */
-            return NULL;
-    }
-    /* Lock to manipulate the queue (FIXME) */
-    EnterCriticalSection(&q->mtx);
-    /* Get the message size. */
-    if (q->out + sizeof(q->msglen) > q->depth) {
-        /* Handle annoying wraparound case. */
-        size_t len1 = q->depth - q->out;
-        memcpy(&q->msglen, q->data + q->out, len1);
-        memcpy(((char *)&q->msglen) + len1, q->data,
-               sizeof(q->msglen) - len1);
-        q->out = sizeof(q->msglen) - len1;
-    }
-    else {
-        memcpy(&q->msglen, q->data + q->out, sizeof(q->msglen));
-        q->out += sizeof(q->msglen);
-    }
-    q->nbytes -= sizeof(q->msglen);
-    /* Get the message body. */
-    outptr = q->msg;
-    len = q->msglen;
-    if (q->out + q->msglen > q->depth) {
-        /* Handle wraparound. */
-        size_t len1 = q->depth - q->out;
-        memcpy(outptr, q->data + q->out, len1);
-        outptr += len1;
-        len -= len1;
-        q->nbytes -= len1;
-        q->out = 0;
-    }
-    memcpy(outptr, q->data + q->out, len);
-    q->nbytes -= len;
-    q->out += len;
-
-    /* Signal the condition variable. */
-    SetEvent(q->evt);
-    /* Unlock. */
-    LeaveCriticalSection(&q->mtx);
-    if (out_len)
-        *out_len = q->msglen;
-    return q->msg;
-}
-
 #else /* POSIX */
 #include <pthread.h>
 #include <sys/time.h>
 
 struct sbthread_s {
     cmd_ln_t *config;
-    sbmsgq_t *msgq;
     sbthread_main func;
     void *arg;
     pthread_t th;
-};
-
-struct sbmsgq_s {
-    /* Ringbuffer for passing messages. */
-    char *data;
-    size_t depth;
-    size_t out;
-    size_t nbytes;
-
-    /* Current message is stored here. */
-    char *msg;
-    size_t msglen;
-    pthread_mutex_t mtx;
-    pthread_cond_t cond;
 };
 
 struct sbevent_s {
@@ -425,7 +261,6 @@ sbthread_start(cmd_ln_t *config, sbthread_main func, void *arg)
     th->config = config;
     th->func = func;
     th->arg = arg;
-    th->msgq = sbmsgq_init(1024);
     if ((rv = pthread_create(&th->th, NULL, &sbthread_internal_main, th)) != 0) {
         E_ERROR("Failed to create thread: %d\n", rv);
         sbthread_free(th);
@@ -453,93 +288,6 @@ sbthread_wait(sbthread_t *th)
     return (int)(long)exit;
 }
 
-sbmsgq_t *
-sbmsgq_init(size_t depth)
-{
-    sbmsgq_t *msgq;
-
-    msgq = ckd_calloc(1, sizeof(*msgq));
-    msgq->depth = depth;
-    if (pthread_cond_init(&msgq->cond, NULL) != 0) {
-        ckd_free(msgq);
-        return NULL;
-    }
-    if (pthread_mutex_init(&msgq->mtx, NULL) != 0) {
-        pthread_cond_destroy(&msgq->cond);
-        ckd_free(msgq);
-        return NULL;
-    }
-    msgq->data = ckd_calloc(depth, 1);
-    msgq->msg = ckd_calloc(depth, 1);
-    return msgq;
-}
-
-void
-sbmsgq_free(sbmsgq_t *msgq)
-{
-    pthread_mutex_destroy(&msgq->mtx);
-    pthread_cond_destroy(&msgq->cond);
-    ckd_free(msgq->data);
-    ckd_free(msgq->msg);
-    ckd_free(msgq);
-}
-
-int
-sbmsgq_send(sbmsgq_t *q, size_t len, void const *data)
-{
-    size_t in;
-
-    /* Don't allow things bigger than depth to be sent! */
-    if (len + sizeof(len) > q->depth)
-        return -1;
-
-    /* Lock the condition variable while we manipulate the buffer. */
-    pthread_mutex_lock(&q->mtx);
-    if (q->nbytes + len + sizeof(len) > q->depth) {
-        /* Unlock and wait for space to be available. */
-        if (pthread_cond_wait(&q->cond, &q->mtx) != 0) {
-            /* Timed out, don't send anything. */
-            pthread_mutex_unlock(&q->mtx);
-            return -1;
-        }
-        /* Condition is now locked again. */
-    }
-    in = (q->out + q->nbytes) % q->depth;
-
-    /* First write the size of the message. */
-    if (in + sizeof(len) > q->depth) {
-        /* Handle the annoying case where the size field gets wrapped around. */
-        size_t len1 = q->depth - in;
-        memcpy(q->data + in, &len, len1);
-        memcpy(q->data, ((char *)&len) + len1, sizeof(len) - len1);
-        q->nbytes += sizeof(len);
-        in = sizeof(len) - len1;
-    }
-    else {
-        memcpy(q->data + in, &len, sizeof(len));
-        q->nbytes += sizeof(len);
-        in += sizeof(len);
-    }
-
-    /* Now write the message body. */
-    if (in + len > q->depth) {
-        /* Handle wraparound. */
-        size_t len1 = q->depth - in;
-        memcpy(q->data + in, data, len1);
-        q->nbytes += len1;
-        data = (char const *)data + len1;
-        len -= len1;
-        in = 0;
-    }
-    memcpy(q->data + in, data, len);
-    q->nbytes += len;
-
-    /* Signal the condition variable. */
-    pthread_cond_broadcast(&q->cond);
-    /* Unlock it, we have nothing else to do. */
-    pthread_mutex_unlock(&q->mtx);
-    return 0;
-}
 
 static int
 cond_timed_wait(pthread_cond_t *cond, pthread_mutex_t *mtx, int sec, int nsec)
@@ -562,62 +310,6 @@ cond_timed_wait(pthread_cond_t *cond, pthread_mutex_t *mtx, int sec, int nsec)
         rv = pthread_cond_timedwait(cond, mtx, &end);
     }
     return rv;
-}
-
-void *
-sbmsgq_wait(sbmsgq_t *q, size_t *out_len, int sec, int nsec)
-{
-    char *outptr;
-    size_t len;
-
-    /* Lock the condition variable while we manipulate nmsg. */
-    pthread_mutex_lock(&q->mtx);
-    if (q->nbytes == 0) {
-        /* Unlock the condition variable and wait for a signal. */
-        if (cond_timed_wait(&q->cond, &q->mtx, sec, nsec) != 0) {
-            /* Timed out or something... */
-            pthread_mutex_unlock(&q->mtx);
-            return NULL;
-        }
-        /* Condition variable is now locked again. */
-    }
-    /* Get the message size. */
-    if (q->out + sizeof(q->msglen) > q->depth) {
-        /* Handle annoying wraparound case. */
-        size_t len1 = q->depth - q->out;
-        memcpy(&q->msglen, q->data + q->out, len1);
-        memcpy(((char *)&q->msglen) + len1, q->data,
-               sizeof(q->msglen) - len1);
-        q->out = sizeof(q->msglen) - len1;
-    }
-    else {
-        memcpy(&q->msglen, q->data + q->out, sizeof(q->msglen));
-        q->out += sizeof(q->msglen);
-    }
-    q->nbytes -= sizeof(q->msglen);
-    /* Get the message body. */
-    outptr = q->msg;
-    len = q->msglen;
-    if (q->out + q->msglen > q->depth) {
-        /* Handle wraparound. */
-        size_t len1 = q->depth - q->out;
-        memcpy(outptr, q->data + q->out, len1);
-        outptr += len1;
-        len -= len1;
-        q->nbytes -= len1;
-        q->out = 0;
-    }
-    memcpy(outptr, q->data + q->out, len);
-    q->nbytes -= len;
-    q->out += len;
-
-    /* Signal the condition variable. */
-    pthread_cond_broadcast(&q->cond);
-    /* Unlock the condition variable, we are done. */
-    pthread_mutex_unlock(&q->mtx);
-    if (out_len)
-        *out_len = q->msglen;
-    return q->msg;
 }
 
 sbevent_t *
@@ -742,22 +434,9 @@ sbthread_arg(sbthread_t *th)
     return th->arg;
 }
 
-sbmsgq_t *
-sbthread_msgq(sbthread_t *th)
-{
-    return th->msgq;
-}
-
-int
-sbthread_send(sbthread_t *th, size_t len, void const *data)
-{
-    return sbmsgq_send(th->msgq, len, data);
-}
-
 void
 sbthread_free(sbthread_t *th)
 {
     sbthread_wait(th);
-    sbmsgq_free(th->msgq);
     ckd_free(th);
 }

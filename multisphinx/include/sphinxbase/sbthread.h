@@ -62,11 +62,6 @@ extern "C" {
 typedef struct sbthread_s sbthread_t;
 
 /**
- * Asynchronous message queue object.
- */
-typedef struct sbmsgq_s sbmsgq_t;
-
-/**
  * Mutex (critical section) object.
  */
 typedef struct sbmtx_s sbmtx_t;
@@ -112,51 +107,10 @@ SPHINXBASE_EXPORT
 void *sbthread_arg(sbthread_t *th);
 
 /**
- * Get message queue from a thread.
- */
-SPHINXBASE_EXPORT
-sbmsgq_t *sbthread_msgq(sbthread_t *th);
-
-/**
  * Wait for a thread to complete.
  */
 SPHINXBASE_EXPORT
 int sbthread_wait(sbthread_t *th);
-
-/**
- * Send an asynchronous message to a thread.
- *
- * Each thread gets a message queue by default, so this is just a
- * wrapper around sbmsgq_send().
- */
-SPHINXBASE_EXPORT
-int sbthread_send(sbthread_t *th, size_t len, void const *data);
-
-/**
- * Create a message queue.
- *
- * @param depth Depth of the queue.
- */
-SPHINXBASE_EXPORT
-sbmsgq_t *sbmsgq_init(size_t depth);
-
-/**
- * Free a message queue.
- */
-SPHINXBASE_EXPORT
-void sbmsgq_free(sbmsgq_t *q);
-
-/**
- * Post a message to a queue.
- */
-SPHINXBASE_EXPORT
-int sbmsgq_send(sbmsgq_t *q, size_t len, void const *data);
-
-/**
- * Wait for a message from a queue.
- */
-SPHINXBASE_EXPORT
-void *sbmsgq_wait(sbmsgq_t *q, size_t *out_len, int sec, int nsec);
 
 /**
  * Create a mutex.
