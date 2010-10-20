@@ -135,42 +135,46 @@ dump_bptable(bptbl_t *bptbl)
 static void
 bptbl_forward_sort(bptbl_t *bptbl, int sf, int ef)
 {
-    int i, new_swindow_sf, last_valid_bp;
-    int *prev_idx;
-    int *prev_sf;
+    int i, orig_i, new_swindow_sf, last_valid_bp;
+    int *new_idx; /**< map old indices to new ones. */
+    int *prev_sf; /**< map new indices to original sf. */
 
     /* Sort and compact everything between sf and ef. */
     E_INFO("Insertion sorting valid backpointers from %d to %d:\n", sf, ef);
     new_swindow_sf = ef;
-    prev_idx = ckd_calloc(bptbl->ef_idx[ef], sizeof(*prev_idx));
+    new_idx = ckd_calloc(bptbl->ef_idx[ef], sizeof(*new_idx));
     prev_sf = ckd_calloc(bptbl->ef_idx[ef], sizeof(*prev_sf));
     for (i = 0; i < bptbl->ef_idx[ef]; ++i) {
-        prev_idx[i] = i;
+        new_idx[i] = i;
         prev_sf[i] = bp_sf(bptbl, i);
     }
     last_valid_bp = bptbl->ef_idx[ef];
-    for (i = bptbl->ef_idx[sf]; i < last_valid_bp; ++i) {
+    for (orig_i = i = bptbl->ef_idx[sf]; i < last_valid_bp; ++i, ++orig_i) {
         int sf, j;
         bp_t ent;
 
+        /* Note that this has horrible time complexity. */
         while (bptbl->ent[i].valid == FALSE && i < last_valid_bp) {
+            int k;
             E_INFO_NOFN("deleting: %-5d %-10s start %-3d\n",
                         i, dict_wordstr(bptbl->d2p->dict,
                                         bptbl->ent[i].wid), sf);
             memmove(bptbl->ent + i, bptbl->ent + i + 1,
                     (last_valid_bp - i - 1) * sizeof(*bptbl->ent));
-            memmove(prev_idx + i, prev_idx + i + 1,
-                    (last_valid_bp - i - 1) * sizeof(*prev_idx));
             memmove(prev_sf + i, prev_sf + i + 1,
                     (last_valid_bp - i - 1) * sizeof(*prev_sf));
             --last_valid_bp;
+            new_idx[orig_i++] = -1;
         }
         if (i == last_valid_bp)
             break;
+
         sf = prev_sf[i];
-        E_INFO_NOFN("%-5d %-10s start %-3d\n",
+        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d bp %-5d\n",
                     i, dict_wordstr(bptbl->d2p->dict,
-                                    bptbl->ent[i].wid), sf);
+                                    bptbl->ent[i].wid),
+                    sf, bptbl->ent[i].frame,
+                    bptbl->ent[i].bp);
         /* Update start frame pointer. */
         if (sf < new_swindow_sf)
             new_swindow_sf = sf;
@@ -179,39 +183,48 @@ bptbl_forward_sort(bptbl_t *bptbl, int sf, int ef)
             int jsf;
             jsf = prev_sf[j];
             if (jsf > sf) {
-                E_INFO("  inserting to %d\n", j);
+                int k;
+
+                E_INFO_NOFN("  inserting to %d\n", j);
                 ent = bptbl->ent[i];
                 memmove(bptbl->ent + j + 1, bptbl->ent + j,
                         (i - j) * sizeof(*bptbl->ent));
-                memmove(prev_idx + j + 1, prev_idx + j,
-                        (i - j) * sizeof(*prev_idx));
                 memmove(prev_sf + j + 1, prev_sf + j,
                         (i - j) * sizeof(*prev_sf));
                 bptbl->ent[j] = ent;
-                prev_idx[j] = i;
                 prev_sf[j] = sf;
                 if (j < bptbl->sf_idx[jsf] || bptbl->sf_idx[jsf] == -1)
                     bptbl->sf_idx[jsf] = j;
+
+                for (k = j; k < bptbl->ef_idx[ef]; ++k) {
+                    if (new_idx[k] >= j && new_idx[k] < i)
+                        ++new_idx[k];
+                }
+                new_idx[orig_i] = j;
+                E_INFO_NOFN("new_idx:");
+                for (k = 0; k < bptbl->ef_idx[ef]; ++k)
+                    E_INFOCONT(" %-2d", new_idx[k]);
+                E_INFOCONT("\n");
+
                 break;
             }
         }
     }
+    /* Snap backpointers to new positions. */
     for (i = bptbl->ef_idx[sf]; i < bptbl->ef_idx[ef]; ++i) {
-        E_INFO("idx %d => %d\n", i, prev_idx[i]);
-        if (bptbl->ent[i].bp >= bptbl->ef_idx[sf]) {
-            E_INFO("bp %d => %d\n",
-                   bptbl->ent[i].bp, prev_idx[bptbl->ent[i].bp]);
-            bptbl->ent[i].bp = prev_idx[bptbl->ent[i].bp];
-        }
+        if (bptbl->ent[i].bp >= bptbl->ef_idx[sf])
+            bptbl->ent[i].bp = new_idx[bptbl->ent[i].bp];
     }
     for (i = bptbl->ef_idx[sf]; i < bptbl->ef_idx[ef]; ++i) {
         if (bptbl->ent[i].valid == FALSE)
             continue;
-        E_INFO_NOFN("%-5d %-10s start %-3d\n",
+        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d bp %-5d\n",
                     i, dict_wordstr(bptbl->d2p->dict,
-                                    bptbl->ent[i].wid), bp_sf(bptbl, i));
+                                    bptbl->ent[i].wid),
+                    bp_sf(bptbl, i), bptbl->ent[i].frame,
+                    bptbl->ent[i].bp);
     }
-    ckd_free(prev_idx);
+    ckd_free(new_idx);
     ckd_free(prev_sf);
     /* ef is never actually a valid value for it. */
     if (new_swindow_sf != ef) {
