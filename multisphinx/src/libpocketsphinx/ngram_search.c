@@ -342,6 +342,7 @@ ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
     /* Look for an existing exit for this word in this frame. */
     _bp_ = ngs->bptbl->word_idx[w];
     if (_bp_ != NO_BP) {
+        E_INFO("Re-using bp %d sf %d\n", _bp_, bp_sf(ngs->bptbl, _bp_));
         /* Keep only the best scoring one (this is a potential source
          * of search errors...) */
         if (ngs->bptbl->ent[_bp_].score WORSE_THAN score) {
@@ -409,6 +410,8 @@ ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
             *bss = WORST_SCORE;
         ngs->bptbl->bscore_stack[ngs->bptbl->bss_head + rc] = score;
         cache_bptable_paths(ngs, ngs->bptbl->n_ent);
+        E_INFO("Entered bp %d sf %d\n", ngs->bptbl->n_ent,
+               bp_sf(ngs->bptbl, ngs->bptbl->n_ent));
 
         ngs->bptbl->n_ent++;
         ngs->bptbl->bss_head += rcsize;
@@ -429,13 +432,13 @@ ngram_search_find_exit(ngram_search_t *ngs, int frame_idx, int32 *out_best_score
 
     if (frame_idx == -1 || frame_idx >= ngs->bptbl->n_frame)
         frame_idx = ngs->bptbl->n_frame - 1;
-    end_bpidx = ngs->bptbl->frame_idx[frame_idx];
+    end_bpidx = ngs->bptbl->ef_idx[frame_idx];
 
     best_score = WORST_SCORE;
     best_exit = NO_BP;
 
     /* Scan back to find a frame with some backpointers in it. */
-    while (frame_idx >= 0 && ngs->bptbl->frame_idx[frame_idx] == end_bpidx)
+    while (frame_idx >= 0 && ngs->bptbl->ef_idx[frame_idx] == end_bpidx)
         --frame_idx;
     /* This is NOT an error, it just means there is no hypothesis yet. */
     if (frame_idx < 0)
@@ -443,7 +446,7 @@ ngram_search_find_exit(ngram_search_t *ngs, int frame_idx, int32 *out_best_score
 
     /* Now find the entry for </s> OR the best scoring entry. */
     assert(end_bpidx < ngs->bptbl->n_alloc);
-    for (bp = ngs->bptbl->frame_idx[frame_idx]; bp < end_bpidx; ++bp) {
+    for (bp = ngs->bptbl->ef_idx[frame_idx]; bp < end_bpidx; ++bp) {
         if (ngs->bptbl->ent[bp].wid == ps_search_finish_wid(ngs)
             || ngs->bptbl->ent[bp].score BETTER_THAN best_score) {
             best_score = ngs->bptbl->ent[bp].score;
@@ -1007,7 +1010,7 @@ find_end_node(ngram_search_t *ngs, ps_lattice_t *dag, float32 lwf)
      * find the node corresponding to the best exit. */
     /* Find the last frame containing a word exit. */
     for (ef = dag->n_frames - 1;
-         ef >= 0 && ngs->bptbl->frame_idx[ef] == ngs->bptbl->n_ent;
+         ef >= 0 && ngs->bptbl->ef_idx[ef] == ngs->bptbl->n_ent;
          --ef);
     if (ef < 0) {
         E_ERROR("Empty backpointer table: can not build DAG.\n");
@@ -1017,7 +1020,7 @@ find_end_node(ngram_search_t *ngs, ps_lattice_t *dag, float32 lwf)
     /* Find best word exit in that frame. */
     bestscore = WORST_SCORE;
     bestbp = NO_BP;
-    for (bp = ngs->bptbl->frame_idx[ef]; bp < ngs->bptbl->frame_idx[ef + 1]; ++bp) {
+    for (bp = ngs->bptbl->ef_idx[ef]; bp < ngs->bptbl->ef_idx[ef + 1]; ++bp) {
         int32 n_used, l_scr, wid, prev_wid;
         
         wid = ngs->bptbl->ent[bp].real_wid;

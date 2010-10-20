@@ -506,6 +506,22 @@ ngram_fwdtree_start(ngram_search_t *ngs)
     hmm_enter(&rhmm->hmm, 0, NO_BP, 0);
 }
 
+static int32
+update_oldest_bp(ngram_search_t *ngs, hmm_t *hmm)
+{
+    int j;
+
+    for (j = 0; j < hmm->n_emit_state; ++j)
+        if (hmm_score(hmm, j) BETTER_THAN WORST_SCORE)
+            if (hmm_history(hmm, j) < ngs->oldest_bp)
+                ngs->oldest_bp = hmm_history(hmm, j);
+    if (hmm_out_score(hmm) BETTER_THAN WORST_SCORE)
+        if (hmm_out_history(hmm) < ngs->oldest_bp)
+            ngs->oldest_bp = hmm_out_history(hmm);
+
+    return ngs->oldest_bp;
+}
+
 /*
  * Mark the active senones for all senones belonging to channels that are active in the
  * current frame.
@@ -521,8 +537,10 @@ compute_sen_active(ngram_search_t *ngs, int frame_idx)
 
     /* Flag active senones for root channels */
     for (i = ngs->n_root_chan, rhmm = ngs->root_chan; i > 0; --i, rhmm++) {
-        if (hmm_frame(&rhmm->hmm) == frame_idx)
+        if (hmm_frame(&rhmm->hmm) == frame_idx) {
             acmod_activate_hmm(ps_search_acmod(ngs), &rhmm->hmm);
+            update_oldest_bp(ngs, &rhmm->hmm);
+        }
     }
 
     /* Flag active senones for nonroot channels in HMM tree */
@@ -530,6 +548,7 @@ compute_sen_active(ngram_search_t *ngs, int frame_idx)
     acl = ngs->active_chan_list[frame_idx & 0x1];
     for (hmm = *(acl++); i > 0; --i, hmm = *(acl++)) {
         acmod_activate_hmm(ps_search_acmod(ngs), &hmm->hmm);
+        update_oldest_bp(ngs, &hmm->hmm);
     }
 
     /* Flag active senones for individual word channels */
@@ -538,14 +557,17 @@ compute_sen_active(ngram_search_t *ngs, int frame_idx)
     for (w = *(awl++); i > 0; --i, w = *(awl++)) {
         for (hmm = ngs->word_chan[w]; hmm; hmm = hmm->next) {
             acmod_activate_hmm(ps_search_acmod(ngs), &hmm->hmm);
+            update_oldest_bp(ngs, &hmm->hmm);
         }
     }
     for (i = 0; i < ngs->n_1ph_words; i++) {
         w = ngs->single_phone_wid[i];
         rhmm = (root_chan_t *) ngs->word_chan[w];
 
-        if (hmm_frame(&rhmm->hmm) == frame_idx)
+        if (hmm_frame(&rhmm->hmm) == frame_idx) {
             acmod_activate_hmm(ps_search_acmod(ngs), &rhmm->hmm);
+            update_oldest_bp(ngs, &rhmm->hmm);
+        }
     }
 }
 
@@ -732,14 +754,8 @@ prune_root_chan(ngram_search_t *ngs, int frame_idx)
             continue;
 
         if (hmm_bestscore(&rhmm->hmm) BETTER_THAN thresh) {
-            int j;
             hmm_frame(&rhmm->hmm) = nf;  /* rhmm will be active in next frame */
             E_DEBUG(3, ("Preserving root channel %d score %d\n", i, hmm_bestscore(&rhmm->hmm)));
-            /* Track oldest backpointer in this active HMM. */
-            for (j = 0; j < rhmm->hmm.n_emit_state; ++j)
-                if (hmm_score(&rhmm->hmm, j) BETTER_THAN WORST_SCORE)
-                    if (hmm_history(&rhmm->hmm, j) < ngs->oldest_bp)
-                        ngs->oldest_bp = hmm_history(&rhmm->hmm, j);
             /* transitions out of this root channel */
             /* transition to all next-level channels in the HMM tree */
             newphone_score = hmm_out_score(&rhmm->hmm) + ngs->pip;
@@ -814,18 +830,11 @@ prune_nonroot_chan(ngram_search_t *ngs, int frame_idx)
         assert(hmm_frame(&hmm->hmm) >= frame_idx);
 
         if (hmm_bestscore(&hmm->hmm) BETTER_THAN thresh) {
-            int j;
             /* retain this channel in next frame */
             if (hmm_frame(&hmm->hmm) != nf) {
                 hmm_frame(&hmm->hmm) = nf;
                 *(nacl++) = hmm;
             }
-
-            /* Track oldest backpointer in this active HMM. */
-            for (j = 0; j < hmm->hmm.n_emit_state; ++j)
-                if (hmm_score(&hmm->hmm, j) BETTER_THAN WORST_SCORE)
-                    if (hmm_history(&hmm->hmm, j) < ngs->oldest_bp)
-                        ngs->oldest_bp = hmm_history(&hmm->hmm, j);
 
             /* transition to all next-level channel in the HMM tree */
             newphone_score = hmm_out_score(&hmm->hmm) + ngs->pip;
@@ -967,8 +976,8 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
     /* Compute best LM score and bp for new cands entered in the sorted lists above */
     for (i = 0; i < n_cand_sf; i++) {
         /* For the i-th unique end frame... */
-        bp = ngs->bptbl->frame_idx[ngs->cand_sf[i].bp_ef];
-        bplast = ngs->bptbl->frame_idx[ngs->cand_sf[i].bp_ef + 1] - 1;
+        bp = ngs->bptbl->ef_idx[ngs->cand_sf[i].bp_ef];
+        bplast = ngs->bptbl->ef_idx[ngs->cand_sf[i].bp_ef + 1] - 1;
 
         for (bpe = &(ngs->bptbl->ent[bp]); bp <= bplast; bp++, bpe++) {
             if (!bpe->valid)
@@ -1065,17 +1074,10 @@ prune_word_chan(ngram_search_t *ngs, int frame_idx)
 
             thmm = hmm->next;
             if (hmm_bestscore(&hmm->hmm) BETTER_THAN lastphn_thresh) {
-                int j;
                 /* retain this channel in next frame */
                 hmm_frame(&hmm->hmm) = nf;
                 k++;
                 phmmp = &(hmm->next);
-
-                /* Track oldest backpointer in this active HMM. */
-                for (j = 0; j < hmm->hmm.n_emit_state; ++j)
-                    if (hmm_score(&hmm->hmm, j) BETTER_THAN WORST_SCORE)
-                        if (hmm_history(&hmm->hmm, j) < ngs->oldest_bp)
-                            ngs->oldest_bp = hmm_history(&hmm->hmm, j);
 
                 /* Could if ((! skip_alt_frm) || (frame_idx & 0x1)) the following */
                 if (hmm_out_score(&hmm->hmm) BETTER_THAN newword_thresh) {
@@ -1208,7 +1210,7 @@ bptable_maxwpf(ngram_search_t *ngs, int frame_idx)
     bestscr = (int32) 0x80000000;
     bestbpe = NULL;
     n = 0;
-    for (bp = ngs->bptbl->frame_idx[frame_idx]; bp < ngs->bptbl->n_ent; bp++) {
+    for (bp = ngs->bptbl->ef_idx[frame_idx]; bp < ngs->bptbl->n_ent; bp++) {
         bpe = &(ngs->bptbl->ent[bp]);
         if (dict_filler_word(ps_search_dict(ngs), bpe->wid)) {
             if (bpe->score BETTER_THAN bestscr) {
@@ -1227,12 +1229,12 @@ bptable_maxwpf(ngram_search_t *ngs, int frame_idx)
 
     /* Allow up to maxwpf best entries to survive; mark the remaining with valid = 0 */
     n = (ngs->bptbl->n_ent
-         - ngs->bptbl->frame_idx[frame_idx]) - n;  /* No. of entries after limiting fillers */
+         - ngs->bptbl->ef_idx[frame_idx]) - n;  /* No. of entries after limiting fillers */
     for (; n > ngs->maxwpf; --n) {
         /* Find worst BPTable entry */
         worstscr = (int32) 0x7fffffff;
         worstbpe = NULL;
-        for (bp = ngs->bptbl->frame_idx[frame_idx]; (bp < ngs->bptbl->n_ent); bp++) {
+        for (bp = ngs->bptbl->ef_idx[frame_idx]; (bp < ngs->bptbl->n_ent); bp++) {
             bpe = &(ngs->bptbl->ent[bp]);
             if (bpe->valid && (bpe->score WORSE_THAN worstscr)) {
                 worstscr = bpe->score;
@@ -1271,7 +1273,7 @@ word_transition(ngram_search_t *ngs, int frame_idx)
     pls = (phone_loop_search_t *)ps_search_lookahead(ngs);
     /* Ugh, this is complicated.  Scan all word exits for this frame
      * (they have already been created by prune_word_chan()). */
-    for (bp = ngs->bptbl->frame_idx[frame_idx]; bp < ngs->bptbl->n_ent; bp++) {
+    for (bp = ngs->bptbl->ef_idx[frame_idx]; bp < ngs->bptbl->n_ent; bp++) {
         bpe = &(ngs->bptbl->ent[bp]);
         ngs->bptbl->word_idx[bpe->wid] = NO_BP;
 
@@ -1344,7 +1346,7 @@ word_transition(ngram_search_t *ngs, int frame_idx)
         w = ngs->single_phone_wid[i];
         ngs->last_ltrans[w].dscr = (int32) 0x80000000;
     }
-    for (bp = ngs->bptbl->frame_idx[frame_idx]; bp < ngs->bptbl->n_ent; bp++) {
+    for (bp = ngs->bptbl->ef_idx[frame_idx]; bp < ngs->bptbl->n_ent; bp++) {
         bpe = &(ngs->bptbl->ent[bp]);
         if (!bpe->valid)
             continue;
@@ -1469,11 +1471,8 @@ ngram_fwdtree_search(ngram_search_t *ngs, int frame_idx)
         return 0;
     ngs->st.n_senone_active_utt += ps_search_acmod(ngs)->n_senone_active;
 
-    /* Sort and garbage collect backpointer table. */
-    bptable_gc(ngs->bptbl, ngs->oldest_bp, frame_idx);
-
     /* Mark backpointer table for current frame. */
-    bptbl_push_frame(ngs->bptbl, frame_idx);
+    bptbl_push_frame(ngs->bptbl, ngs->oldest_bp, frame_idx);
 
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
@@ -1512,7 +1511,7 @@ ngram_fwdtree_finish(ngram_search_t *ngs)
     /* This is the number of frames processed. */
     cf = ps_search_acmod(ngs)->output_frame;
     /* Add a mark in the backpointer table for one past the final frame. */
-    bptbl_push_frame(ngs->bptbl, cf);
+    bptbl_push_frame(ngs->bptbl, ngs->oldest_bp, cf);
 
     /* Deactivate channels lined up for the next frame */
     /* First, root channels of HMM tree */

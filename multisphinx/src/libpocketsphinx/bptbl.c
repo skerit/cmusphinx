@@ -66,9 +66,9 @@ bptbl_init(dict_t *dict, int n_alloc, int n_frame_alloc)
     bptbl->bscore_stack_size = bptbl->n_alloc * 20;
     bptbl->bscore_stack = ckd_calloc(bptbl->bscore_stack_size,
                                      sizeof(*bptbl->bscore_stack));
-    bptbl->frame_idx = ckd_calloc(bptbl->n_frame_alloc + 1,
-                                  sizeof(*bptbl->frame_idx));
-    ++bptbl->frame_idx; /* Make bptableidx[-1] valid */
+    bptbl->ef_idx = ckd_calloc(bptbl->n_frame_alloc + 1,
+                               sizeof(*bptbl->ef_idx));
+    ++bptbl->ef_idx; /* Make bptableidx[-1] valid */
     bptbl->frm_wordlist = ckd_calloc(bptbl->n_frame_alloc,
                                      sizeof(*bptbl->frm_wordlist));
 
@@ -84,8 +84,8 @@ bptbl_free(bptbl_t *bptbl)
     ckd_free(bptbl->word_idx);
     ckd_free(bptbl->ent);
     ckd_free(bptbl->bscore_stack);
-    if (bptbl->frame_idx != NULL)
-        ckd_free(bptbl->frame_idx - 1);
+    if (bptbl->ef_idx != NULL)
+        ckd_free(bptbl->ef_idx - 1);
     ckd_free(bptbl->frm_wordlist);
     ckd_free(bptbl);
 }
@@ -107,19 +107,21 @@ dump_bptable(bptbl_t *bptbl)
 }
 
 int
-bptbl_push_frame(bptbl_t *bptbl, int frame_idx)
+bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
 {
+    E_INFO("pushing frame %d, oldest bp %d in frame %d\n",
+           frame_idx, oldest_bp, bp_sf(bptbl, oldest_bp));
     if (frame_idx >= bptbl->n_frame_alloc) {
         bptbl->n_frame_alloc *= 2;
-        bptbl->frame_idx = ckd_realloc(bptbl->frame_idx - 1,
-                                       (bptbl->n_frame_alloc + 1)
-                                       * sizeof(*bptbl->frame_idx));
+        bptbl->ef_idx = ckd_realloc(bptbl->ef_idx - 1,
+                                    (bptbl->n_frame_alloc + 1)
+                                    * sizeof(*bptbl->ef_idx));
         bptbl->frm_wordlist = ckd_realloc(bptbl->frm_wordlist,
                                           bptbl->n_frame_alloc
                                           * sizeof(*bptbl->frm_wordlist));
-        ++bptbl->frame_idx; /* Make bptableidx[-1] valid */
+        ++bptbl->ef_idx; /* Make bptableidx[-1] valid */
     }
-    bptbl->frame_idx[frame_idx] = bptbl->n_ent;
+    bptbl->ef_idx[frame_idx] = bptbl->n_ent;
     return bptbl->n_ent;
 }
 

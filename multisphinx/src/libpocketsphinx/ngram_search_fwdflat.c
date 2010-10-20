@@ -643,7 +643,7 @@ fwdflat_word_transition(ngram_search_t *ngs, int frame_idx)
     get_expand_wordlist(ngs, cf, ngs->max_sf_win);
 
     /* Scan words exited in current frame */
-    for (b = ngs->bptbl->frame_idx[cf]; b < ngs->bptbl->n_ent; b++) {
+    for (b = ngs->bptbl->ef_idx[cf]; b < ngs->bptbl->n_ent; b++) {
         xwdssid_t *rssid;
         int32 silscore;
 
@@ -798,7 +798,7 @@ ngram_fwdflat_search(ngram_search_t *ngs, int frame_idx)
     ngs->st.n_senone_active_utt += ps_search_acmod(ngs)->n_senone_active;
 
     /* Mark backpointer table for current frame. */
-    bptbl_push_frame(ngs->bptbl, frame_idx);
+    bptbl_push_frame(ngs->bptbl, ngs->oldest_bp, frame_idx);
 
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
@@ -905,7 +905,7 @@ ngram_fwdflat_finish(ngram_search_t *ngs)
     /* This is the number of frames processed. */
     cf = ps_search_acmod(ngs)->output_frame;
     /* Add a mark in the backpointer table for one past the final frame. */
-    bptbl_push_frame(ngs->bptbl, cf);
+    bptbl_push_frame(ngs->bptbl, ngs->oldest_bp, cf);
 
     /* Print out some statistics. */
     if (cf > 0) {
