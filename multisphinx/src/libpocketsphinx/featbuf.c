@@ -70,7 +70,6 @@ struct featbuf_s {
     int beginutt, endutt;
     FILE *mfcfh;
     FILE *rawfh;
-    /* FIXME: These need to be semaphores... */
     /**
      * Event signaled by consumer threads when featbuf_release_all()
      * is called.
@@ -78,15 +77,24 @@ struct featbuf_s {
     sbevent_t *release;
     /**
      * Number of consumer threads which have completed the utterance.
+     *
+     * FIXME: This has race conditions and should be replaced by a
+     * semaphore-like object.
      */
     int released;
     /**
      * Event signaled by producer thread when a new utterance is
-     * started.  Manually reset at end of utterance.  Also signaled to
-     * cancel waiting on an utterance in which case @a canceled will
-     * be true.
+     * started.  Also signaled to cancel waiting on an utterance in
+     * which case @a canceled will be true.
      */
     sbevent_t *start;
+    /**
+     * Number of consumer threads which are waiting to start the utterance.
+     *
+     * FIXME: This has race conditions and should be replaced by a semaphore.
+     */
+    int started;
+   
     /**
      * Flag signifying that featbuf_cancel() was called.  Reset by
      * featbuf_start_utt().  */
@@ -247,9 +255,12 @@ featbuf_wait_utt(featbuf_t *fb, int timeout)
 
     E_INFO("Waiting for utt refcount = %d\n", fb->refcount);
     if ((rc = sbevent_wait(fb->start, s, timeout)) < 0) {
-        E_INFO("Wait finished with %d\n", rc);
+        /* This means a timeout, so don't decrement fb->started. */
         return rc;
     }
+    /* FIXME: Race condition. */
+    if (++fb->started == fb->refcount - 1)
+        sbevent_reset(fb->start);
     E_INFO("Wait finished with %d\n", rc);
     if (fb->canceled) {
         E_INFO("Wait canceled\n");
@@ -293,12 +304,7 @@ featbuf_release_all(featbuf_t *fb, int sidx)
 
     if ((rv = featbuf_release(fb, sidx, -1)) < 0)
         return rv;
-    /* FIXME: Still possible race conditions here, need to use semaphores. */
-    if (++fb->released == fb->refcount - 1) {
-        E_INFO("WTF releasing start signal released %d refcount %d\n",
-               fb->released, fb->refcount);
-        sbevent_reset(fb->start);
-    }
+    ++fb->released;
     sbevent_signal(fb->release);
     return rv;
 }
@@ -313,6 +319,7 @@ featbuf_start_utt(featbuf_t *fb)
     fb->beginutt = TRUE;
     fb->endutt = FALSE;
     fb->released = 0;
+    fb->started = 0;
 
     fe_start_utt(fb->fe);
 

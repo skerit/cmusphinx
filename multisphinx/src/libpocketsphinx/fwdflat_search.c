@@ -960,8 +960,6 @@ fwdflat_search_decode_2ndpass(fwdflat_search_t *ffs, acmod_t *acmod)
             /* We are going to use the window so truncate it. */
             if (end_win > bptbl_frame_idx(ffs->input_bptbl))
                 end_win = bptbl_frame_idx(ffs->input_bptbl);
-            E_INFO("Searching frame %d window end %d\n",
-                   frame_idx, end_win);
             fwdflat_search_expand_arcs(ffs, frame_idx, end_win);
             if ((k = fwdflat_search_one_frame(ffs, frame_idx)) <= 0)
                 break;
@@ -980,7 +978,6 @@ fwdflat_search_decode(ps_search_t *base)
     acmod_t *acmod = ps_search_acmod(base);
     int frame_idx, nfr, k;
 
-    E_INFO("WTF decoding\n");
     if (ffs->input_bptbl)
         return fwdflat_search_decode_2ndpass(ffs, ps_search_acmod(base));
 
