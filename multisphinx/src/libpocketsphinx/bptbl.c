@@ -431,7 +431,7 @@ bptbl_update_active(bptbl_t *bptbl, int active_fr, int last_retired_bp)
 static void
 bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
 {
-    int prev_active_fr, active_fr;
+    int next_active_fr;
     int n_retired, last_retired_bp;
 
     /* active_fr is the first frame which is still active in search
@@ -440,34 +440,33 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
      * backwards to any backpointers before active_fr, and thus any
      * backpointers which are not reachable from those exiting in
      * active_fr will never be reachable. */
-    prev_active_fr = bptbl->active_fr;
     if (oldest_bp == NO_BP)
-        active_fr = 0;
+        next_active_fr = 0;
     else
-        active_fr = bptbl_ent(bptbl, oldest_bp)->frame;
-    assert(active_fr >= prev_active_fr);
+        next_active_fr = bptbl_ent(bptbl, oldest_bp)->frame;
+    assert(next_active_fr >= bptbl->active_fr);
     /* Need at least 2 frames to GC. */
-    if (active_fr <= prev_active_fr + 1)
+    if (next_active_fr <= bptbl->active_fr + 1)
         return;
     /* If there is nothing to GC then finish up. */
-    if (bptbl_ef_idx(bptbl, prev_active_fr)
-        == bptbl_ef_idx(bptbl, active_fr)) {
-        bptbl_update_active(bptbl, active_fr, bptbl->first_invert_bp);
+    if (bptbl_ef_idx(bptbl, bptbl->active_fr)
+        == bptbl_ef_idx(bptbl, next_active_fr)) {
+        bptbl_update_active(bptbl, next_active_fr, bptbl->first_invert_bp);
         return;
     }
-    E_DEBUG(2,("GC from frame %d to %d\n", prev_active_fr, active_fr));
+    E_DEBUG(2,("GC from frame %d to %d\n", bptbl->active_fr, next_active_fr));
     /* Expand the permutation table if necessary. */
-    garray_expand_to(bptbl->permute, bptbl_ef_idx(bptbl, active_fr));
+    garray_expand_to(bptbl->permute, bptbl_ef_idx(bptbl, next_active_fr));
     garray_set_base(bptbl->permute, bptbl_active_idx(bptbl));
     /* Mark, compact, snap pointers. */
-    n_retired = bptbl_mark(bptbl, active_fr, frame_idx);
+    n_retired = bptbl_mark(bptbl, next_active_fr, frame_idx);
     E_DEBUG(2,("About to retire %d bps\n", n_retired));
-    last_retired_bp = bptbl_retire(bptbl, n_retired, bptbl_ef_idx(bptbl, active_fr));
+    last_retired_bp = bptbl_retire(bptbl, n_retired, bptbl_ef_idx(bptbl, next_active_fr));
     assert(n_retired == last_retired_bp - bptbl->first_invert_bp);
     bptbl_remap(bptbl, last_retired_bp,
-                bptbl_ef_idx(bptbl, active_fr),
-                bptbl_ef_idx(bptbl, active_fr));
-    bptbl_update_active(bptbl, active_fr, last_retired_bp);
+                bptbl_ef_idx(bptbl, next_active_fr),
+                bptbl_ef_idx(bptbl, next_active_fr));
+    bptbl_update_active(bptbl, next_active_fr, last_retired_bp);
     E_INFO("Retired %d bps: now %d retired, %d active\n", n_retired,
            bptbl_retired_idx(bptbl),
            bptbl_end_idx(bptbl) - bptbl_active_idx(bptbl));
