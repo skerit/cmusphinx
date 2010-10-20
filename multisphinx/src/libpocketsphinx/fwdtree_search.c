@@ -1954,7 +1954,7 @@ fwdtree_search_find_exit(fwdtree_search_t *fts, int frame_idx, int32 *out_best_s
         return NO_BP;
 
     /* Now find the entry for </s> OR the best scoring entry. */
-    assert(end_bpidx < fts->bptbl->n_alloc);
+    assert(end_bpidx < fts->bptbl->n_ent_alloc);
     for (bp = bptbl_ef_idx(fts->bptbl, frame_idx); bp < end_bpidx; ++bp) {
         bp_t *bpe = bptbl_ent(fts->bptbl, bp);
         if (bpe->wid == ps_search_finish_wid(fts)

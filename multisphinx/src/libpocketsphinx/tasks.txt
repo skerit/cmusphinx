@@ -23,3 +23,5 @@
     * radix sort by frame, insertion sort by word id
     * lattice generation is now very, very easy
     * count start frames in retirement process
+
+* Replace bptbl arrays with ring queues

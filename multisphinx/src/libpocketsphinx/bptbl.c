@@ -66,25 +66,26 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
     bptbl_t *bptbl = ckd_calloc(1, sizeof(*bptbl));
 
     bptbl->d2p = dict2pid_retain(d2p);
-    bptbl->n_alloc = n_alloc;
-    bptbl->n_active_alloc = n_frame_alloc;
+    bptbl->n_ent_alloc = n_alloc;
+    bptbl->n_retired_alloc = n_alloc;
+    bptbl->n_frame_alloc = n_frame_alloc;
     /* FIXME: This will be used for bptbl->ent too */
     bptbl->n_permute_alloc = n_frame_alloc;
 
-    bptbl->ent = ckd_calloc(bptbl->n_alloc, sizeof(*bptbl->ent));
+    bptbl->ent = ckd_calloc(bptbl->n_ent_alloc, sizeof(*bptbl->ent));
     bptbl->permute = ckd_calloc(bptbl->n_permute_alloc, sizeof(*bptbl->permute));
 
-    bptbl->retired = ckd_calloc(bptbl->n_alloc, sizeof(*bptbl->retired));
+    bptbl->retired = ckd_calloc(bptbl->n_retired_alloc, sizeof(*bptbl->retired));
     bptbl->word_idx = ckd_calloc(dict_size(d2p->dict),
                                  sizeof(*bptbl->word_idx));
-    bptbl->bscore_stack_size = bptbl->n_alloc * 20;
+    bptbl->bscore_stack_size = bptbl->n_ent_alloc * 20;
     bptbl->bscore_stack = ckd_calloc(bptbl->bscore_stack_size,
                                      sizeof(*bptbl->bscore_stack));
-    bptbl->ef_idx = ckd_calloc(bptbl->n_active_alloc,
+    bptbl->ef_idx = ckd_calloc(bptbl->n_frame_alloc,
                                sizeof(*bptbl->ef_idx));
-    bptbl->frm_wordlist = ckd_calloc(bptbl->n_active_alloc,
+    bptbl->frm_wordlist = ckd_calloc(bptbl->n_frame_alloc,
                                      sizeof(*bptbl->frm_wordlist));
-    bptbl->valid_fr = bitvec_alloc(bptbl->n_active_alloc);
+    bptbl->valid_fr = bitvec_alloc(bptbl->n_frame_alloc);
 
     return bptbl;
 }
@@ -97,6 +98,7 @@ bptbl_free(bptbl_t *bptbl)
     dict2pid_free(bptbl->d2p);
     ckd_free(bptbl->word_idx);
     ckd_free(bptbl->ent);
+    ckd_free(bptbl->retired);
     ckd_free(bptbl->permute);
     ckd_free(bptbl->bscore_stack);
     ckd_free(bptbl->ef_idx);
@@ -110,14 +112,15 @@ bptbl_reset(bptbl_t *bptbl)
 {
     int i;
 
-    for (i = 0; i < bptbl->n_active_alloc; ++i) {
+    for (i = 0; i < bptbl->n_frame_alloc; ++i) {
         bptbl->ef_idx[i] = -1;
     }
-    bitvec_clear_all(bptbl->valid_fr, bptbl->n_active_alloc);
+    bitvec_clear_all(bptbl->valid_fr, bptbl->n_frame_alloc);
     bptbl->first_invert_bp = 0;
     bptbl->dest_s_idx = 0;
     bptbl->n_frame = 0;
     bptbl->n_ent = 0;
+    bptbl->n_retired = 0;
     bptbl->bss_head = 0;
     bptbl->active_fr = 0;
 }
@@ -264,35 +267,36 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
     for (dest = src = sidx; src < eidx; ++src) {
         /* Update all ef_idx including missing frames (there are many) */
         while (ef >= bptbl->active_fr && ef <= bptbl->ent[src].frame) {
-            assert(ef - bptbl->active_fr < bptbl->n_active_alloc);
+            assert(ef - bptbl->active_fr < bptbl->n_frame_alloc);
             bptbl->ef_idx[ef - bptbl->active_fr] = dest;
             ++ef;
         }
         if (bptbl->ent[src].valid) {
             int rcsize = bptbl_rcsize(bptbl, bptbl->ent + src);
-            if (dest != src) {
-                E_DEBUG(4,("permute %d => %d\n", src, dest));
-                if (bptbl->ent[src].s_idx != bptbl->dest_s_idx) {
-                    E_DEBUG(4,("Moving %d rc scores from %d to %d for bptr %d\n",
-                               rcsize, bptbl->ent[src].s_idx, bptbl->dest_s_idx, dest));
-                    assert(bptbl->ent[src].s_idx > bptbl->dest_s_idx);
-                    if (src < bptbl->n_ent - 1)
-                        assert(bptbl->dest_s_idx + rcsize <= bptbl->ent[src + 1].s_idx);
-                    memmove(bptbl->bscore_stack + bptbl->dest_s_idx,
-                            bptbl->bscore_stack + bptbl->ent[src].s_idx,
-                            rcsize * sizeof(*bptbl->bscore_stack));
-                    if (bptbl->dest_s_idx == 8568) {
-                        int k;
-                        E_INFO_NOFN("bscore:");
-                        for (k = 0; k < rcsize; ++k)
-                            E_INFOCONT(" %d", bptbl->bscore_stack[bptbl->dest_s_idx + k]);
-                        E_INFOCONT("\n");
-                    }
+            E_DEBUG(4,("permute %d => %d\n", src, dest));
+            if (bptbl->ent[src].s_idx != bptbl->dest_s_idx) {
+                E_DEBUG(4,("Moving %d rc scores from %d to %d for bptr %d\n",
+                           rcsize, bptbl->ent[src].s_idx, bptbl->dest_s_idx, dest));
+                assert(bptbl->ent[src].s_idx > bptbl->dest_s_idx);
+                if (src < bptbl->n_ent - 1)
+                    assert(bptbl->dest_s_idx + rcsize <= bptbl->ent[src + 1].s_idx);
+                memmove(bptbl->bscore_stack + bptbl->dest_s_idx,
+                        bptbl->bscore_stack + bptbl->ent[src].s_idx,
+                        rcsize * sizeof(*bptbl->bscore_stack));
+                if (bptbl->dest_s_idx == 8568) {
+                    int k;
+                    E_INFO_NOFN("bscore:");
+                    for (k = 0; k < rcsize; ++k)
+                        E_INFOCONT(" %d", bptbl->bscore_stack[bptbl->dest_s_idx + k]);
+                    E_INFOCONT("\n");
                 }
+            }
+            bptbl->ent[dest].s_idx = bptbl->dest_s_idx;
+            if (dest != src) {
                 bptbl->ent[dest] = bptbl->ent[src];
-                bptbl->ent[dest].s_idx = bptbl->dest_s_idx;
                 bptbl->ent[src].valid = FALSE;
             }
+
             assert(src - bptbl->first_invert_bp < bptbl->n_permute_alloc);
             bptbl->permute[src - bptbl->first_invert_bp] = dest;
             bptbl->dest_s_idx += rcsize;
@@ -376,7 +380,7 @@ bptbl_update_active_fr(bptbl_t *bptbl, int active_fr)
     E_DEBUG(3,("moving %d ef_idx from %d (%d - %d)\n",
                bptbl->n_frame - active_fr,
                delta, active_fr, bptbl->active_fr));
-    assert(delta + bptbl->n_frame - active_fr < bptbl->n_active_alloc);
+    assert(delta + bptbl->n_frame - active_fr < bptbl->n_frame_alloc);
     memmove(bptbl->ef_idx, bptbl->ef_idx + delta,
             (bptbl->n_frame - active_fr) * sizeof(*bptbl->ef_idx));
     bptbl->active_fr = active_fr;
@@ -429,15 +433,15 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
 {
     E_DEBUG(2,("pushing frame %d, oldest bp %d in frame %d\n",
                frame_idx, oldest_bp, oldest_bp == NO_BP ? -1 : bptbl->ent[oldest_bp].frame));
-    if (frame_idx - bptbl->active_fr >= bptbl->n_active_alloc) {
-        bptbl->n_active_alloc *= 2;
-        E_INFO("Reallocating frame-based bptr arrays to %d\n", bptbl->n_active_alloc);
+    if (frame_idx - bptbl->active_fr >= bptbl->n_frame_alloc) {
+        bptbl->n_frame_alloc *= 2;
+        E_INFO("Reallocating frame-based bptr arrays to %d\n", bptbl->n_frame_alloc);
         bptbl->ef_idx = ckd_realloc(bptbl->ef_idx,
-                                    bptbl->n_active_alloc * sizeof(*bptbl->ef_idx));
+                                    bptbl->n_frame_alloc * sizeof(*bptbl->ef_idx));
         bptbl->frm_wordlist = ckd_realloc(bptbl->frm_wordlist,
-                                          bptbl->n_active_alloc
+                                          bptbl->n_frame_alloc
                                           * sizeof(*bptbl->frm_wordlist));
-        bptbl->valid_fr = bitvec_realloc(bptbl->valid_fr, bptbl->n_active_alloc);
+        bptbl->valid_fr = bitvec_realloc(bptbl->valid_fr, bptbl->n_frame_alloc);
     }
     bptbl->ef_idx[frame_idx - bptbl->active_fr] = bptbl->n_ent;
     bptbl->n_frame = frame_idx + 1;
@@ -497,12 +501,12 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx, int32 path,
     }
 
     /* Expand the backpointer tables if necessary. */
-    if (bptbl->n_ent >= bptbl->n_alloc) {
-        bptbl->n_alloc *= 2;
+    if (bptbl->n_ent >= bptbl->n_ent_alloc) {
+        bptbl->n_ent_alloc *= 2;
         bptbl->ent = ckd_realloc(bptbl->ent,
-                                 bptbl->n_alloc
+                                 bptbl->n_ent_alloc
                                  * sizeof(*bptbl->ent));
-        E_INFO("Resized backpointer table to %d entries\n", bptbl->n_alloc);
+        E_INFO("Resized backpointer table to %d entries\n", bptbl->n_ent_alloc);
     }
     if (bptbl->bss_head >= bptbl->bscore_stack_size
         - bin_mdef_n_ciphone(bptbl->d2p->mdef)) {

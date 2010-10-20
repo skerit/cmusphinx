@@ -79,13 +79,14 @@ typedef struct bp_s {
  */
 typedef struct bptbl_s {
     dict2pid_t *d2p;     /**< Tied state mapping. */
+
     bp_t *retired;       /**< Retired backpointer entries. */
     int32 n_retired;     /**< Number of retired entries. */
+    int32 n_retired_alloc; /**< Allocated size of retired array. */
 
     bp_t *ent;           /**< Active backpointer entries. */
     int32 n_ent;         /**< First free BPTable entry. */
-
-    int32 n_alloc;       /**< Number of entries allocated for entry-based arrays (ent, permute) */
+    int32 n_ent_alloc;   /**< Allocated size of active array. */
 
     int32 *bscore_stack;     /**< Array containing right context scores for word exits. */
     int32 bss_head;          /**< First free BScoreStack entry */
@@ -112,7 +113,7 @@ typedef struct bptbl_s {
     int32 n_permute_alloc;
 
     /* All these are indexed by frame - active_sf */
-    int32 n_active_alloc; /**< Number of frames allocated for frame-based arrays. */
+    int32 n_frame_alloc; /**< Number of frames allocated for frame-based arrays. */
     int32 *ef_idx;       /**< First BPTable entry exiting in each frame */
     ps_latnode_t **frm_wordlist;   /**< List of active words in each frame. */
     bitvec_t *valid_fr;  /**< Set of accessible frames (used in gc) */

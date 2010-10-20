@@ -38,6 +38,12 @@
 /**
  * @file ring_queue.h
  * @brief Circular arrays that support synchronized queue operations.
+ *
+ * Ring queues are used for temporary storage and queuing of
+ * time-sequence data such as backpointers.  A ring queue stores up to
+ * a specified number of uniformly sized objects.  Each object is
+ * assigned a unique and increasing sequence ID, which can be used to
+ * access it so long as it remains in the queue.
  */
 
 #ifndef __RING_QUEUE_H__
@@ -46,12 +52,14 @@
 typedef struct ring_queue_s ring_queue_t;
 
 /**
- * Flags passed to ring_queue_init()
+ * Type of sequence IDs.
  */
-enum ring_queue_flags_e {
-	RING_QUEUE_SYNCHRONIZED = (1<<0), /**< Synchronize accesses. */
-	RING_QUEUE_GROWABLE = (1<<1)      /**< Grow the queue when full. */
-};
+typedef int32 qid_t;
+
+/**
+ * Invalid sequence ID.
+ */
+#define QID_INVALID -1
 
 /**
  * Create a ring queue.
@@ -76,7 +84,53 @@ ring_queue_t *ring_queue_retain(ring_queue_t *rq);
 SPHINXBASE_EXPORT
 int ring_queue_free(ring_queue_t *rq);
 
+/**
+ * Add an item to the end of the ring queue.
+ *
+ * @param timeout Maximum wait time in nanoseconds, or 0 for
+ *                non-blocking, -1 to wait forever.
+ */
+SPHINXBASE_EXPORT
+qid_t ring_queue_push(ring_queue_t *rq, void const *item,
+                      int timeout);
 
+
+/**
+ * Pull an item off the front of the ring queue.
+ *
+ * @param timeout Maximum wait time in nanoseconds, or 0 for
+ *                non-blocking, -1 to wait forever.
+ */
+SPHINXBASE_EXPORT
+qid_t ring_queue_shift(ring_queue_t *rq, void *out_item,
+                       int timeout);
+
+/**
+ * Query number of items in the queue and space available.
+ *
+ * @param out_items [Output] Number of items in the queue.
+ * @param out_space [Output] Amount of free space in the queue.
+ * @return Index of first item in the queue.
+ */
+SPHINXBASE_EXPORT
+qid_t ring_queue_available(ring_queue_t *rq, int *out_items, int *out_space);
+
+/**
+ * Get a pointer to a specific item in the queue.
+ *
+ * @return Pointer to item with ID qid, or NULL if no such item.
+ */
+SPHINXBASE_EXPORT
+void *ring_queue_ent(ring_queue_t *rq, qid_t qid);
+
+/**
+ * Drain multiple items from the queue.
+ *
+ * @param timeout Maximum wait time in nanoseconds, or 0 for
+ *                non-blocking, -1 to wait forever.
+ */
+SPHINXBASE_EXPORT
+qid_t ring_queue_drain(ring_queue_t *rq, int n_items, int timeout);
 
 
 #endif /* __RING_QUEUE_H__ */
