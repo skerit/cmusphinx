@@ -162,27 +162,13 @@ ngram_search_init(cmd_ln_t *config,
     /* Allocate a billion different tables for stuff. */
     ngs->word_chan = ckd_calloc(dict_size(dict),
                                 sizeof(*ngs->word_chan));
-    ngs->word_lat_idx = ckd_calloc(dict_size(dict),
-                                   sizeof(*ngs->word_lat_idx));
     ngs->zeroPermTab = ckd_calloc(bin_mdef_n_ciphone(acmod->mdef),
                                   sizeof(*ngs->zeroPermTab));
     ngs->word_active = bitvec_alloc(dict_size(dict));
     ngs->last_ltrans = ckd_calloc(dict_size(dict),
                                   sizeof(*ngs->last_ltrans));
 
-    /* FIXME: All these structures need to be made dynamic with
-     * garbage collection. */
-    ngs->bp_table_size = cmd_ln_int32_r(config, "-latsize");
-    ngs->bp_table = ckd_calloc(ngs->bp_table_size,
-                               sizeof(*ngs->bp_table));
-    /* FIXME: This thing is frickin' huge. */
-    ngs->bscore_stack_size = ngs->bp_table_size * 20;
-    ngs->bscore_stack = ckd_calloc(ngs->bscore_stack_size,
-                                   sizeof(*ngs->bscore_stack));
-    ngs->n_frame_alloc = 256;
-    ngs->bp_table_idx = ckd_calloc(ngs->n_frame_alloc + 1,
-                                   sizeof(*ngs->bp_table_idx));
-    ++ngs->bp_table_idx; /* Make bptableidx[-1] valid */
+    ngs->bptbl = bptbl_init(dict, cmd_ln_int32_r(config, "-latsize"), 256);
 
     /* Allocate active word list array */
     ngs->active_word_list = ckd_calloc_2d(2, dict_size(dict),
@@ -258,11 +244,11 @@ ngram_search_reinit(ps_search_t *search, dict_t *dict, dict2pid_t *d2p)
     if (old_n_words != dict_size(dict)) {
         search->n_words = dict_size(dict);
         /* Reallocate these temporary arrays. */
-        ckd_free(ngs->word_lat_idx);
+        ckd_free(ngs->bptbl->word_idx);
         ckd_free(ngs->word_active);
         ckd_free(ngs->last_ltrans);
         ckd_free_2d(ngs->active_word_list);
-        ngs->word_lat_idx = ckd_calloc(search->n_words, sizeof(*ngs->word_lat_idx));
+        ngs->bptbl->word_idx = ckd_calloc(search->n_words, sizeof(*ngs->bptbl->word_idx));
         ngs->word_active = bitvec_alloc(search->n_words);
         ngs->last_ltrans = ckd_calloc(search->n_words, sizeof(*ngs->last_ltrans));
         ngs->active_word_list
@@ -310,35 +296,12 @@ ngram_search_free(ps_search_t *search)
     ngram_model_free(ngs->lmset);
 
     ckd_free(ngs->word_chan);
-    ckd_free(ngs->word_lat_idx);
     ckd_free(ngs->zeroPermTab);
     bitvec_free(ngs->word_active);
-    ckd_free(ngs->bp_table);
-    ckd_free(ngs->bscore_stack);
-    if (ngs->bp_table_idx != NULL)
-        ckd_free(ngs->bp_table_idx - 1);
+    bptbl_free(ngs->bptbl);
     ckd_free_2d(ngs->active_word_list);
     ckd_free(ngs->last_ltrans);
     ckd_free(ngs);
-}
-
-int
-ngram_search_mark_bptable(ngram_search_t *ngs, int frame_idx)
-{
-    if (frame_idx >= ngs->n_frame_alloc) {
-        ngs->n_frame_alloc *= 2;
-        ngs->bp_table_idx = ckd_realloc(ngs->bp_table_idx - 1,
-                                        (ngs->n_frame_alloc + 1)
-                                        * sizeof(*ngs->bp_table_idx));
-        if (ngs->frm_wordlist) {
-            ngs->frm_wordlist = ckd_realloc(ngs->frm_wordlist,
-                                            ngs->n_frame_alloc
-                                            * sizeof(*ngs->frm_wordlist));
-        }
-        ++ngs->bp_table_idx; /* Make bptableidx[-1] valid */
-    }
-    ngs->bp_table_idx[frame_idx] = ngs->bpidx;
-    return ngs->bpidx;
 }
 
 /**
@@ -352,22 +315,22 @@ cache_bptable_paths(ngram_search_t *ngs, int32 bp)
 
     assert(bp != NO_BP);
 
-    be = &(ngs->bp_table[bp]);
+    be = &(ngs->bptbl->ent[bp]);
     prev_bp = bp;
     w = be->wid;
 
     while (dict_filler_word(ps_search_dict(ngs), w)) {
-        prev_bp = ngs->bp_table[prev_bp].bp;
+        prev_bp = ngs->bptbl->ent[prev_bp].bp;
         if (prev_bp == NO_BP)
             return;
-        w = ngs->bp_table[prev_bp].wid;
+        w = ngs->bptbl->ent[prev_bp].wid;
     }
 
     be->real_wid = dict_basewid(ps_search_dict(ngs), w);
 
-    prev_bp = ngs->bp_table[prev_bp].bp;
+    prev_bp = ngs->bptbl->ent[prev_bp].bp;
     be->prev_real_wid =
-        (prev_bp != NO_BP) ? ngs->bp_table[prev_bp].real_wid : -1;
+        (prev_bp != NO_BP) ? ngs->bptbl->ent[prev_bp].real_wid : -1;
 }
 
 void
@@ -377,56 +340,56 @@ ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
     int32 _bp_;
 
     /* Look for an existing exit for this word in this frame. */
-    _bp_ = ngs->word_lat_idx[w];
+    _bp_ = ngs->bptbl->word_idx[w];
     if (_bp_ != NO_BP) {
         /* Keep only the best scoring one (this is a potential source
          * of search errors...) */
-        if (ngs->bp_table[_bp_].score WORSE_THAN score) {
-            if (ngs->bp_table[_bp_].bp != path) {
-                ngs->bp_table[_bp_].bp = path;
+        if (ngs->bptbl->ent[_bp_].score WORSE_THAN score) {
+            if (ngs->bptbl->ent[_bp_].bp != path) {
+                ngs->bptbl->ent[_bp_].bp = path;
                 cache_bptable_paths(ngs, _bp_);
             }
-            ngs->bp_table[_bp_].score = score;
+            ngs->bptbl->ent[_bp_].score = score;
         }
         /* But do keep track of scores for all right contexts, since
          * we need them to determine the starting path scores for any
          * successors of this word exit. */
-        ngs->bscore_stack[ngs->bp_table[_bp_].s_idx + rc] = score;
+        ngs->bptbl->bscore_stack[ngs->bptbl->ent[_bp_].s_idx + rc] = score;
     }
     else {
         int32 i, rcsize, *bss;
         bp_t *be;
 
         /* This might happen if recognition fails. */
-        if (ngs->bpidx == NO_BP) {
+        if (ngs->bptbl->n_ent == NO_BP) {
             E_ERROR("No entries in backpointer table!");
             return;
         }
 
         /* Expand the backpointer tables if necessary. */
-        if (ngs->bpidx >= ngs->bp_table_size) {
-            ngs->bp_table_size *= 2;
-            ngs->bp_table = ckd_realloc(ngs->bp_table,
-                                        ngs->bp_table_size
-                                        * sizeof(*ngs->bp_table));
-            E_INFO("Resized backpointer table to %d entries\n", ngs->bp_table_size);
+        if (ngs->bptbl->n_ent >= ngs->bptbl->n_alloc) {
+            ngs->bptbl->n_alloc *= 2;
+            ngs->bptbl->ent = ckd_realloc(ngs->bptbl->ent,
+                                        ngs->bptbl->n_alloc
+                                        * sizeof(*ngs->bptbl->ent));
+            E_INFO("Resized backpointer table to %d entries\n", ngs->bptbl->n_alloc);
         }
-        if (ngs->bss_head >= ngs->bscore_stack_size
+        if (ngs->bptbl->bss_head >= ngs->bptbl->bscore_stack_size
             - bin_mdef_n_ciphone(ps_search_acmod(ngs)->mdef)) {
-            ngs->bscore_stack_size *= 2;
-            ngs->bscore_stack = ckd_realloc(ngs->bscore_stack,
-                                            ngs->bscore_stack_size
-                                            * sizeof(*ngs->bscore_stack));
-            E_INFO("Resized score stack to %d entries\n", ngs->bscore_stack_size);
+            ngs->bptbl->bscore_stack_size *= 2;
+            ngs->bptbl->bscore_stack = ckd_realloc(ngs->bptbl->bscore_stack,
+                                            ngs->bptbl->bscore_stack_size
+                                            * sizeof(*ngs->bptbl->bscore_stack));
+            E_INFO("Resized score stack to %d entries\n", ngs->bptbl->bscore_stack_size);
         }
 
-        ngs->word_lat_idx[w] = ngs->bpidx;
-        be = &(ngs->bp_table[ngs->bpidx]);
+        ngs->bptbl->word_idx[w] = ngs->bptbl->n_ent;
+        be = &(ngs->bptbl->ent[ngs->bptbl->n_ent]);
         be->wid = w;
         be->frame = frame_idx;
         be->bp = path;
         be->score = score;
-        be->s_idx = ngs->bss_head;
+        be->s_idx = ngs->bptbl->bss_head;
         be->valid = TRUE;
 
         /* DICT2PID */
@@ -441,14 +404,14 @@ ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
             rcsize = dict2pid_rssid(ps_search_dict2pid(ngs),
                                     be->last_phone, be->last2_phone)->n_ssid;
         }
-        /* Allocate some space on the bscore_stack for all of these triphones. */
-        for (i = rcsize, bss = ngs->bscore_stack + ngs->bss_head; i > 0; --i, bss++)
+        /* Allocate some space on the bptbl->bscore_stack for all of these triphones. */
+        for (i = rcsize, bss = ngs->bptbl->bscore_stack + ngs->bptbl->bss_head; i > 0; --i, bss++)
             *bss = WORST_SCORE;
-        ngs->bscore_stack[ngs->bss_head + rc] = score;
-        cache_bptable_paths(ngs, ngs->bpidx);
+        ngs->bptbl->bscore_stack[ngs->bptbl->bss_head + rc] = score;
+        cache_bptable_paths(ngs, ngs->bptbl->n_ent);
 
-        ngs->bpidx++;
-        ngs->bss_head += rcsize;
+        ngs->bptbl->n_ent++;
+        ngs->bptbl->bss_head += rcsize;
     }
 }
 
@@ -461,32 +424,32 @@ ngram_search_find_exit(ngram_search_t *ngs, int frame_idx, int32 *out_best_score
     int32 best_score;
 
     /* No hypothesis means no exit node! */
-    if (ngs->n_frame == 0)
+    if (ngs->bptbl->n_frame == 0)
         return NO_BP;
 
-    if (frame_idx == -1 || frame_idx >= ngs->n_frame)
-        frame_idx = ngs->n_frame - 1;
-    end_bpidx = ngs->bp_table_idx[frame_idx];
+    if (frame_idx == -1 || frame_idx >= ngs->bptbl->n_frame)
+        frame_idx = ngs->bptbl->n_frame - 1;
+    end_bpidx = ngs->bptbl->frame_idx[frame_idx];
 
     best_score = WORST_SCORE;
     best_exit = NO_BP;
 
     /* Scan back to find a frame with some backpointers in it. */
-    while (frame_idx >= 0 && ngs->bp_table_idx[frame_idx] == end_bpidx)
+    while (frame_idx >= 0 && ngs->bptbl->frame_idx[frame_idx] == end_bpidx)
         --frame_idx;
     /* This is NOT an error, it just means there is no hypothesis yet. */
     if (frame_idx < 0)
         return NO_BP;
 
     /* Now find the entry for </s> OR the best scoring entry. */
-    assert(end_bpidx < ngs->bp_table_size);
-    for (bp = ngs->bp_table_idx[frame_idx]; bp < end_bpidx; ++bp) {
-        if (ngs->bp_table[bp].wid == ps_search_finish_wid(ngs)
-            || ngs->bp_table[bp].score BETTER_THAN best_score) {
-            best_score = ngs->bp_table[bp].score;
+    assert(end_bpidx < ngs->bptbl->n_alloc);
+    for (bp = ngs->bptbl->frame_idx[frame_idx]; bp < end_bpidx; ++bp) {
+        if (ngs->bptbl->ent[bp].wid == ps_search_finish_wid(ngs)
+            || ngs->bptbl->ent[bp].score BETTER_THAN best_score) {
+            best_score = ngs->bptbl->ent[bp].score;
             best_exit = bp;
         }
-        if (ngs->bp_table[bp].wid == ps_search_finish_wid(ngs))
+        if (ngs->bptbl->ent[bp].wid == ps_search_finish_wid(ngs))
             break;
     }
 
@@ -508,7 +471,7 @@ ngram_search_bp_hyp(ngram_search_t *ngs, int bpidx)
     bp = bpidx;
     len = 0;
     while (bp != NO_BP) {
-        bp_t *be = &ngs->bp_table[bp];
+        bp_t *be = &ngs->bptbl->ent[bp];
         bp = be->bp;
         if (dict_real_word(ps_search_dict(ngs), be->wid))
             len += strlen(dict_basestr(ps_search_dict(ngs), be->wid)) + 1;
@@ -524,7 +487,7 @@ ngram_search_bp_hyp(ngram_search_t *ngs, int bpidx)
     bp = bpidx;
     c = base->hyp_str + len - 1;
     while (bp != NO_BP) {
-        bp_t *be = &ngs->bp_table[bp];
+        bp_t *be = &ngs->bptbl->ent[bp];
         size_t len;
 
         bp = be->bp;
@@ -607,11 +570,11 @@ ngram_search_exit_score(ngram_search_t *ngs, bp_t *pbe, int rcphone)
 {
     /* DICT2PID */
     /* Get the mapping from right context phone ID to index in the
-     * right context table and the bscore_stack. */
+     * right context table and the bptbl->bscore_stack. */
     if (pbe->last2_phone == -1) {
         /* No right context for single phone predecessor words. */
-        assert(ngs->bscore_stack[pbe->s_idx] != WORST_SCORE);
-        return ngs->bscore_stack[pbe->s_idx];
+        assert(ngs->bptbl->bscore_stack[pbe->s_idx] != WORST_SCORE);
+        return ngs->bptbl->bscore_stack[pbe->s_idx];
     }
     else {
         xwdssid_t *rssid;
@@ -621,7 +584,7 @@ ngram_search_exit_score(ngram_search_t *ngs, bp_t *pbe, int rcphone)
                                pbe->last_phone, pbe->last2_phone);
         /* This may be WORST_SCORE, which means that there was no exit
          * with rcphone as right context. */
-        return ngs->bscore_stack[pbe->s_idx + rssid->cimap[rcphone]];
+        return ngs->bptbl->bscore_stack[pbe->s_idx + rssid->cimap[rcphone]];
     }
 }
 
@@ -643,7 +606,7 @@ ngram_compute_seg_score(ngram_search_t *ngs, bp_t *be, float32 lwf,
     }
 
     /* Otherwise, calculate lscr and ascr. */
-    pbe = ngs->bp_table + be->bp;
+    pbe = ngs->bptbl->ent + be->bp;
     start_score = ngram_search_exit_score(ngs, pbe,
                                  dict_first_phone(ps_search_dict(ngs),be->wid));
     assert(start_score BETTER_THAN WORST_SCORE);
@@ -705,7 +668,7 @@ ngram_search_finish(ps_search_t *search)
 
     if (ngs->fwdtree) {
         ngram_fwdtree_finish(ngs);
-        /* dump_bptable(ngs); */
+        dump_bptable(ngs->bptbl);
 
         /* Now do fwdflat search in its entirety, if requested. */
         if (ngs->fwdflat) {
@@ -793,8 +756,8 @@ ngram_search_bp2itor(ps_seg_t *seg, int bp)
     ngram_search_t *ngs = (ngram_search_t *)seg->search;
     bp_t *be, *pbe;
 
-    be = &ngs->bp_table[bp];
-    pbe = be->bp == -1 ? NULL : &ngs->bp_table[be->bp];
+    be = &ngs->bptbl->ent[bp];
+    pbe = be->bp == -1 ? NULL : &ngs->bptbl->ent[be->bp];
     seg->word = dict_wordstr(ps_search_dict(ngs), be->wid);
     seg->ef = be->frame;
     seg->sf = pbe ? pbe->frame + 1 : 0;
@@ -874,7 +837,7 @@ ngram_search_bp_iter(ngram_search_t *ngs, int bpidx, float32 lwf)
     itor->n_bpidx = 0;
     bp = bpidx;
     while (bp != NO_BP) {
-        bp_t *be = &ngs->bp_table[bp];
+        bp_t *be = &ngs->bptbl->ent[bp];
         bp = be->bp;
         ++itor->n_bpidx;
     }
@@ -886,7 +849,7 @@ ngram_search_bp_iter(ngram_search_t *ngs, int bpidx, float32 lwf)
     cur = itor->n_bpidx - 1;
     bp = bpidx;
     while (bp != NO_BP) {
-        bp_t *be = &ngs->bp_table[bp];
+        bp_t *be = &ngs->bptbl->ent[bp];
         itor->bpidx[cur] = bp;
         bp = be->bp;
         --cur;
@@ -957,7 +920,7 @@ create_dag_nodes(ngram_search_t *ngs, ps_lattice_t *dag)
     bp_t *bp_ptr;
     int32 i;
 
-    for (i = 0, bp_ptr = ngs->bp_table; i < ngs->bpidx; ++i, ++bp_ptr) {
+    for (i = 0, bp_ptr = ngs->bptbl->ent; i < ngs->bptbl->n_ent; ++i, ++bp_ptr) {
         int32 sf, ef, wid;
         ps_latnode_t *node;
 
@@ -965,7 +928,7 @@ create_dag_nodes(ngram_search_t *ngs, ps_lattice_t *dag)
         if (!bp_ptr->valid)
             continue;
 
-        sf = (bp_ptr->bp < 0) ? 0 : ngs->bp_table[bp_ptr->bp].frame + 1;
+        sf = (bp_ptr->bp < 0) ? 0 : ngs->bptbl->ent[bp_ptr->bp].frame + 1;
         ef = bp_ptr->frame;
         wid = bp_ptr->wid;
 
@@ -1032,7 +995,7 @@ find_end_node(ngram_search_t *ngs, ps_lattice_t *dag, float32 lwf)
 
     /* Find final node </s>.last_frame; nothing can follow this node */
     for (node = dag->nodes; node; node = node->next) {
-        int32 lef = ngs->bp_table[node->lef].frame;
+        int32 lef = ngs->bptbl->ent[node->lef].frame;
         if ((node->wid == ps_search_finish_wid(ngs))
             && (lef == dag->n_frames - 1))
             break;
@@ -1044,7 +1007,7 @@ find_end_node(ngram_search_t *ngs, ps_lattice_t *dag, float32 lwf)
      * find the node corresponding to the best exit. */
     /* Find the last frame containing a word exit. */
     for (ef = dag->n_frames - 1;
-         ef >= 0 && ngs->bp_table_idx[ef] == ngs->bpidx;
+         ef >= 0 && ngs->bptbl->frame_idx[ef] == ngs->bptbl->n_ent;
          --ef);
     if (ef < 0) {
         E_ERROR("Empty backpointer table: can not build DAG.\n");
@@ -1054,15 +1017,15 @@ find_end_node(ngram_search_t *ngs, ps_lattice_t *dag, float32 lwf)
     /* Find best word exit in that frame. */
     bestscore = WORST_SCORE;
     bestbp = NO_BP;
-    for (bp = ngs->bp_table_idx[ef]; bp < ngs->bp_table_idx[ef + 1]; ++bp) {
+    for (bp = ngs->bptbl->frame_idx[ef]; bp < ngs->bptbl->frame_idx[ef + 1]; ++bp) {
         int32 n_used, l_scr, wid, prev_wid;
         
-        wid = ngs->bp_table[bp].real_wid;
-        prev_wid = ngs->bp_table[bp].prev_real_wid;
+        wid = ngs->bptbl->ent[bp].real_wid;
+        prev_wid = ngs->bptbl->ent[bp].prev_real_wid;
         l_scr = ngram_tg_score(ngs->lmset, ps_search_finish_wid(ngs), wid, prev_wid, &n_used);
         l_scr = l_scr * lwf;
-        if (ngs->bp_table[bp].score + l_scr BETTER_THAN bestscore) {
-            bestscore = ngs->bp_table[bp].score + l_scr;
+        if (ngs->bptbl->ent[bp].score + l_scr BETTER_THAN bestscore) {
+            bestscore = ngs->bptbl->ent[bp].score + l_scr;
             bestbp = bp;
         }
     }
@@ -1071,7 +1034,7 @@ find_end_node(ngram_search_t *ngs, ps_lattice_t *dag, float32 lwf)
         return NULL;
     }
     E_WARN("</s> not found in last frame, using %s instead\n",
-           dict_basestr(ps_search_dict(ngs), ngs->bp_table[bestbp].wid));
+           dict_basestr(ps_search_dict(ngs), ngs->bptbl->ent[bestbp].wid));
 
     /* Now find the node that corresponds to it. */
     for (node = dag->nodes; node; node = node->next) {
@@ -1081,7 +1044,7 @@ find_end_node(ngram_search_t *ngs, ps_lattice_t *dag, float32 lwf)
 
     /* FIXME: This seems to happen a lot! */
     E_ERROR("Failed to find DAG node corresponding to %s\n",
-           dict_basestr(ps_search_dict(ngs), ngs->bp_table[bestbp].wid));
+           dict_basestr(ps_search_dict(ngs), ngs->bptbl->ent[bestbp].wid));
     return NULL;
 }
 
@@ -1108,13 +1071,13 @@ ngram_search_lattice(ps_search_t *search)
 
     /* Check to see if a lattice has previously been created over the
      * same number of frames, and reuse it if so. */
-    if (search->dag && search->dag->n_frames == ngs->n_frame)
+    if (search->dag && search->dag->n_frames == ngs->bptbl->n_frame)
         return search->dag;
 
     /* Nope, create a new one. */
     ps_lattice_free(search->dag);
     search->dag = NULL;
-    dag = ps_lattice_init_search(search, ngs->n_frame);
+    dag = ps_lattice_init_search(search, ngs->bptbl->n_frame);
     /* Compute these such that they agree with the fwdtree language weight. */
     lwf = ngs->fwdflat ? ngs->fwdflat_fwdtree_lw_ratio : 1.0;
     create_dag_nodes(ngs, dag);
@@ -1126,7 +1089,7 @@ ngram_search_lattice(ps_search_t *search)
            dict_wordstr(search->dict, dag->start->wid), dag->start->sf,
            dict_wordstr(search->dict, dag->end->wid), dag->end->sf);
 
-    ngram_compute_seg_score(ngs, ngs->bp_table + dag->end->lef, lwf,
+    ngram_compute_seg_score(ngs, ngs->bptbl->ent + dag->end->lef, lwf,
                             &dag->final_node_ascr, &lscr);
 
     /*
@@ -1146,8 +1109,8 @@ ngram_search_lattice(ps_search_t *search)
         for (from = to->next; from; from = from->next) {
             bp_t *from_bpe;
 
-            ef = ngs->bp_table[from->fef].frame;
-            lef = ngs->bp_table[from->lef].frame;
+            ef = ngs->bptbl->ent[from->fef].frame;
+            lef = ngs->bptbl->ent[from->lef].frame;
 
             if ((to->sf <= ef) || (to->sf > lef + 1))
                 continue;
@@ -1159,7 +1122,7 @@ ngram_search_lattice(ps_search_t *search)
 
             /* Find bptable entry for "from" that exactly precedes "to" */
             i = from->fef;
-            from_bpe = ngs->bp_table + i;
+            from_bpe = ngs->bptbl->ent + i;
             for (; i <= from->lef; i++, from_bpe++) {
                 if (from_bpe->wid != from->wid)
                     continue;
@@ -1209,8 +1172,8 @@ ngram_search_lattice(ps_search_t *search)
 
     for (node = dag->nodes; node; node = node->next) {
         /* Change node->{fef,lef} from bptbl indices to frames. */
-        node->fef = ngs->bp_table[node->fef].frame;
-        node->lef = ngs->bp_table[node->lef].frame;
+        node->fef = ngs->bptbl->ent[node->fef].frame;
+        node->lef = ngs->bptbl->ent[node->lef].frame;
         /* Find base wid for nodes. */
         node->basewid = dict_basewid(search->dict, node->wid);
     }

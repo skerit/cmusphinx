@@ -71,6 +71,29 @@ typedef struct bp_s {
     int16    last2_phone;       /**< next-to-last phone of this word */
 } bp_t;
 
+#define bp_sf(bpt,i) (((bpt)->ent[i].bp == NO_BP) ? 0 \
+                      : (bpt)->ent[(bpt)->ent[i].bp].frame + 1)
+
+/**
+ * Back pointer table
+ */
+typedef struct bptbl_s {
+    bp_t *ent;       /* Forward pass lattice */
+    dict_t *dict;    /* Dictionary */
+    int32 n_ent;             /* First free BPTable entry */
+    int32 n_alloc;
+    int32 first_unsorted; /**< First entry that has not yet been sorted/gc-ed */
+    int32 *bscore_stack;     /* Score stack for all possible right contexts */
+    int32 bss_head;          /* First free BScoreStack entry */
+    int32 bscore_stack_size;
+    int32 n_frame_alloc; /**< Number of frames allocated in bp_table_idx and friends. */
+    int32 n_frame;       /**< Number of frames actually present. */
+    int32 *frame_idx;    /**< First BPTable entry for each frame */
+    int32 *word_idx;     /**< BPTable index for any word in current frame;
+                            cleared before each frame */
+    ps_latnode_t **frm_wordlist;   /**< List of active words in each frame. */
+} bptbl_t;
+
 
 /**
  * Segmentation "iterator" for backpointer table results.
@@ -81,6 +104,26 @@ typedef struct bptbl_seg_s {
     int16 n_bpidx;  /**< Number of backpointer IDs. */
     int16 cur;      /**< Current position in bpidx. */
 } bptbl_seg_t;
+
+
+bptbl_t *bptbl_init(dict_t *dict, int n_alloc, int n_frame_alloc);
+
+void bptbl_free(bptbl_t *bpt);
+
+void dump_bptable(bptbl_t *bptbl);
+
+/**
+ * Record the current frame's index in the backpointer table.
+ *
+ * @return the current backpointer index.
+ */
+int bptbl_push_frame(bptbl_t *bptbl, int frame_idx);
+
+/**
+ * Order backpointer table entries according to start frame and remove
+ * invalid paths.
+ */
+void bptable_gc(bptbl_t *ngs, int oldest_bp, int frame_idx);
 
 
 #endif /* __BPTBL_H__ */

@@ -270,20 +270,9 @@ struct ngram_search_s {
     cand_sf_t *cand_sf;
     bestbp_rc_t *bestbp_rc;
 
-    bp_t *bp_table;       /* Forward pass lattice */
-    int32 bpidx;             /* First free BPTable entry */
-    int32 bp_table_size;
-    int32 *bscore_stack;     /* Score stack for all possible right contexts */
-    int32 bss_head;          /* First free BScoreStack entry */
-    int32 bscore_stack_size;
-
+    bptbl_t *bptbl;
     int32 oldest_bp; /**< Oldest bptable entry active in decoding graph. */
 
-    int32 n_frame_alloc; /**< Number of frames allocated in bp_table_idx and friends. */
-    int32 n_frame;       /**< Number of frames actually present. */
-    int32 *bp_table_idx; /* First BPTable entry for each frame */
-    int32 *word_lat_idx; /* BPTable index for any word in current frame;
-                            cleared before each frame */
 
     uint16 *zeroPermTab; /**< Null right context table, just an array of
                             n_ciphone zeros (!!) */
@@ -291,7 +280,6 @@ struct ngram_search_s {
     /*
      * Flat lexicon (2nd pass) search stuff.
      */
-    ps_latnode_t **frm_wordlist;   /**< List of active words in each frame. */
     int32 *fwdflat_wordlist;    /**< List of active word IDs for utterance. */
     bitvec_t *expand_word_flag;
     int32 *expand_word_list;
@@ -345,13 +333,6 @@ ps_search_t *ngram_search_init(cmd_ln_t *config,
 void ngram_search_free(ps_search_t *ngs);
 
 /**
- * Record the current frame's index in the backpointer table.
- *
- * @return the current backpointer index.
- */
-int ngram_search_mark_bptable(ngram_search_t *ngs, int frame_idx);
-
-/**
  * Enter a word in the backpointer table.
  */
 void ngram_search_save_bp(ngram_search_t *ngs, int frame_idx, int32 w,
@@ -396,6 +377,5 @@ ps_lattice_t *ngram_search_lattice(ps_search_t *search);
  */
 int32 ngram_search_exit_score(ngram_search_t *ngs, bp_t *pbe, int rcphone);
 
-void dump_bptable(ngram_search_t *ngs);
 
 #endif /* __NGRAM_SEARCH_H__ */

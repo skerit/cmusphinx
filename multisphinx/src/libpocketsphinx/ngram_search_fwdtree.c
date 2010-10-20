@@ -468,12 +468,12 @@ ngram_fwdtree_start(ngram_search_t *ngs)
     memset(&ngs->st, 0, sizeof(ngs->st));
 
     /* Reset backpointer table. */
-    ngs->bpidx = 0;
-    ngs->bss_head = 0;
+    ngs->bptbl->n_ent = 0;
+    ngs->bptbl->bss_head = 0;
 
     /* Reset word lattice. */
     for (i = 0; i < n_words; ++i)
-        ngs->word_lat_idx[i] = NO_BP;
+        ngs->bptbl->word_idx[i] = NO_BP;
 
     /* Reset active HMM and word lists. */
     ngs->n_active_chan[0] = ngs->n_active_chan[1] = 0;
@@ -486,7 +486,7 @@ ngram_fwdtree_start(ngram_search_t *ngs)
     /* Reset other stuff. */
     for (i = 0; i < n_words; i++)
         ngs->last_ltrans[i].sf = -1;
-    ngs->n_frame = 0;
+    ngs->bptbl->n_frame = 0;
 
     /* Clear the hypothesis string. */
     ckd_free(base->hyp_str);
@@ -907,7 +907,7 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
         if (candp->bp == -1)
             continue;
         /* Backpointer entry for it. */
-        bpe = &(ngs->bp_table[candp->bp]);
+        bpe = &(ngs->bptbl->ent[candp->bp]);
 
         /* Subtract starting score for candidate, leave it with only word score */
         start_score = ngram_search_exit_score
@@ -967,10 +967,10 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
     /* Compute best LM score and bp for new cands entered in the sorted lists above */
     for (i = 0; i < n_cand_sf; i++) {
         /* For the i-th unique end frame... */
-        bp = ngs->bp_table_idx[ngs->cand_sf[i].bp_ef];
-        bplast = ngs->bp_table_idx[ngs->cand_sf[i].bp_ef + 1] - 1;
+        bp = ngs->bptbl->frame_idx[ngs->cand_sf[i].bp_ef];
+        bplast = ngs->bptbl->frame_idx[ngs->cand_sf[i].bp_ef + 1] - 1;
 
-        for (bpe = &(ngs->bp_table[bp]); bp <= bplast; bp++, bpe++) {
+        for (bpe = &(ngs->bptbl->ent[bp]); bp <= bplast; bp++, bpe++) {
             if (!bpe->valid)
                 continue;
             /* For each candidate at the start frame find bp->cand transition-score */
@@ -1137,7 +1137,7 @@ static void
 prune_channels(ngram_search_t *ngs, int frame_idx)
 {
     /* Reset the oldest active backpointer. */
-    ngs->oldest_bp = ngs->bpidx;
+    ngs->oldest_bp = ngs->bptbl->n_ent;
     /* Clear last phone candidate list. */
     ngs->n_lastphn_cand = 0;
     /* Set the dynamic beam based on maxhmmpf here. */
@@ -1208,8 +1208,8 @@ bptable_maxwpf(ngram_search_t *ngs, int frame_idx)
     bestscr = (int32) 0x80000000;
     bestbpe = NULL;
     n = 0;
-    for (bp = ngs->bp_table_idx[frame_idx]; bp < ngs->bpidx; bp++) {
-        bpe = &(ngs->bp_table[bp]);
+    for (bp = ngs->bptbl->frame_idx[frame_idx]; bp < ngs->bptbl->n_ent; bp++) {
+        bpe = &(ngs->bptbl->ent[bp]);
         if (dict_filler_word(ps_search_dict(ngs), bpe->wid)) {
             if (bpe->score BETTER_THAN bestscr) {
                 bestscr = bpe->score;
@@ -1226,14 +1226,14 @@ bptable_maxwpf(ngram_search_t *ngs, int frame_idx)
     }
 
     /* Allow up to maxwpf best entries to survive; mark the remaining with valid = 0 */
-    n = (ngs->bpidx
-         - ngs->bp_table_idx[frame_idx]) - n;  /* No. of entries after limiting fillers */
+    n = (ngs->bptbl->n_ent
+         - ngs->bptbl->frame_idx[frame_idx]) - n;  /* No. of entries after limiting fillers */
     for (; n > ngs->maxwpf; --n) {
         /* Find worst BPTable entry */
         worstscr = (int32) 0x7fffffff;
         worstbpe = NULL;
-        for (bp = ngs->bp_table_idx[frame_idx]; (bp < ngs->bpidx); bp++) {
-            bpe = &(ngs->bp_table[bp]);
+        for (bp = ngs->bptbl->frame_idx[frame_idx]; (bp < ngs->bptbl->n_ent); bp++) {
+            bpe = &(ngs->bptbl->ent[bp]);
             if (bpe->valid && (bpe->score WORSE_THAN worstscr)) {
                 worstscr = bpe->score;
                 worstbpe = bpe;
@@ -1271,9 +1271,9 @@ word_transition(ngram_search_t *ngs, int frame_idx)
     pls = (phone_loop_search_t *)ps_search_lookahead(ngs);
     /* Ugh, this is complicated.  Scan all word exits for this frame
      * (they have already been created by prune_word_chan()). */
-    for (bp = ngs->bp_table_idx[frame_idx]; bp < ngs->bpidx; bp++) {
-        bpe = &(ngs->bp_table[bp]);
-        ngs->word_lat_idx[bpe->wid] = NO_BP;
+    for (bp = ngs->bptbl->frame_idx[frame_idx]; bp < ngs->bptbl->n_ent; bp++) {
+        bpe = &(ngs->bptbl->ent[bp]);
+        ngs->bptbl->word_idx[bpe->wid] = NO_BP;
 
         if (bpe->wid == ps_search_finish_wid(ngs))
             continue;
@@ -1283,7 +1283,7 @@ word_transition(ngram_search_t *ngs, int frame_idx)
         /* Array of HMM scores corresponding to all the possible right
          * context expansions of the final phone.  It's likely that a
          * lot of these are going to be missing, actually. */
-        rcss = &(ngs->bscore_stack[bpe->s_idx]);
+        rcss = &(ngs->bptbl->bscore_stack[bpe->s_idx]);
         if (bpe->last2_phone == -1) {
             /* No right context expansion. */
             for (rc = 0; rc < bin_mdef_n_ciphone(ps_search_acmod(ngs)->mdef); ++rc) {
@@ -1344,8 +1344,8 @@ word_transition(ngram_search_t *ngs, int frame_idx)
         w = ngs->single_phone_wid[i];
         ngs->last_ltrans[w].dscr = (int32) 0x80000000;
     }
-    for (bp = ngs->bp_table_idx[frame_idx]; bp < ngs->bpidx; bp++) {
-        bpe = &(ngs->bp_table[bp]);
+    for (bp = ngs->bptbl->frame_idx[frame_idx]; bp < ngs->bptbl->n_ent; bp++) {
+        bpe = &(ngs->bptbl->ent[bp]);
         if (!bpe->valid)
             continue;
 
@@ -1382,7 +1382,7 @@ word_transition(ngram_search_t *ngs, int frame_idx)
         newscore = ngs->last_ltrans[w].dscr + ngs->pip
             + phone_loop_search_score(pls, rhmm->ciphone);
         if (newscore BETTER_THAN thresh) {
-            bpe = ngs->bp_table + ngs->last_ltrans[w].bp;
+            bpe = ngs->bptbl->ent + ngs->last_ltrans[w].bp;
             if ((hmm_frame(&rhmm->hmm) < frame_idx)
                 || (newscore BETTER_THAN hmm_in_score(&rhmm->hmm))) {
                 hmm_enter(&rhmm->hmm,
@@ -1455,15 +1455,6 @@ deactivate_channels(ngram_search_t *ngs, int frame_idx)
     }
 }
 
-/**
- * Order backpointer table entries according to start frame and remove
- * invalid paths.
- */
-static void
-bptable_gc(ngram_search_t *ngs, int frame_idx)
-{
-}
-
 int
 ngram_fwdtree_search(ngram_search_t *ngs, int frame_idx)
 {
@@ -1478,8 +1469,11 @@ ngram_fwdtree_search(ngram_search_t *ngs, int frame_idx)
         return 0;
     ngs->st.n_senone_active_utt += ps_search_acmod(ngs)->n_senone_active;
 
+    /* Sort and garbage collect backpointer table. */
+    bptable_gc(ngs->bptbl, ngs->oldest_bp, frame_idx);
+
     /* Mark backpointer table for current frame. */
-    ngram_search_mark_bptable(ngs, frame_idx);
+    bptbl_push_frame(ngs->bptbl, frame_idx);
 
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
@@ -1502,10 +1496,8 @@ ngram_fwdtree_search(ngram_search_t *ngs, int frame_idx)
     word_transition(ngs, frame_idx);
     /* Deactivate pruned HMMs. */
     deactivate_channels(ngs, frame_idx);
-    /* Sort and garbage collect backpointer table. */
-    bptable_gc(ngs, frame_idx);
 
-    ++ngs->n_frame;
+    ++ngs->bptbl->n_frame;
     /* Return the number of frames processed. */
     return 1;
 }
@@ -1520,7 +1512,7 @@ ngram_fwdtree_finish(ngram_search_t *ngs)
     /* This is the number of frames processed. */
     cf = ps_search_acmod(ngs)->output_frame;
     /* Add a mark in the backpointer table for one past the final frame. */
-    ngram_search_mark_bptable(ngs, cf);
+    bptbl_push_frame(ngs->bptbl, cf);
 
     /* Deactivate channels lined up for the next frame */
     /* First, root channels of HMM tree */
@@ -1559,7 +1551,7 @@ ngram_fwdtree_finish(ngram_search_t *ngs)
     /* Print out some statistics. */
     if (cf > 0) {
         E_INFO("%8d words recognized (%d/fr)\n",
-               ngs->bpidx, (ngs->bpidx + (cf >> 1)) / (cf + 1));
+               ngs->bptbl->n_ent, (ngs->bptbl->n_ent + (cf >> 1)) / (cf + 1));
         E_INFO("%8d senones evaluated (%d/fr)\n", ngs->st.n_senone_active_utt,
                (ngs->st.n_senone_active_utt + (cf >> 1)) / (cf + 1));
         E_INFO("%8d channels searched (%d/fr), %d 1st, %d last\n",

@@ -147,7 +147,6 @@ ngram_fwdflat_init(ngram_search_t *ngs)
     ngs->fwdflat_wordlist = ckd_calloc(n_words + 1, sizeof(*ngs->fwdflat_wordlist));
     ngs->expand_word_flag = bitvec_alloc(n_words);
     ngs->expand_word_list = ckd_calloc(n_words + 1, sizeof(*ngs->expand_word_list));
-    ngs->frm_wordlist = ckd_calloc(ngs->n_frame_alloc, sizeof(*ngs->frm_wordlist));
     ngs->min_ef_width = cmd_ln_int32_r(ps_search_config(ngs), "-fwdflatefwid");
     ngs->max_sf_win = cmd_ln_int32_r(ps_search_config(ngs), "-fwdflatsfwin");
     E_INFO("fwdflat: min_ef_width = %d, max_sf_win = %d\n",
@@ -172,7 +171,6 @@ ngram_fwdflat_deinit(ngram_search_t *ngs)
     ckd_free(ngs->fwdflat_wordlist);
     bitvec_free(ngs->expand_word_flag);
     ckd_free(ngs->expand_word_list);
-    ckd_free(ngs->frm_wordlist);
 }
 
 int
@@ -224,12 +222,13 @@ build_fwdflat_wordlist(ngram_search_t *ngs)
 
     dict = ps_search_dict(ngs);
 
-    memset(ngs->frm_wordlist, 0, ngs->n_frame_alloc * sizeof(*ngs->frm_wordlist));
+    memset(ngs->bptbl->frm_wordlist, 0,
+           ngs->bptbl->n_frame_alloc * sizeof(*ngs->bptbl->frm_wordlist));
 
     /* Scan the backpointer table for all active words and record
      * their start frames. */
-    for (i = 0, bp = ngs->bp_table; i < ngs->bpidx; i++, bp++) {
-        sf = (bp->bp < 0) ? 0 : ngs->bp_table[bp->bp].frame + 1;
+    for (i = 0, bp = ngs->bptbl->ent; i < ngs->bptbl->n_ent; i++, bp++) {
+        sf = (bp->bp < 0) ? 0 : ngs->bptbl->ent[bp->bp].frame + 1;
         ef = bp->frame;
         wid = bp->wid;
 
@@ -243,7 +242,7 @@ build_fwdflat_wordlist(ngram_search_t *ngs)
             continue;
 
         /* Look for it in the wordlist. */
-        for (node = ngs->frm_wordlist[sf]; node && (node->wid != wid);
+        for (node = ngs->bptbl->frm_wordlist[sf]; node && (node->wid != wid);
              node = node->next);
 
         /* Update last end frame. */
@@ -255,22 +254,22 @@ build_fwdflat_wordlist(ngram_search_t *ngs)
             node->wid = wid;
             node->fef = node->lef = ef;
 
-            node->next = ngs->frm_wordlist[sf];
-            ngs->frm_wordlist[sf] = node;
+            node->next = ngs->bptbl->frm_wordlist[sf];
+            ngs->bptbl->frm_wordlist[sf] = node;
         }
     }
 
     /* Eliminate "unlikely" words, for which there are too few end points */
-    for (f = 0; f < ngs->n_frame; f++) {
+    for (f = 0; f < ngs->bptbl->n_frame; f++) {
         prevnode = NULL;
-        for (node = ngs->frm_wordlist[f]; node; node = nextnode) {
+        for (node = ngs->bptbl->frm_wordlist[f]; node; node = nextnode) {
             nextnode = node->next;
             /* Word has too few endpoints */
             if ((node->lef - node->fef < ngs->min_ef_width) ||
                 /* Word is </s> and doesn't actually end in last frame */
-                ((node->wid == ps_search_finish_wid(ngs)) && (node->lef < ngs->n_frame - 1))) {
+                ((node->wid == ps_search_finish_wid(ngs)) && (node->lef < ngs->bptbl->n_frame - 1))) {
                 if (!prevnode)
-                    ngs->frm_wordlist[f] = nextnode;
+                    ngs->bptbl->frm_wordlist[f] = nextnode;
                 else
                     prevnode->next = nextnode;
                 listelem_free(ngs->latnode_alloc, node);
@@ -283,8 +282,8 @@ build_fwdflat_wordlist(ngram_search_t *ngs)
     /* Form overall wordlist for 2nd pass */
     nwd = 0;
     bitvec_clear_all(ngs->word_active, ps_search_n_words(ngs));
-    for (f = 0; f < ngs->n_frame; f++) {
-        for (node = ngs->frm_wordlist[f]; node; node = node->next) {
+    for (f = 0; f < ngs->bptbl->n_frame; f++) {
+        for (node = ngs->bptbl->frm_wordlist[f]; node; node = node->next) {
             if (!bitvec_is_set(ngs->word_active, node->wid)) {
                 /* ??? */
                 bitvec_set(ngs->word_active, node->wid);
@@ -371,11 +370,11 @@ ngram_fwdflat_start(ngram_search_t *ngs)
     build_fwdflat_wordlist(ngs);
     build_fwdflat_chan(ngs);
 
-    ngs->bpidx = 0;
-    ngs->bss_head = 0;
+    ngs->bptbl->n_ent = 0;
+    ngs->bptbl->bss_head = 0;
 
     for (i = 0; i < ps_search_n_words(ngs); i++)
-        ngs->word_lat_idx[i] = NO_BP;
+        ngs->bptbl->word_idx[i] = NO_BP;
 
     /* Start search with <s>; word_chan[<s>] is permanently allocated */
     rhmm = (root_chan_t *) ngs->word_chan[ps_search_start_wid(ngs)];
@@ -390,7 +389,7 @@ ngram_fwdflat_start(ngram_search_t *ngs)
         ngs->last_ltrans[i].sf = -1;
 
     if (!ngs->fwdtree)
-        ngs->n_frame = 0;
+        ngs->bptbl->n_frame = 0;
 
     ngs->st.n_fwdflat_chan = 0;
     ngs->st.n_fwdflat_words = 0;
@@ -601,14 +600,14 @@ get_expand_wordlist(ngram_search_t *ngs, int32 frm, int32 win)
     if (sf < 0)
         sf = 0;
     ef = frm + win;
-    if (ef > ngs->n_frame)
-        ef = ngs->n_frame;
+    if (ef > ngs->bptbl->n_frame)
+        ef = ngs->bptbl->n_frame;
 
     bitvec_clear_all(ngs->expand_word_flag, ps_search_n_words(ngs));
     ngs->n_expand_words = 0;
 
     for (f = sf; f < ef; f++) {
-        for (node = ngs->frm_wordlist[f]; node; node = node->next) {
+        for (node = ngs->bptbl->frm_wordlist[f]; node; node = node->next) {
             if (!bitvec_is_set(ngs->expand_word_flag, node->wid)) {
                 ngs->expand_word_list[ngs->n_expand_words++] = node->wid;
                 bitvec_set(ngs->expand_word_flag, node->wid);
@@ -644,20 +643,20 @@ fwdflat_word_transition(ngram_search_t *ngs, int frame_idx)
     get_expand_wordlist(ngs, cf, ngs->max_sf_win);
 
     /* Scan words exited in current frame */
-    for (b = ngs->bp_table_idx[cf]; b < ngs->bpidx; b++) {
+    for (b = ngs->bptbl->frame_idx[cf]; b < ngs->bptbl->n_ent; b++) {
         xwdssid_t *rssid;
         int32 silscore;
 
-        bp = ngs->bp_table + b;
-        ngs->word_lat_idx[bp->wid] = NO_BP;
+        bp = ngs->bptbl->ent + b;
+        ngs->bptbl->word_idx[bp->wid] = NO_BP;
 
         if (bp->wid == ps_search_finish_wid(ngs))
             continue;
 
         /* DICT2PID location */
         /* Get the mapping from right context phone ID to index in the
-         * right context table and the bscore_stack. */
-        rcss = ngs->bscore_stack + bp->s_idx;
+         * right context table and the bptbl->bscore_stack. */
+        rcss = ngs->bptbl->bscore_stack + bp->s_idx;
         if (bp->last2_phone == -1)
             rssid = NULL;
         else
@@ -799,7 +798,7 @@ ngram_fwdflat_search(ngram_search_t *ngs, int frame_idx)
     ngs->st.n_senone_active_utt += ps_search_acmod(ngs)->n_senone_active;
 
     /* Mark backpointer table for current frame. */
-    ngram_search_mark_bptable(ngs, frame_idx);
+    bptbl_push_frame(ngs->bptbl, frame_idx);
 
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
@@ -838,7 +837,7 @@ ngram_fwdflat_search(ngram_search_t *ngs, int frame_idx)
         }
     }
     if (!ngs->fwdtree)
-        ++ngs->n_frame;
+        ++ngs->bptbl->n_frame;
     ngs->n_active_word[nf & 0x1] = j;
 
     /* Return the number of frames processed. */
@@ -857,8 +856,8 @@ destroy_fwdflat_wordlist(ngram_search_t *ngs)
     if (!ngs->fwdtree)
         return;
 
-    for (f = 0; f < ngs->n_frame; f++) {
-        for (node = ngs->frm_wordlist[f]; node; node = tnode) {
+    for (f = 0; f < ngs->bptbl->n_frame; f++) {
+        for (node = ngs->bptbl->frm_wordlist[f]; node; node = tnode) {
             tnode = node->next;
             listelem_free(ngs->latnode_alloc, node);
         }
@@ -906,12 +905,12 @@ ngram_fwdflat_finish(ngram_search_t *ngs)
     /* This is the number of frames processed. */
     cf = ps_search_acmod(ngs)->output_frame;
     /* Add a mark in the backpointer table for one past the final frame. */
-    ngram_search_mark_bptable(ngs, cf);
+    bptbl_push_frame(ngs->bptbl, cf);
 
     /* Print out some statistics. */
     if (cf > 0) {
         E_INFO("%8d words recognized (%d/fr)\n",
-               ngs->bpidx, (ngs->bpidx + (cf >> 1)) / (cf + 1));
+               ngs->bptbl->n_ent, (ngs->bptbl->n_ent + (cf >> 1)) / (cf + 1));
         E_INFO("%8d senones evaluated (%d/fr)\n", ngs->st.n_senone_active_utt,
                (ngs->st.n_senone_active_utt + (cf >> 1)) / (cf + 1));
         E_INFO("%8d channels searched (%d/fr)\n",

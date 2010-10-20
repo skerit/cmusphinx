@@ -19,3 +19,18 @@ So we will add another phase to each frame of search, which is sorting
 and garbage collection of the lattice (in the future we can hopefully
 put this in its own thread) This task gets inserted between fwdflat
 and fwdtree, and between fwdtree and bestpath/lattice generation.
+
+---
+
+The problem with this is that when you permute the backpointer table,
+you have to rewrite all the references to those backpointers.  This is
+one place where the oldest backpointer thing can help - we know that
+no new entries will be generated that point to things behind it, so we
+are free to reorder everything from it on backwards.  Then we just
+have to snap the pointers as part of the insertion operation.
+
+It also means that we can sort everything between the previous oldest
+backpointer and the latest one without having to touch anything in the
+more distant past, since nothing will point any further back.
+
+I.e. we just insertion sort within variably-sized blocks.
