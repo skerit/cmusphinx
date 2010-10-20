@@ -154,8 +154,8 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
 
     /* Invalidate all backpointer entries up to active_fr - 1. */
     /* FIXME: actually anything behind active_fr - 1 is fair game. */
-    E_INFO("Garbage collecting from %d to %d (%d to %d):\n",
-           bptbl_ef_idx(bptbl, sf), bptbl_ef_idx(bptbl, ef), sf, ef);
+    E_DEBUG(2,("Garbage collecting from %d to %d (%d to %d):\n",
+               bptbl_ef_idx(bptbl, sf), bptbl_ef_idx(bptbl, ef), sf, ef));
     for (i = bptbl_ef_idx(bptbl, sf);
          i < bptbl_ef_idx(bptbl, ef); ++i) {
         bptbl->ent[i].valid = FALSE;
@@ -163,8 +163,8 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
 
     /* Now re-activate all ones backwards reachable from the elastic
      * window. (make sure cf has been pushed!) */
-    E_INFO("Finding coaccessible frames from backpointers from %d to %d\n",
-           bptbl_ef_idx(bptbl, ef), bptbl_ef_idx(bptbl, cf));
+    E_DEBUG(2, ("Finding coaccessible frames from backpointers from %d to %d\n",
+                bptbl_ef_idx(bptbl, ef), bptbl_ef_idx(bptbl, cf)));
     /* Collect coaccessible frames from these backpointers */
     bitvec_clear_all(bptbl->valid_fr, cf - bptbl->active_fr);
     n_active_fr = 0;
@@ -210,16 +210,16 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
                 }
             }
         }
-        E_INFO("last_gc_fr %d => %d\n", last_gc_fr, next_gc_fr);
+        E_DEBUG(3,("last_gc_fr %d => %d\n", last_gc_fr, next_gc_fr));
         last_gc_fr = next_gc_fr;
     }
-    E_INFO("Removed");
+    E_DEBUG(2,("Removed"));
     for (i = bptbl_ef_idx(bptbl, sf);
          i < bptbl_ef_idx(bptbl, ef); ++i) {
         if (bptbl->ent[i].valid == FALSE)
-            E_INFOCONT(" %d", i);
+            E_DEBUGCONT(2,(" %d", i));
     }
-    E_INFOCONT("\n");
+    E_DEBUGCONT(2,("\n"));
 }
 
 /**
@@ -235,8 +235,8 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
     int sidx = bptbl->first_invert_bp;
 
     ef = bptbl->ent[sidx].frame;
-    E_INFO("compacting from %d to %d (%d to %d)\n",
-           sidx, eidx, ef, bptbl->ent[eidx].frame);
+    E_DEBUG(2,("compacting from %d to %d (%d to %d)\n",
+               sidx, eidx, ef, bptbl->ent[eidx].frame));
     for (dest = src = sidx; src < eidx; ++src) {
         /* Update all ef_idx including missing frames (there are many) */
         while (ef >= bptbl->active_fr && ef <= bptbl->ent[src].frame) {
@@ -252,12 +252,12 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
                 bptbl->ent[dest] = bptbl->ent[src];
                 bptbl->ent[src].valid = FALSE;
             }
-            E_INFO("permute %d => %d\n", src, dest);
+            E_DEBUG(4,("permute %d => %d\n", src, dest));
             bptbl->permute[src] = dest;
             ++dest;
         }
         else {
-            E_INFO("permute %d => -1\n", src);
+            E_DEBUG(4,("permute %d => -1\n", src));
             bptbl->permute[src] = -1;
         }
     }
@@ -275,6 +275,9 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
 static int
 bptbl_forward_sort(bptbl_t *bptbl, int sidx, int eidx)
 {
+    /* Straightforward for now, we just insertion sort these dudes and
+     * update the permutation table and first_invert_bp as necessary.
+     * This could be done in conjunction with */
     return 0;
 }
 
@@ -293,8 +296,8 @@ bptbl_invert(bptbl_t *bptbl, int eidx)
     for (i = sidx; i < bptbl->n_ent; ++i) {
         if (bptbl->ent[i].bp >= sidx && bptbl->ent[i].bp < eidx) {
             if (bptbl->ent[i].bp != bptbl->permute[bptbl->ent[i].bp])
-                E_INFO("invert %d => %d in %d\n",
-                       bptbl->ent[i].bp, bptbl->permute[bptbl->ent[i].bp], i);
+                E_DEBUG(3,("invert %d => %d in %d\n",
+                           bptbl->ent[i].bp, bptbl->permute[bptbl->ent[i].bp], i));
             bptbl->ent[i].bp = bptbl->permute[bptbl->ent[i].bp];
             assert(bp_sf(bptbl, i) < bptbl->ent[i].frame);
         }
@@ -311,9 +314,9 @@ bptbl_update_active_fr(bptbl_t *bptbl, int active_fr)
     if (delta == 0)
         return;
     assert(delta > 0);
-    E_INFO("moving %d ef_idx from %d (%d - %d)\n",
-           bptbl->n_frame - active_fr,
-           delta, active_fr, bptbl->active_fr);
+    E_DEBUG(3,("moving %d ef_idx from %d (%d - %d)\n",
+               bptbl->n_frame - active_fr,
+               delta, active_fr, bptbl->active_fr));
     assert(delta + bptbl->n_frame - active_fr < bptbl->n_active_alloc);
     memmove(bptbl->ef_idx, bptbl->ef_idx + delta,
             (bptbl->n_frame - active_fr) * sizeof(*bptbl->ef_idx));
@@ -343,27 +346,33 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     }
 
     bptbl_mark(bptbl, prev_active_fr, active_fr, frame_idx);
+#if 0
     E_INFO("before compaction\n");
     dump_bptable(bptbl, 0, -1);
+#endif
     bptbl_compact(bptbl, bptbl_ef_idx(bptbl, active_fr));
+#if 0
     E_INFO("after compaction\n");
     dump_bptable(bptbl, 0, -1);
+#endif
     bptbl_forward_sort(bptbl, bptbl_ef_idx(bptbl, prev_active_fr),
                        bptbl_ef_idx(bptbl, active_fr));
     bptbl_invert(bptbl, bptbl_ef_idx(bptbl, active_fr));
+#if 0
     E_INFO("after inversion\n");
     dump_bptable(bptbl, 0, -1);
+#endif
     bptbl_update_active_fr(bptbl, active_fr);
 }
 
 int
 bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
 {
-    E_INFO("pushing frame %d, oldest bp %d in frame %d\n",
-           frame_idx, oldest_bp, oldest_bp == NO_BP ? -1 : bptbl->ent[oldest_bp].frame);
+    E_DEBUG(2,("pushing frame %d, oldest bp %d in frame %d\n",
+               frame_idx, oldest_bp, oldest_bp == NO_BP ? -1 : bptbl->ent[oldest_bp].frame));
     if (frame_idx - bptbl->active_fr >= bptbl->n_active_alloc) {
         bptbl->n_active_alloc *= 2;
-        E_INFO("reallocating frame-based arrays to %d\n", bptbl->n_active_alloc);
+        E_INFO("Reallocating frame-based bptr arrays to %d\n", bptbl->n_active_alloc);
         bptbl->ef_idx = ckd_realloc(bptbl->ef_idx,
                                     bptbl->n_active_alloc * sizeof(*bptbl->ef_idx));
         bptbl->frm_wordlist = ckd_realloc(bptbl->frm_wordlist,
@@ -447,8 +456,8 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx, int32 path,
     for (i = rcsize, bss = bptbl->bscore_stack + bptbl->bss_head; i > 0; --i, bss++)
         *bss = WORST_SCORE;
     bptbl->bscore_stack[bptbl->bss_head + rc] = score;
-    E_INFO("Entered bp %d sf %d ef %d active_fr %d\n", bptbl->n_ent,
-           bp_sf(bptbl, bptbl->n_ent), frame_idx, bptbl->active_fr);
+    E_DEBUG(3,("Entered bp %d sf %d ef %d active_fr %d\n", bptbl->n_ent,
+               bp_sf(bptbl, bptbl->n_ent), frame_idx, bptbl->active_fr));
     assert(bp_sf(bptbl, bptbl->n_ent) >= bptbl->active_fr);
 
     bptbl->n_ent++;
