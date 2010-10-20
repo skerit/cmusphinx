@@ -433,6 +433,7 @@ fwdflat_search_start(ps_search_t *base)
     bptbl_reset(ffs->bptbl);
     fwdflat_arc_buffer_reset(ffs->input_arcs);
     ffs->oldest_bp = -1;
+    ffs->next_idx = 0;
     for (i = 0; i < ps_search_n_words(ffs); i++)
         ffs->word_idx[i] = NO_BP;
 
@@ -975,7 +976,7 @@ fwdflat_search_step(ps_search_t *base)
             /* Add the next chunk of bps to the arc buffer. */
             ffs->next_idx = fwdflat_arc_buffer_add_bps
                 (ffs->input_arcs, ffs->input_bptbl,
-                 ffs->input_arcs->next_idx,
+                 ffs->next_idx,
                  ffs->input_bptbl->first_invert_bp);
             fwdflat_arc_buffer_commit(ffs->input_arcs);
             /* Release bps we won't need anymore. */
@@ -1328,7 +1329,6 @@ fwdflat_arc_buffer_reset(fwdflat_arc_buffer_t *fab)
 {
     fab->active_sf = fab->next_sf = 0;
     fab->active_arc = 0;
-    fab->next_idx = 0;
     garray_reset(fab->arcs);
     garray_reset(fab->sf_idx);
 }

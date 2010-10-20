@@ -152,6 +152,11 @@ size_t garray_base(garray_t *gar);
 void garray_reset(garray_t *gar);
 
 /**
+ * Remove all elements from the array and update its base index.
+ */
+void garray_reset_to(garray_t *gar, size_t base_idx);
+
+/**
  * Set memory for elements to zero.
  */
 void garray_clear(garray_t *gar, size_t start, size_t n_ent);

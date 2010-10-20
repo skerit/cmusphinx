@@ -110,3 +110,4 @@ test/unit/test_util/test_heap
 test/unit/test_util/test_huff_code
 test/unit/test_search/test_arc_buffer
 test/unit/test_search/test_acmod_copy
+test/unit/test_search/test_fwdtree_maxwpf

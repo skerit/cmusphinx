@@ -218,6 +218,11 @@ bpidx_t bptbl_ef_idx(bptbl_t *bptbl, int frame_idx);
 bpidx_t bptbl_active_idx(bptbl_t *bptbl);
 
 /**
+ * Obtain the first active frame's index.
+ */
+int bptbl_active_frame(bptbl_t *bptbl);
+
+/**
  * Obtain the index of the end of the backpointer table (the last index plus one).
  */
 bpidx_t bptbl_end_idx(bptbl_t *bptbl);

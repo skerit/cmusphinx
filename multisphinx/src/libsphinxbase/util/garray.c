@@ -176,6 +176,13 @@ garray_reset(garray_t *gar)
     gar->base_idx = 0;
 }
 
+void
+garray_reset_to(garray_t *gar, size_t base_idx)
+{
+    gar->n_ent = 0;
+    gar->base_idx = base_idx;
+}
+
 size_t
 garray_shift(garray_t *gar, size_t n_ent)
 {

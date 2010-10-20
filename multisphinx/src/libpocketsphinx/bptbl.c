@@ -121,7 +121,6 @@ bptbl_reset(bptbl_t *bptbl)
     bptbl->first_invert_bp = 0;
     bptbl->dest_s_idx = 0;
     bptbl->n_frame = 0;
-    bptbl->active_fr = 0; /* FIXME: No longer actually needed. */
     bptbl->oldest_bp = NO_BP;
 }
 
@@ -173,13 +172,14 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
     int i, j, n_active_fr, last_gc_fr;
 
     assert(cf >= ef);
-    assert(ef > bptbl->active_fr);
+    assert(ef > bptbl_active_frame(bptbl));
 
     /* Invalidate all active backpointer entries up to ef. */
     E_DEBUG(2,("Invalidating backpointers from %d to %d (%d to %d)\n",
-               bptbl->active_fr, ef,
-               bptbl_ef_idx(bptbl, bptbl->active_fr), bptbl_ef_idx(bptbl, ef)));
-    for (i = bptbl_ef_idx(bptbl, bptbl->active_fr);
+               bptbl_active_frame(bptbl), ef,
+               bptbl_ef_idx(bptbl, bptbl_active_frame(bptbl)),
+               bptbl_ef_idx(bptbl, ef)));
+    for (i = bptbl_ef_idx(bptbl, bptbl_active_frame(bptbl));
          i < bptbl_ef_idx(bptbl, ef); ++i) {
         E_DEBUG(5,("Invalidate bp %d\n", i));
         garray_ent(bptbl->ent, bp_t, i).valid = FALSE;
@@ -190,7 +190,7 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
                ef, cf,
                bptbl_ef_idx(bptbl, ef), bptbl_ef_idx(bptbl, cf)));
     /* Mark everything immediately reachable from (ef..cf) */
-    bitvec_clear_all(bptbl->valid_fr, cf - bptbl->active_fr);
+    bitvec_clear_all(bptbl->valid_fr, cf - bptbl_active_frame(bptbl));
     n_active_fr = 0;
     /* NOTE: This for statement can be sped up at the cost of being
      * less obvious. */
@@ -203,10 +203,10 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
             continue;
         if (prev != NULL) {
             int frame = prev->frame;
-            if (frame >= bptbl->active_fr
-                && bitvec_is_clear(bptbl->valid_fr, frame - bptbl->active_fr)) {
-                E_DEBUG(5,("Validate frame %d\n", frame - bptbl->active_fr));
-                bitvec_set(bptbl->valid_fr, frame - bptbl->active_fr);
+            if (frame >= bptbl_active_frame(bptbl)
+                && bitvec_is_clear(bptbl->valid_fr, frame - bptbl_active_frame(bptbl))) {
+                E_DEBUG(5,("Validate frame %d\n", frame - bptbl_active_frame(bptbl)));
+                bitvec_set(bptbl->valid_fr, frame - bptbl_active_frame(bptbl));
                 ++n_active_fr;
             }
         }
@@ -220,10 +220,10 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
     while (n_active_fr > 0) {
         int next_gc_fr = 0;
         n_active_fr = 0;
-        for (i = bptbl->active_fr; i <= last_gc_fr; ++i) {
-            /* NOTE: We asserted i >= bptbl->active_fr */
-            if (bitvec_is_set(bptbl->valid_fr, i - bptbl->active_fr)) {
-                bitvec_clear(bptbl->valid_fr, i - bptbl->active_fr);
+        for (i = bptbl_active_frame(bptbl); i <= last_gc_fr; ++i) {
+            /* NOTE: We asserted i >= bptbl_active_frame(bptbl) */
+            if (bitvec_is_set(bptbl->valid_fr, i - bptbl_active_frame(bptbl))) {
+                bitvec_clear(bptbl->valid_fr, i - bptbl_active_frame(bptbl));
                 /* Add all backpointers in this frame (the bogus
                  * lattice generation algorithm) */
                 for (j = bptbl_ef_idx(bptbl, i);
@@ -233,11 +233,11 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
                     ent->valid = TRUE;
                     if (prev != NULL) {
                         int frame = prev->frame;
-                        if (frame >= bptbl->active_fr
+                        if (frame >= bptbl_active_frame(bptbl)
                             && bitvec_is_clear(bptbl->valid_fr,
-                                               frame - bptbl->active_fr)) {
+                                               frame - bptbl_active_frame(bptbl))) {
                             bitvec_set(bptbl->valid_fr,
-                                       frame - bptbl->active_fr);
+                                       frame - bptbl_active_frame(bptbl));
                             ++n_active_fr;
                         }
                         if (frame > next_gc_fr)
@@ -250,7 +250,7 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
         last_gc_fr = next_gc_fr;
     }
     E_DEBUG(2,("Removed"));
-    for (j = 0, i = bptbl_ef_idx(bptbl, bptbl->active_fr);
+    for (j = 0, i = bptbl_ef_idx(bptbl, bptbl_active_frame(bptbl));
          i < bptbl_ef_idx(bptbl, ef); ++i) {
         bp_t *ent = bptbl_ent(bptbl, i);
         assert(ent != NULL);
@@ -404,7 +404,7 @@ static void
 bptbl_update_active(bptbl_t *bptbl, int active_fr, int last_retired_bp)
 {
     /* This means nothing happened. */
-    if (active_fr == bptbl->active_fr)
+    if (active_fr == bptbl_active_frame(bptbl))
         return;
 
     /* Shift back active backpointers. */
@@ -419,13 +419,12 @@ bptbl_update_active(bptbl_t *bptbl, int active_fr, int last_retired_bp)
     /* Shift back end frame indices (implicitly updating output of bptbl_active_idx) */
     E_DEBUG(3,("moving %d ef_idx from %d (%d - %d)\n",
                bptbl->n_frame - active_fr,
-               active_fr - bptbl->active_fr,
-               active_fr, bptbl->active_fr));
+               active_fr - bptbl_active_frame(bptbl),
+               active_fr, bptbl_active_frame(bptbl)));
     garray_shift_from(bptbl->ef_idx, active_fr);
     garray_set_base(bptbl->ef_idx, active_fr);
 
     /* Update external frame indices (FIXME: probably no longer necessary). */
-    bptbl->active_fr = active_fr;
     bptbl->first_invert_bp = last_retired_bp;
 }
 
@@ -445,17 +444,17 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
         next_active_fr = 0;
     else
         next_active_fr = bptbl_ent(bptbl, oldest_bp)->frame;
-    assert(next_active_fr >= bptbl->active_fr);
+    assert(next_active_fr >= bptbl_active_frame(bptbl));
     /* Need at least 2 frames to GC. */
-    if (next_active_fr <= bptbl->active_fr + 1)
+    if (next_active_fr <= bptbl_active_frame(bptbl) + 1)
         return;
     /* If there is nothing to GC then finish up. */
-    if (bptbl_ef_idx(bptbl, bptbl->active_fr)
+    if (bptbl_ef_idx(bptbl, bptbl_active_frame(bptbl))
         == bptbl_ef_idx(bptbl, next_active_fr)) {
         bptbl_update_active(bptbl, next_active_fr, bptbl->first_invert_bp);
         return;
     }
-    E_DEBUG(2,("GC from frame %d to %d\n", bptbl->active_fr, next_active_fr));
+    E_DEBUG(2,("GC from frame %d to %d\n", bptbl_active_frame(bptbl), next_active_fr));
     /* Expand the permutation table if necessary. */
     garray_expand_to(bptbl->permute, bptbl_ef_idx(bptbl, next_active_fr));
     garray_set_base(bptbl->permute, bptbl_active_idx(bptbl));
@@ -490,7 +489,7 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp)
                oldest_bp == NO_BP
                ? -1 : bptbl_ent(bptbl, oldest_bp)->frame));
     garray_expand_to(bptbl->ef_idx, frame_idx + 1);
-    if (frame_idx - bptbl->active_fr >= bptbl->n_frame_alloc) {
+    if (frame_idx - bptbl_active_frame(bptbl) >= bptbl->n_frame_alloc) {
         bptbl->n_frame_alloc *= 2;
         bptbl->valid_fr = bitvec_realloc(bptbl->valid_fr, bptbl->n_frame_alloc);
     }
@@ -551,10 +550,9 @@ int
 bptbl_finalize(bptbl_t *bptbl)
 {
     int n_retired, last_retired_bp;
-    bpidx_t eidx;
 
     E_DEBUG(2,("Final GC from frame %d to %d\n",
-               bptbl->active_fr, bptbl->n_frame));
+               bptbl_active_frame(bptbl), bptbl->n_frame));
     /* If there is nothing to GC then finish up. */
     if (bptbl_end_idx(bptbl) == bptbl_active_idx(bptbl))
         return 0;
@@ -570,13 +568,11 @@ bptbl_finalize(bptbl_t *bptbl)
     bptbl_remap(bptbl, last_retired_bp, bptbl_end_idx(bptbl), bptbl_end_idx(bptbl));
     /* Just invalidate active entries, no need to move anything. */
     bptbl->first_invert_bp = last_retired_bp;
-    bptbl->active_fr = bptbl->n_frame;
     /* Empty the active entry table and set its base index to the
      * final index, which implicitly sets bptbl_active_idx (sorry
-     * about that) */
-    eidx = bptbl_end_idx(bptbl);
-    garray_reset(bptbl->ent); /* This will temporarily reset bptbl_end_idx :( */
-    garray_set_base(bptbl->ent, eidx);
+     * about that).  Do the same thing for bptbl_active_frame. */
+    garray_reset_to(bptbl->ent, bptbl_end_idx(bptbl));
+    garray_reset_to(bptbl->ef_idx, bptbl->n_frame);
     E_INFO("Retired %d bps: now %d retired, %d active, first_active_sf %d\n", n_retired,
            bptbl_retired_idx(bptbl),
            bptbl_end_idx(bptbl) - bptbl_active_idx(bptbl),
@@ -655,7 +651,7 @@ bptbl_find_exit(bptbl_t *bptbl, int32 wid)
 int32
 bptbl_ef_idx(bptbl_t *bptbl, int frame_idx)
 {
-    if (frame_idx < bptbl->active_fr)
+    if (frame_idx < bptbl_active_frame(bptbl))
         return 0;
     else if (frame_idx >= bptbl->n_frame)
         return bptbl_end_idx(bptbl);
@@ -695,6 +691,12 @@ bptbl_end_idx(bptbl_t *bptbl)
 }
 
 int
+bptbl_active_frame(bptbl_t *bptbl)
+{
+    return garray_base(bptbl->ef_idx);
+}
+
+int
 bptbl_frame_idx(bptbl_t *bptbl)
 {
     return bptbl->n_frame;
@@ -703,7 +705,7 @@ bptbl_frame_idx(bptbl_t *bptbl)
 bpidx_t
 bptbl_idx(bptbl_t *bptbl, bp_t *bpe)
 {
-    if (bpe->frame < bptbl->active_fr)
+    if (bpe->frame < bptbl_active_frame(bptbl))
         return bpe - garray_ptr(bptbl->retired, bp_t, 0)
             + garray_base(bptbl->retired);
     else
@@ -810,8 +812,8 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
     E_DEBUG(3,("Entered bp %d sf %d ef %d s_idx %d active_fr %d\n",
                bptbl_end_idx(bptbl) - 1,
                bptbl_sf(bptbl, bptbl_end_idx(bptbl) - 1),
-               bptbl->n_frame - 1, bss_head, bptbl->active_fr));
-    assert(bptbl_sf(bptbl, bptbl_end_idx(bptbl) - 1) >= bptbl->active_fr);
+               bptbl->n_frame - 1, bss_head, bptbl_active_frame(bptbl)));
+    assert(bptbl_sf(bptbl, bptbl_end_idx(bptbl) - 1) >= bptbl_active_frame(bptbl));
     return bpe;
 }
 
