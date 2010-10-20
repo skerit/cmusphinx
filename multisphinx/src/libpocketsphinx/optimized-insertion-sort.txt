@@ -34,3 +34,25 @@ backpointer and the latest one without having to touch anything in the
 more distant past, since nothing will point any further back.
 
 I.e. we just insertion sort within variably-sized blocks.
+
+---
+
+We divide the backpointer table into two parts - the oldest part sorts
+by start time (needed to do fwdflat search and build word lattice)
+while the newest part sorts by end time (needed by fwdtree search).
+The ending frame of the oldest active backpointer in the search tree
+is the dividing line between the two.
+
+The end-time sorted part constitutes an elastic window within which
+phoneme lookahead, fwdtree, and potentially other forward searches (or
+parallel ones) operate.
+
+Behind the dividing line is a fixed window in which fwdflat operates.
+
+Behind that, backpointer entries are retired or garbage collected by
+the lattice generator.
+
+---
+
+To reduce the length of the elastic window, forcibly break long
+silences - if the oldest backpointer in a filler word is too old, and 

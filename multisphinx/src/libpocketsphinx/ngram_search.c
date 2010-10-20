@@ -118,10 +118,8 @@ ngram_search_calc_beams(ngram_search_t *ngs)
     ngs->wip = logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-wip"));
     ngs->nwpen = logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-nwpen"));
     ngs->pip = logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-pip"));
-    ngs->silpen = ngs->pip
-        + logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-silprob"));
-    ngs->fillpen = ngs->pip
-        + logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-fillprob"));
+    ngs->silpen = logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-silprob"));
+    ngs->fillpen = logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-fillprob"));
 
     /* Language weight ratios for fwdflat and bestpath search. */
     ngs->fwdflat_fwdtree_lw_ratio =
@@ -342,7 +340,6 @@ ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
     /* Look for an existing exit for this word in this frame. */
     _bp_ = ngs->bptbl->word_idx[w];
     if (_bp_ != NO_BP) {
-        E_INFO("Re-using bp %d sf %d\n", _bp_, bp_sf(ngs->bptbl, _bp_));
         /* Keep only the best scoring one (this is a potential source
          * of search errors...) */
         if (ngs->bptbl->ent[_bp_].score WORSE_THAN score) {
@@ -410,8 +407,9 @@ ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
             *bss = WORST_SCORE;
         ngs->bptbl->bscore_stack[ngs->bptbl->bss_head + rc] = score;
         cache_bptable_paths(ngs, ngs->bptbl->n_ent);
-        E_INFO("Entered bp %d sf %d\n", ngs->bptbl->n_ent,
-               bp_sf(ngs->bptbl, ngs->bptbl->n_ent));
+        E_INFO("Entered bp %d sf %d ef %d\n", ngs->bptbl->n_ent,
+               bp_sf(ngs->bptbl, ngs->bptbl->n_ent), frame_idx);
+        assert(bp_sf(ngs->bptbl, ngs->bptbl->n_ent) >= ngs->bptbl->window_sf);
 
         ngs->bptbl->n_ent++;
         ngs->bptbl->bss_head += rcsize;

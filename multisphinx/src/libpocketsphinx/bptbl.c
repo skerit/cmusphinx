@@ -110,7 +110,9 @@ int
 bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
 {
     E_INFO("pushing frame %d, oldest bp %d in frame %d\n",
-           frame_idx, oldest_bp, bp_sf(bptbl, oldest_bp));
+           frame_idx, oldest_bp, oldest_bp == NO_BP ? -1 : bptbl->ent[oldest_bp].frame);
+    if (oldest_bp >= 0)
+        bptbl->window_sf = bptbl->ent[oldest_bp].frame + 1;
     if (frame_idx >= bptbl->n_frame_alloc) {
         bptbl->n_frame_alloc *= 2;
         bptbl->ef_idx = ckd_realloc(bptbl->ef_idx - 1,
@@ -128,8 +130,8 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
 void
 bptable_gc(bptbl_t *bpt, int oldest_bp, int frame_idx)
 {
-    int i, old_first_unsorted = bpt->first_unsorted;
     return;
+#if 0
     E_INFO("Before sorting (%d : %d)\n", bpt->first_unsorted, oldest_bp);
     for (i = bpt->first_unsorted; i < oldest_bp; ++i) {
         E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
@@ -180,4 +182,5 @@ bptable_gc(bptbl_t *bpt, int oldest_bp, int frame_idx)
                     bpt->ent[i].score,
                     bpt->ent[i].bp);
     }
+#endif
 }

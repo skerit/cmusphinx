@@ -82,7 +82,7 @@ typedef struct bptbl_s {
     dict_t *dict;    /* Dictionary */
     int32 n_ent;             /* First free BPTable entry */
     int32 n_alloc;
-    int32 first_unsorted; /**< First entry that has not yet been sorted/gc-ed */
+    int32 window_sf;      /**< Start of elastic window of end-sorted arcs */
     int32 *bscore_stack;     /* Score stack for all possible right contexts */
     int32 bss_head;          /* First free BScoreStack entry */
     int32 bscore_stack_size;
