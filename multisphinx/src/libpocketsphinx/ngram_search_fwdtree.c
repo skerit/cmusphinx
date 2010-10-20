@@ -877,7 +877,7 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
     int32 thresh;
     int32 bestscore, dscr;
     chan_t *hmm;
-    bptbl_t *bpe;
+    bp_t *bpe;
     int32 n_cand_sf = 0;
 
     nf = frame_idx + 1;
@@ -1176,7 +1176,7 @@ bptable_maxwpf(ngram_search_t *ngs, int frame_idx)
 {
     int32 bp, n;
     int32 bestscr, worstscr;
-    bptbl_t *bpe, *bestbpe, *worstbpe;
+    bp_t *bpe, *bestbpe, *worstbpe;
 
     /* Don't prune if no pruing. */
     if (ngs->maxwpf == -1 || ngs->maxwpf == ps_search_n_words(ngs))
@@ -1231,7 +1231,7 @@ word_transition(ngram_search_t *ngs, int frame_idx)
     int32 rc;
     int32 *rcss;                /* right context score stack */
     int32 thresh, newscore;
-    bptbl_t *bpe;
+    bp_t *bpe;
     root_chan_t *rhmm;
     struct bestbp_rc_s *bestbp_rc_ptr;
     phone_loop_search_t *pls;

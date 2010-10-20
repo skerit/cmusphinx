@@ -9,6 +9,7 @@ libpocketsphinx_la_LIBADD = $(top_builddir)/src/libsphinxbase/libsphinxbase.la
 libpocketsphinx_la_SOURCES =			\
 	acmod.c					\
 	bin_mdef.c				\
+	bptbl.c					\
 	blkarray_list.c				\
 	dict.c					\
 	dict2pid.c				\

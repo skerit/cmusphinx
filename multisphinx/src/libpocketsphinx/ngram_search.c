@@ -348,7 +348,7 @@ static void
 cache_bptable_paths(ngram_search_t *ngs, int32 bp)
 {
     int32 w, prev_bp;
-    bptbl_t *be;
+    bp_t *be;
 
     assert(bp != NO_BP);
 
@@ -395,7 +395,7 @@ ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
     }
     else {
         int32 i, rcsize, *bss;
-        bptbl_t *be;
+        bp_t *be;
 
         /* This might happen if recognition fails. */
         if (ngs->bpidx == NO_BP) {
@@ -508,7 +508,7 @@ ngram_search_bp_hyp(ngram_search_t *ngs, int bpidx)
     bp = bpidx;
     len = 0;
     while (bp != NO_BP) {
-        bptbl_t *be = &ngs->bp_table[bp];
+        bp_t *be = &ngs->bp_table[bp];
         bp = be->bp;
         if (dict_real_word(ps_search_dict(ngs), be->wid))
             len += strlen(dict_basestr(ps_search_dict(ngs), be->wid)) + 1;
@@ -524,7 +524,7 @@ ngram_search_bp_hyp(ngram_search_t *ngs, int bpidx)
     bp = bpidx;
     c = base->hyp_str + len - 1;
     while (bp != NO_BP) {
-        bptbl_t *be = &ngs->bp_table[bp];
+        bp_t *be = &ngs->bp_table[bp];
         size_t len;
 
         bp = be->bp;
@@ -603,7 +603,7 @@ ngram_search_free_all_rc(ngram_search_t *ngs, int32 w)
 }
 
 int32
-ngram_search_exit_score(ngram_search_t *ngs, bptbl_t *pbe, int rcphone)
+ngram_search_exit_score(ngram_search_t *ngs, bp_t *pbe, int rcphone)
 {
     /* DICT2PID */
     /* Get the mapping from right context phone ID to index in the
@@ -629,10 +629,10 @@ ngram_search_exit_score(ngram_search_t *ngs, bptbl_t *pbe, int rcphone)
  * Compute acoustic and LM scores for a BPTable entry (segment).
  */
 void
-ngram_compute_seg_score(ngram_search_t *ngs, bptbl_t *be, float32 lwf,
+ngram_compute_seg_score(ngram_search_t *ngs, bp_t *be, float32 lwf,
                         int32 *out_ascr, int32 *out_lscr)
 {
-    bptbl_t *pbe;
+    bp_t *pbe;
     int32 start_score;
 
     /* Start of utterance. */
@@ -696,22 +696,6 @@ ngram_search_step(ps_search_t *search, int frame_idx)
         return ngram_fwdflat_search(ngs, frame_idx);
     else
         return -1;
-}
-
-static void
-dump_bptable(ngram_search_t *ngs)
-{
-    int i;
-    E_INFO("Backpointer table (%d entries):\n", ngs->bpidx);
-    for (i = 0; i < ngs->bpidx; ++i) {
-        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp\n", /* %-3d history %08x\n", */
-                    i, dict_wordstr(ps_search_dict(ngs), ngs->bp_table[i].wid),
-                    ngs->bp_table[i].bp == -1 ? 0 : 
-                    ngs->bp_table[ngs->bp_table[i].bp].frame + 1,
-                    ngs->bp_table[i].frame,
-                    ngs->bp_table[i].score,
-                    ngs->bp_table[i].bp);
-    }
 }
 
 static int
@@ -807,7 +791,7 @@ static void
 ngram_search_bp2itor(ps_seg_t *seg, int bp)
 {
     ngram_search_t *ngs = (ngram_search_t *)seg->search;
-    bptbl_t *be, *pbe;
+    bp_t *be, *pbe;
 
     be = &ngs->bp_table[bp];
     pbe = be->bp == -1 ? NULL : &ngs->bp_table[be->bp];
@@ -890,7 +874,7 @@ ngram_search_bp_iter(ngram_search_t *ngs, int bpidx, float32 lwf)
     itor->n_bpidx = 0;
     bp = bpidx;
     while (bp != NO_BP) {
-        bptbl_t *be = &ngs->bp_table[bp];
+        bp_t *be = &ngs->bp_table[bp];
         bp = be->bp;
         ++itor->n_bpidx;
     }
@@ -902,7 +886,7 @@ ngram_search_bp_iter(ngram_search_t *ngs, int bpidx, float32 lwf)
     cur = itor->n_bpidx - 1;
     bp = bpidx;
     while (bp != NO_BP) {
-        bptbl_t *be = &ngs->bp_table[bp];
+        bp_t *be = &ngs->bp_table[bp];
         itor->bpidx[cur] = bp;
         bp = be->bp;
         --cur;
@@ -970,7 +954,7 @@ ngram_search_prob(ps_search_t *search)
 static void
 create_dag_nodes(ngram_search_t *ngs, ps_lattice_t *dag)
 {
-    bptbl_t *bp_ptr;
+    bp_t *bp_ptr;
     int32 i;
 
     for (i = 0, bp_ptr = ngs->bp_table; i < ngs->bpidx; ++i, ++bp_ptr) {
@@ -1160,7 +1144,7 @@ ngram_search_lattice(ps_search_t *search)
 
         /* Find predecessors of to : from->fef+1 <= to->sf <= from->lef+1 */
         for (from = to->next; from; from = from->next) {
-            bptbl_t *from_bpe;
+            bp_t *from_bpe;
 
             ef = ngs->bp_table[from->fef].frame;
             lef = ngs->bp_table[from->lef].frame;

@@ -147,8 +147,6 @@ typedef struct bestbp_rc_s {
     int32 lc;                   /* right most ci-phone of above BP entry word */
 } bestbp_rc_t;
 
-#define NO_BP		-1
-
 /**
  * Various statistics for profiling.
  */
@@ -272,7 +270,7 @@ struct ngram_search_s {
     cand_sf_t *cand_sf;
     bestbp_rc_t *bestbp_rc;
 
-    bptbl_t *bp_table;       /* Forward pass lattice */
+    bp_t *bp_table;       /* Forward pass lattice */
     int32 bpidx;             /* First free BPTable entry */
     int32 bp_table_size;
     int32 *bscore_stack;     /* Score stack for all possible right contexts */
@@ -394,6 +392,6 @@ ps_lattice_t *ngram_search_lattice(ps_search_t *search);
 /**
  * Get the exit score for a backpointer entry with a given right context.
  */
-int32 ngram_search_exit_score(ngram_search_t *ngs, bptbl_t *pbe, int rcphone);
+int32 ngram_search_exit_score(ngram_search_t *ngs, bp_t *pbe, int rcphone);
 
 #endif /* __NGRAM_SEARCH_H__ */

@@ -215,7 +215,7 @@ build_fwdflat_wordlist(ngram_search_t *ngs)
 {
     int32 i, f, sf, ef, wid, nwd;
     dict_t *dict;
-    bptbl_t *bp;
+    bp_t *bp;
     ps_latnode_t *node, *prevnode, *nextnode;
 
     /* No tree-search, use statically allocated wordlist. */
@@ -623,7 +623,7 @@ fwdflat_word_transition(ngram_search_t *ngs, int frame_idx)
 {
     int32 cf, nf, b, thresh, pip, i, w, newscore;
     int32 best_silrc_score = 0, best_silrc_bp = 0;      /* FIXME: good defaults? */
-    bptbl_t *bp;
+    bp_t *bp;
     int32 *rcss;
     root_chan_t *rhmm;
     int32 *awl;
