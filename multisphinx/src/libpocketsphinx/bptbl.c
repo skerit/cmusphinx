@@ -306,29 +306,29 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     /* active_sf is the first frame which is still active in search
      * (i.e. for which outgoing word arcs can still be generated).
      * Therefore, any future backpointer table entries will not point
-     * backwards to any backpointers before (active_sf - 1), and thus
-     * any backpointers which are not reachable from those exiting in
-     * (active_sf - 1) will never be reachable. */
+     * backwards to any backpointers before active_sf, and thus any
+     * backpointers which are not reachable from those exiting in
+     * active_sf will never be reachable. */
     prev_active_sf = bptbl->active_sf;
-    active_sf = bptbl->ent[oldest_bp].frame + 1;
+    active_sf = bptbl->ent[oldest_bp].frame;
     assert(active_sf >= prev_active_sf);
     if (active_sf <= prev_active_sf + 1)
         return;
     /* If there is nothing to GC then finish up */
-    if (bptbl->ef_idx[prev_active_sf - 1] == bptbl->ef_idx[active_sf - 1]) {
+    if (bptbl->ef_idx[prev_active_sf] == bptbl->ef_idx[active_sf]) {
         bptbl->active_sf = active_sf;
         return;
     }
 
-    bptbl_mark(bptbl, prev_active_sf - 1, active_sf - 1, frame_idx);
+    bptbl_mark(bptbl, prev_active_sf, active_sf, frame_idx);
     E_INFO("before compaction\n");
     dump_bptable(bptbl, 0, -1);
-    bptbl_compact(bptbl, bptbl->ef_idx[active_sf - 1]);
+    bptbl_compact(bptbl, bptbl->ef_idx[active_sf]);
     E_INFO("after compaction\n");
     dump_bptable(bptbl, 0, -1);
-    bptbl_forward_sort(bptbl, bptbl->ef_idx[prev_active_sf - 1],
-                       bptbl->ef_idx[active_sf - 1]);
-    bptbl_invert(bptbl, bptbl->ef_idx[active_sf - 1]);
+    bptbl_forward_sort(bptbl, bptbl->ef_idx[prev_active_sf],
+                       bptbl->ef_idx[active_sf]);
+    bptbl_invert(bptbl, bptbl->ef_idx[active_sf]);
     E_INFO("after inversion\n");
     dump_bptable(bptbl, 0, -1);
     bptbl->active_sf = active_sf;
