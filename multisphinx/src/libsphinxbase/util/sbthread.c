@@ -534,7 +534,7 @@ sbmsgq_send(sbmsgq_t *q, size_t len, void const *data)
     q->nbytes += len;
 
     /* Signal the condition variable. */
-    pthread_cond_signal(&q->cond);
+    pthread_cond_broadcast(&q->cond);
     /* Unlock it, we have nothing else to do. */
     pthread_mutex_unlock(&q->mtx);
     return 0;
@@ -611,7 +611,7 @@ sbmsgq_wait(sbmsgq_t *q, size_t *out_len, int sec, int nsec)
     q->out += len;
 
     /* Signal the condition variable. */
-    pthread_cond_signal(&q->cond);
+    pthread_cond_broadcast(&q->cond);
     /* Unlock the condition variable, we are done. */
     pthread_mutex_unlock(&q->mtx);
     if (out_len)
@@ -656,7 +656,7 @@ sbevent_signal(sbevent_t *evt)
 
     pthread_mutex_lock(&evt->mtx);
     evt->signalled = TRUE;
-    rv = pthread_cond_signal(&evt->cond);
+    rv = pthread_cond_broadcast(&evt->cond);
     pthread_mutex_unlock(&evt->mtx);
     return rv;
 }

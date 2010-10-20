@@ -118,6 +118,7 @@ size_t
 garray_reserve(garray_t *gar, size_t n_ent)
 {
     if (n_ent > gar->n_ent_alloc) {
+        assert(gar->n_ent_alloc != 0);
         while (n_ent > gar->n_ent_alloc)
             gar->n_ent_alloc *= 2;
         gar->ent = ckd_realloc(gar->ent, gar->n_ent_alloc * gar->ent_size);
@@ -136,6 +137,7 @@ garray_expand(garray_t *gar, size_t n_ent)
 size_t
 garray_expand_to(garray_t *gar, size_t next_idx)
 {
+    assert(next_idx != 0);
     return garray_expand(gar, next_idx - gar->base_idx);
 }
 
