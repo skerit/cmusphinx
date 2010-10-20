@@ -81,81 +81,7 @@ static ps_searchfuncs_t fwdflat_funcs = {
     /* seg_iter: */ fwdflat_search_seg_iter,
 };
 
-static void
-ngram_fwdflat_expand_all(fwdflat_search_t *ffs)
-{
-    int n_words, i;
-
-    /* For all "real words" (not fillers or <s>/</s>) in the dictionary,
-     *
-     * 1) Add the ones which are in the LM to the fwdflat wordlist
-     * 2) And to the expansion list (since we are expanding all)
-     */
-    ffs->n_expand_words = 0;
-    n_words = ps_search_n_words(ffs);
-    bitvec_clear_all(ffs->expand_word_flag, ps_search_n_words(ffs));
-    for (i = 0; i < n_words; ++i) {
-        if (!dict_real_word(ps_search_dict(ffs), i))
-            continue;
-        if (!ngram_model_set_known_wid(ffs->lmset,
-                                       dict_basewid(ps_search_dict(ffs),i)))
-            continue;
-        ffs->fwdflat_wordlist[ffs->n_expand_words] = i;
-        ffs->expand_word_list[ffs->n_expand_words] = i;
-        bitvec_set(ffs->expand_word_flag, i);
-        ffs->n_expand_words++;
-    }
-    E_INFO("Utterance vocabulary contains %d words\n", ffs->n_expand_words);
-    ffs->expand_word_list[ffs->n_expand_words] = -1;
-    ffs->fwdflat_wordlist[ffs->n_expand_words] = -1;
-}
-
-static void
-ngram_fwdflat_allocate_1ph(fwdflat_search_t *ffs)
-{
-    dict_t *dict = ps_search_dict(ffs);
-    int n_words = ps_search_n_words(ffs);
-    int i, w;
-
-    ffs->n_1ph_words = 0;
-    for (w = 0; w < n_words; w++) {
-        if (dict_is_single_phone(dict, w))
-            ++ffs->n_1ph_words;
-    }
-    ffs->rhmm_1ph = ckd_calloc(ffs->n_1ph_words, sizeof(*ffs->rhmm_1ph));
-    i = 0;
-    for (w = 0; w < n_words; w++) {
-        if (!dict_is_single_phone(dict, w))
-            continue;
-
-        /* DICT2PID location */
-        ffs->rhmm_1ph[i].ciphone = dict_first_phone(dict, w);
-        ffs->rhmm_1ph[i].ci2phone = bin_mdef_silphone(ps_search_acmod(ffs)->mdef);
-        hmm_init(ffs->hmmctx, &ffs->rhmm_1ph[i].hmm, TRUE,
-                 /* ssid */ bin_mdef_pid2ssid(ps_search_acmod(ffs)->mdef,
-                                              ffs->rhmm_1ph[i].ciphone),
-                 /* tmatid */ ffs->rhmm_1ph[i].ciphone);
-        ffs->rhmm_1ph[i].next = NULL;
-        ffs->word_chan[w] = &ffs->rhmm_1ph[i];
-        i++;
-    }
-}
-
-static void
-ngram_fwdflat_free_1ph(fwdflat_search_t *ffs)
-{
-    int i, w;
-    int n_words = ps_search_n_words(ffs);
-
-    for (i = w = 0; w < n_words; ++w) {
-        if (!dict_is_single_phone(ps_search_dict(ffs), w))
-            continue;
-        hmm_deinit(&ffs->rhmm_1ph[i].hmm);
-        ++i;
-    }
-    ckd_free(ffs->rhmm_1ph);
-    ffs->rhmm_1ph = NULL;
-}
+static void build_fwdflat_chan(fwdflat_search_t *ffs);
 
 static void
 fwdflat_search_calc_beams(fwdflat_search_t *ffs)
@@ -200,7 +126,6 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
 {
     fwdflat_search_t *ffs;
     const char *path;
-    int n_words;
 
     ffs = ckd_calloc(1, sizeof(*ffs));
     ps_search_init(&ffs->base, &fwdflat_funcs, config, acmod, dict, d2p);
@@ -266,15 +191,8 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     /* Create word mappings. */
     fwdflat_search_update_widmap(ffs);
 
-    n_words = ps_search_n_words(ffs);
-    ffs->fwdflat_wordlist = ckd_calloc(n_words + 1, sizeof(*ffs->fwdflat_wordlist));
-    ffs->expand_word_flag = bitvec_alloc(n_words);
-    ffs->expand_word_list = ckd_calloc(n_words + 1, sizeof(*ffs->expand_word_list));
-
-    /* Build full expansion list from LM words. */
-    ngram_fwdflat_expand_all(ffs);
-    /* Allocate single phone words. */
-    ngram_fwdflat_allocate_1ph(ffs);
+    /* Create HMM network. */
+    build_fwdflat_chan(ffs);
 
     return (ps_search_t *)ffs;
 
@@ -284,16 +202,41 @@ error_out:
 }
 
 static void
+fwdflat_search_free_all_rc(fwdflat_search_t *ffs, int32 w)
+{
+    internal_node_t *hmm, *thmm;
+
+    hmm = ffs->word_chan[w]->next;
+    hmm_deinit(&ffs->word_chan[w]->hmm);
+    listelem_free(ffs->root_chan_alloc, ffs->word_chan[w]);
+    while (hmm) {
+        thmm = hmm->next;
+        hmm_deinit(&hmm->hmm);
+        listelem_free(ffs->chan_alloc, hmm);
+        hmm = thmm;
+    }
+    ffs->word_chan[w] = NULL;
+}
+
+static void
+destroy_fwdflat_chan(fwdflat_search_t *ffs)
+{
+    int32 wid;
+
+    for (wid = 0; wid < ps_search_n_words(ffs); ++wid) {
+        assert(ffs->word_chan[wid] != NULL);
+        fwdflat_search_free_all_rc(ffs, wid);
+    }
+}
+
+static void
 fwdflat_search_free(ps_search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
 
     ps_search_deinit(base);
 
-    ngram_fwdflat_free_1ph(ffs);
-    ckd_free(ffs->fwdflat_wordlist);
-    bitvec_free(ffs->expand_word_flag);
-    ckd_free(ffs->expand_word_list);
+    destroy_fwdflat_chan(ffs);
 
     hmm_context_free(ffs->hmmctx);
     listelem_alloc_free(ffs->chan_alloc);
@@ -317,18 +260,11 @@ fwdflat_search_reinit(ps_search_t *base, dict_t *dict, dict2pid_t *d2p)
     old_n_words = ps_search_n_words(ffs);
     if (old_n_words != dict_size(dict)) {
         base->n_words = dict_size(dict);
-        ckd_free(ffs->fwdflat_wordlist);
-        ckd_free(ffs->expand_word_list);
-        bitvec_free(ffs->expand_word_flag);
         ckd_free(ffs->bptbl->word_idx);
         ckd_free(ffs->word_active);
         ckd_free_2d(ffs->active_word_list);
         ckd_free(ffs->word_chan);
-        ffs->fwdflat_wordlist = ckd_calloc(base->n_words + 1,
-                                           sizeof(*ffs->fwdflat_wordlist));
-        ffs->expand_word_flag = bitvec_alloc(base->n_words);
-        ffs->expand_word_list = ckd_calloc(base->n_words + 1,
-                                           sizeof(*ffs->expand_word_list));
+
         ffs->bptbl->word_idx = ckd_calloc(base->n_words,
                                           sizeof(*ffs->bptbl->word_idx));
         ffs->word_active = bitvec_alloc(base->n_words);
@@ -344,23 +280,16 @@ fwdflat_search_reinit(ps_search_t *base, dict_t *dict, dict2pid_t *d2p)
     fwdflat_search_calc_beams(ffs);
     /* Update word mappings. */
     fwdflat_search_update_widmap(ffs);
+    /* Rebuild HMM network */
+    build_fwdflat_chan(ffs);
 
-    /* Free single-phone words. */
-    ngram_fwdflat_free_1ph(ffs);
-    /* Rebuild full expansion list from LM words. */
-    ngram_fwdflat_expand_all(ffs);
-    /* Allocate single phone words. */
-    ngram_fwdflat_allocate_1ph(ffs);
-
-    /* Otherwise there is nothing to do since the wordlist is
-     * generated anew every utterance. */
     return 0;
 }
 
 static internal_node_t *
 fwdflat_search_alloc_all_rc(fwdflat_search_t *ffs, int32 w)
 {
-    internal_node_t *hmm;
+    internal_node_t *fhmm, *hmm;
     xwdssid_t *rssid;
     int32 i;
 
@@ -370,8 +299,9 @@ fwdflat_search_alloc_all_rc(fwdflat_search_t *ffs, int32 w)
     rssid = dict2pid_rssid(ps_search_dict2pid(ffs),
                            dict_last_phone(ps_search_dict(ffs),w),
                            dict_second_last_phone(ps_search_dict(ffs),w));
-    hmm = listelem_malloc(ffs->chan_alloc);
-    hmm->info.rc_id = 0;
+    fhmm = hmm = listelem_malloc(ffs->chan_alloc);
+    hmm->rc_id = 0;
+    hmm->next = NULL;
     hmm->ciphone = dict_last_phone(ps_search_dict(ffs),w);
     hmm_init(ffs->hmmctx, &hmm->hmm, FALSE, rssid->ssid[0], hmm->ciphone);
     E_DEBUG(3,("allocated rc_id 0 ssid %d ciphone %d lc %d word %s\n",
@@ -386,7 +316,7 @@ fwdflat_search_alloc_all_rc(fwdflat_search_t *ffs, int32 w)
             hmm->next = thmm;
             hmm = thmm;
 
-            hmm->info.rc_id = i;
+            hmm->rc_id = i;
             hmm->ciphone = dict_last_phone(ps_search_dict(ffs),w);
             hmm_init(ffs->hmmctx, &hmm->hmm, FALSE, rssid->ssid[i], hmm->ciphone);
             E_DEBUG(3,("allocated rc_id %d ssid %d ciphone %d lc %d word %s\n",
@@ -398,16 +328,16 @@ fwdflat_search_alloc_all_rc(fwdflat_search_t *ffs, int32 w)
             hmm = hmm->next;
     }
 
-    return hmm;
+    return fhmm;
 }
 
 /**
- * Build HMM network for one utterance of fwdflat search.
+ * Build HMM network.
  */
 static void
 build_fwdflat_chan(fwdflat_search_t *ffs)
 {
-    int32 i, wid, p;
+    int32 wid, p;
     first_node_t *rhmm;
     internal_node_t *hmm, *prevhmm;
     dict_t *dict;
@@ -416,22 +346,21 @@ build_fwdflat_chan(fwdflat_search_t *ffs)
     dict = ps_search_dict(ffs);
     d2p = ps_search_dict2pid(ffs);
 
-    /* Build word HMMs for each word in the lattice. */
-    for (i = 0; ffs->fwdflat_wordlist[i] >= 0; i++) {
-        wid = ffs->fwdflat_wordlist[i];
-
-        /* Omit single-phone words as they are permanently allocated */
-        if (dict_is_single_phone(dict, wid))
-            continue;
-
+    /* Build word HMMs for each word in the dictionary. */
+    for (wid = 0; wid < ps_search_n_words(ffs); ++wid) {
         assert(ffs->word_chan[wid] == NULL);
 
         /* Multiplex root HMM for first phone (one root per word, flat
-         * lexicon).  diphone is irrelevant here, for the time being,
-         * at least. */
+         * lexicon). */
         rhmm = listelem_malloc(ffs->root_chan_alloc);
-        rhmm->ci2phone = dict_second_phone(dict, wid);
-        rhmm->ciphone = dict_first_phone(dict, wid);
+        if (dict_is_single_phone(dict, wid)) {
+            rhmm->ciphone = dict_first_phone(dict, wid);
+            rhmm->ci2phone = bin_mdef_silphone(ps_search_acmod(ffs)->mdef);
+        }
+        else {
+            rhmm->ciphone = dict_first_phone(dict, wid);
+            rhmm->ci2phone = dict_second_phone(dict, wid);
+        }
         rhmm->next = NULL;
         hmm_init(ffs->hmmctx, &rhmm->hmm, TRUE,
                  bin_mdef_pid2ssid(ps_search_acmod(ffs)->mdef, rhmm->ciphone),
@@ -442,7 +371,7 @@ build_fwdflat_chan(fwdflat_search_t *ffs)
         for (p = 1; p < dict_pronlen(dict, wid) - 1; p++) {
             hmm = listelem_malloc(ffs->chan_alloc);
             hmm->ciphone = dict_pron(dict, wid, p);
-            hmm->info.rc_id = (p == dict_pronlen(dict, wid) - 1) ? 0 : -1;
+            hmm->rc_id = -1;
             hmm->next = NULL;
             hmm_init(ffs->hmmctx, &hmm->hmm, FALSE,
                      dict2pid_internal(d2p,wid,p), hmm->ciphone);
@@ -456,13 +385,14 @@ build_fwdflat_chan(fwdflat_search_t *ffs)
         }
 
         /* Right-context phones */
-        hmm = fwdflat_search_alloc_all_rc(ffs, wid);
-
-        /* Link in just allocated right-context phones */
-        if (prevhmm)
-            prevhmm->next = hmm;
-        else
-            rhmm->next = hmm;
+        if (!dict_is_single_phone(dict, wid)) {
+            hmm = fwdflat_search_alloc_all_rc(ffs, wid);
+            /* Link in just allocated right-context phones */
+            if (prevhmm)
+                prevhmm->next = hmm;
+            else
+                rhmm->next = hmm;
+        }
         ffs->word_chan[wid] = rhmm;
     }
 }
@@ -474,13 +404,12 @@ fwdflat_search_start(ps_search_t *base)
     first_node_t *rhmm;
     int i;
 
-    build_fwdflat_chan(ffs);
     bptbl_reset(ffs->bptbl);
     ffs->oldest_bp = -1;
     for (i = 0; i < ps_search_n_words(ffs); i++)
         ffs->bptbl->word_idx[i] = NO_BP;
 
-    /* Start search with <s>; word_chan[<s>] is permanently allocated */
+    /* Start search with <s> */
     rhmm = (first_node_t *) ffs->word_chan[ps_search_start_wid(ffs)];
     hmm_enter(&rhmm->hmm, 0, NO_BP, 0);
     ffs->active_word_list[0][0] = ps_search_start_wid(ffs);
@@ -498,6 +427,22 @@ fwdflat_search_start(ps_search_t *base)
     return 0;
 }
 
+static int32
+update_oldest_bp(fwdflat_search_t *ffs, hmm_t *hmm)
+{
+    int j;
+
+    for (j = 0; j < hmm->n_emit_state; ++j)
+        if (hmm_score(hmm, j) BETTER_THAN WORST_SCORE)
+            if (hmm_history(hmm, j) < ffs->oldest_bp)
+                ffs->oldest_bp = hmm_history(hmm, j);
+    if (hmm_out_score(hmm) BETTER_THAN WORST_SCORE)
+        if (hmm_out_history(hmm) < ffs->oldest_bp)
+            ffs->oldest_bp = hmm_out_history(hmm);
+
+    return ffs->oldest_bp;
+}
+
 static void
 compute_fwdflat_sen_active(fwdflat_search_t *ffs, int frame_idx)
 {
@@ -507,6 +452,7 @@ compute_fwdflat_sen_active(fwdflat_search_t *ffs, int frame_idx)
     internal_node_t *hmm;
 
     acmod_clear_active(ps_search_acmod(ffs));
+    ffs->oldest_bp = ffs->bptbl->n_ent;
 
     i = ffs->n_active_word[frame_idx & 0x1];
     awl = ffs->active_word_list[frame_idx & 0x1];
@@ -515,14 +461,17 @@ compute_fwdflat_sen_active(fwdflat_search_t *ffs, int frame_idx)
         rhmm = (first_node_t *)ffs->word_chan[w];
         if (hmm_frame(&rhmm->hmm) == frame_idx) {
             acmod_activate_hmm(ps_search_acmod(ffs), &rhmm->hmm);
+            update_oldest_bp(ffs, &rhmm->hmm);
         }
 
         for (hmm = rhmm->next; hmm; hmm = hmm->next) {
             if (hmm_frame(&hmm->hmm) == frame_idx) {
                 acmod_activate_hmm(ps_search_acmod(ffs), &hmm->hmm);
+                update_oldest_bp(ffs, &hmm->hmm);
             }
         }
     }
+    assert(ffs->oldest_bp < ffs->bptbl->n_ent);
 }
 
 static void
@@ -608,7 +557,6 @@ fwdflat_prune_chan(fwdflat_search_t *ffs, int frame_idx)
     thresh = ffs->best_score + ffs->fwdflatbeam;
     wordthresh = ffs->best_score + ffs->fwdflatwbeam;
     pip = ffs->pip;
-    E_DEBUG(3,("frame %d thresh %d wordthresh %d\n", frame_idx, thresh, wordthresh));
 
     /* Scan all active words. */
     for (w = *(awl++); i > 0; --i, w = *(awl++)) {
@@ -623,12 +571,11 @@ fwdflat_prune_chan(fwdflat_search_t *ffs, int frame_idx)
             newscore = hmm_out_score(&rhmm->hmm);
             if (rhmm->next) {
                 assert(!dict_is_single_phone(ps_search_dict(ffs), w));
-
                 newscore += pip;
                 if (newscore BETTER_THAN thresh) {
                     hmm = rhmm->next;
                     /* Enter all right context phones */
-                    if (hmm->info.rc_id >= 0) {
+                    if (hmm->rc_id >= 0) {
                         for (; hmm; hmm = hmm->next) {
                             if ((hmm_frame(&hmm->hmm) < cf)
                                 || (newscore BETTER_THAN hmm_in_score(&hmm->hmm))) {
@@ -649,9 +596,7 @@ fwdflat_prune_chan(fwdflat_search_t *ffs, int frame_idx)
             }
             else {
                 assert(dict_is_single_phone(ps_search_dict(ffs), w));
-
-                /* Word exit for single-phone words (where did their
-                 * whmms come from?) */
+                /* Word exit for single-phone words */
                 if (newscore BETTER_THAN wordthresh) {
                     fwdflat_search_save_bp(ffs, cf, w, newscore,
                                            hmm_out_history(&rhmm->hmm), 0);
@@ -669,12 +614,12 @@ fwdflat_prune_chan(fwdflat_search_t *ffs, int frame_idx)
 
                     newscore = hmm_out_score(&hmm->hmm);
                     /* Word-internal phones */
-                    if (hmm->info.rc_id < 0) {
+                    if (hmm->rc_id < 0) {
                         newscore += pip;
                         if (newscore BETTER_THAN thresh) {
                             nexthmm = hmm->next;
                             /* Enter all right-context phones. */
-                            if (nexthmm->info.rc_id >= 0) {
+                            if (nexthmm->rc_id >= 0) {
                                  for (; nexthmm; nexthmm = nexthmm->next) {
                                     if ((hmm_frame(&nexthmm->hmm) < cf)
                                         || (newscore BETTER_THAN
@@ -702,7 +647,7 @@ fwdflat_prune_chan(fwdflat_search_t *ffs, int frame_idx)
                         if (newscore BETTER_THAN wordthresh) {
                             fwdflat_search_save_bp(ffs, cf, w, newscore,
                                                    hmm_out_history(&hmm->hmm),
-                                                   hmm->info.rc_id);
+                                                   hmm->rc_id);
                         }
                     }
                 }
@@ -713,13 +658,6 @@ fwdflat_prune_chan(fwdflat_search_t *ffs, int frame_idx)
             }
         }
     }
-}
-
-static void
-get_expand_wordlist(fwdflat_search_t *ffs, int32 frm, int32 win)
-{
-    ffs->st.n_fwdflat_word_transition += ffs->n_expand_words;
-    return;
 }
 
 static void
@@ -739,10 +677,6 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
     pip = ffs->pip;
     best_silrc_score = WORST_SCORE;
 
-    /* Search for all words starting within a window of this frame.
-     * These are the successors for words exiting now. */
-    get_expand_wordlist(ffs, cf, ffs->max_sf_win);
-
     /* Scan words exited in current frame */
     for (b = bptbl_ef_idx(ffs->bptbl, cf);
          b < bptbl_ef_idx(ffs->bptbl, cf + 1); b++) {
@@ -756,7 +690,6 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
         if (ent->wid == ps_search_finish_wid(ffs))
             continue;
 
-        /* DICT2PID location */
         /* Get the mapping from right context phone ID to index in the
          * right context table and the bptbl->bscore_stack. */
         rcss = ffs->bptbl->bscore_stack + ent->s_idx;
@@ -766,10 +699,14 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
             rssid = dict2pid_rssid(d2p, ent->last_phone, ent->last2_phone);
 
         /* Transition to all successor words. */
-        for (i = 0; ffs->expand_word_list[i] >= 0; i++) {
+        for (w = 0; w < ps_search_n_words(ffs); w++) {
             int32 n_used;
 
-            w = ffs->expand_word_list[i];
+            if (!dict_real_word(ps_search_dict(ffs), w))
+                continue;
+            if (!ngram_model_set_known_wid(ffs->lmset,
+                                           dict_basewid(ps_search_dict(ffs),w)))
+                continue;
 
             /* Get the exit score we recorded in save_bwd_ptr(), or
              * something approximating it. */
@@ -828,7 +765,7 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
             bitvec_set(ffs->word_active, w);
         }
     }
-    /* Transition to noise words */
+    /* Transition to noise words (FIXME: Depends on dictionary organization) */
     newscore = best_silrc_score + ffs->fillpen + pip;
     if ((newscore BETTER_THAN thresh) && (newscore BETTER_THAN WORST_SCORE)) {
         for (w = ps_search_silence_wid(ffs) + 1; w < ps_search_n_words(ffs); w++) {
@@ -926,9 +863,14 @@ fwdflat_search_step(ps_search_t *base, int frame_idx)
     /* Create next active word list */
     nf = frame_idx + 1;
     nawl = ffs->active_word_list[nf & 0x1];
-    for (i = 0, j = 0; ffs->fwdflat_wordlist[i] >= 0; i++) {
-        if (bitvec_is_set(ffs->word_active, ffs->fwdflat_wordlist[i])) {
-            *(nawl++) = ffs->fwdflat_wordlist[i];
+    for (i = 0, j = 0; i < ps_search_n_words(ffs); i++) {
+        if (!dict_real_word(ps_search_dict(ffs), i))
+            continue;
+        if (!ngram_model_set_known_wid(ffs->lmset,
+                                       dict_basewid(ps_search_dict(ffs),i)))
+            continue;
+        if (bitvec_is_set(ffs->word_active, i)) {
+            *(nawl++) = i;
             j++;
         }
     }
@@ -944,57 +886,12 @@ fwdflat_search_step(ps_search_t *base, int frame_idx)
     return 1;
 }
 
-/**
- * Destroy wordlist from the current utterance.
- */
-static void
-destroy_fwdflat_wordlist(fwdflat_search_t *ffs)
-{
-}
-
-
-static void
-fwdflat_search_free_all_rc(fwdflat_search_t *ffs, int32 w)
-{
-    internal_node_t *hmm, *thmm;
-
-    hmm = ffs->word_chan[w]->next;
-    hmm_deinit(&ffs->word_chan[w]->hmm);
-    listelem_free(ffs->root_chan_alloc, ffs->word_chan[w]);
-    while (hmm) {
-        thmm = hmm->next;
-        hmm_deinit(&hmm->hmm);
-        listelem_free(ffs->chan_alloc, hmm);
-        hmm = thmm;
-    }
-    ffs->word_chan[w] = NULL;
-}
-
-/**
- * Free HMM network for one utterance of fwdflat search.
- */
-static void
-destroy_fwdflat_chan(fwdflat_search_t *ffs)
-{
-    int32 i, wid;
-
-    for (i = 0; ffs->fwdflat_wordlist[i] >= 0; i++) {
-        wid = ffs->fwdflat_wordlist[i];
-        if (dict_is_single_phone(ps_search_dict(ffs),wid))
-            continue;
-        assert(ffs->word_chan[wid] != NULL);
-        fwdflat_search_free_all_rc(ffs, wid);
-    }
-}
-
 static int
 fwdflat_search_finish(ps_search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
     int32 cf;
 
-    destroy_fwdflat_chan(ffs);
-    destroy_fwdflat_wordlist(ffs);
     bitvec_clear_all(ffs->word_active, ps_search_n_words(ffs));
 
     /* This is the number of frames processed. */

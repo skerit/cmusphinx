@@ -396,6 +396,22 @@ ngram_fwdflat_start(ngram_search_t *ngs)
     ngs->st.n_senone_active_utt = 0;
 }
 
+static int32
+update_oldest_bp(ngram_search_t *ffs, hmm_t *hmm)
+{
+    int j;
+
+    for (j = 0; j < hmm->n_emit_state; ++j)
+        if (hmm_score(hmm, j) BETTER_THAN WORST_SCORE)
+            if (hmm_history(hmm, j) < ffs->oldest_bp)
+                ffs->oldest_bp = hmm_history(hmm, j);
+    if (hmm_out_score(hmm) BETTER_THAN WORST_SCORE)
+        if (hmm_out_history(hmm) < ffs->oldest_bp)
+            ffs->oldest_bp = hmm_out_history(hmm);
+
+    return ffs->oldest_bp;
+}
+
 static void
 compute_fwdflat_sen_active(ngram_search_t *ngs, int frame_idx)
 {
@@ -405,6 +421,7 @@ compute_fwdflat_sen_active(ngram_search_t *ngs, int frame_idx)
     chan_t *hmm;
 
     acmod_clear_active(ps_search_acmod(ngs));
+    ngs->oldest_bp = ngs->bptbl->n_ent;
 
     i = ngs->n_active_word[frame_idx & 0x1];
     awl = ngs->active_word_list[frame_idx & 0x1];
@@ -413,14 +430,17 @@ compute_fwdflat_sen_active(ngram_search_t *ngs, int frame_idx)
         rhmm = (root_chan_t *)ngs->word_chan[w];
         if (hmm_frame(&rhmm->hmm) == frame_idx) {
             acmod_activate_hmm(ps_search_acmod(ngs), &rhmm->hmm);
+            update_oldest_bp(ngs, &rhmm->hmm);
         }
 
         for (hmm = rhmm->next; hmm; hmm = hmm->next) {
             if (hmm_frame(&hmm->hmm) == frame_idx) {
                 acmod_activate_hmm(ps_search_acmod(ngs), &hmm->hmm);
+                update_oldest_bp(ngs, &hmm->hmm);
             }
         }
     }
+    assert(ngs->oldest_bp < ngs->bptbl->n_ent);
 }
 
 static void
@@ -677,7 +697,7 @@ fwdflat_word_transition(ngram_search_t *ngs, int frame_idx)
             if (newscore == WORST_SCORE)
                 continue;
             /* FIXME: Floating point... */
-            newscore += lwf
+            newscore += /* lwf */ 1
                 * ngram_tg_score(ngs->lmset,
                                  dict_basewid(dict, w),
                                  ent->real_wid,
@@ -837,6 +857,9 @@ ngram_fwdflat_search(ngram_search_t *ngs, int frame_idx)
         }
     }
     ngs->n_active_word[nf & 0x1] = j;
+    E_INFO("%d active words entering frame %d\n",
+           j, nf);
+           
 
     /* Return the number of frames processed. */
     return 1;
