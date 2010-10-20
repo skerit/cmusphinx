@@ -31,16 +31,16 @@
   - Hook these up to the pocketsphinx API
   - Punt on lattice generation and bestpath for now (disable it)
 
-* Implement fixed size bptbls
-  - Figure out the mechanism for expiring old bps
-  - Test this out
-
 * Release old bps and rc scores in two-pass search
-  - Needs an API for this - bptbl_release()?
+  - Needs an API for this - bptbl_release()
   - Hypothesis interface needs to be able to transition between
     available results from one pass to the next
   - This is the essence of "anytime recognition"
   - Also should be able to show a visualization of this
+
+* Implement fixed size bptbls
+  - Figure out the mechanism for expiring old bps
+  - Test this out
 
 * Rewrite lattice generation to be incremental on retired bps
   - This is pretty similar to the arc buffer code

@@ -960,7 +960,6 @@ fwdflat_search_step(ps_search_t *base)
     
     if (ffs->input_bptbl) {
         int next_sf; /**< First frame pointed to by active bps. */
-        int narc;
         /* next_sf is the first starting frame that is still active.  The
          * bptbl code tracks this for us in the form of the oldest
          * backpointer referenced by the active part of the bptbl. */
@@ -973,12 +972,14 @@ fwdflat_search_step(ps_search_t *base)
 
         /* Extend the arc buffer the appropriate number of frames. */
         if (fwdflat_arc_buffer_extend(ffs->input_arcs, next_sf) > 0) {
-            /* Add the next chunk of bps to the arc buffer.  FIXME:
-             * For the time being we just try to add them all, the arc
-             * buffer code will filter out the irrelevant ones. */
-            narc = fwdflat_arc_buffer_add_bps(ffs->input_arcs, ffs->input_bptbl,
-                                              0, ffs->input_bptbl->first_invert_bp);
+            /* Add the next chunk of bps to the arc buffer. */
+            ffs->next_idx = fwdflat_arc_buffer_add_bps
+                (ffs->input_arcs, ffs->input_bptbl,
+                 ffs->input_arcs->next_idx,
+                 ffs->input_bptbl->first_invert_bp);
             fwdflat_arc_buffer_commit(ffs->input_arcs);
+            /* Release bps we won't need anymore. */
+            bptbl_release(ffs->input_bptbl, ffs->next_idx);
         }
 
         /* Now pull things from the arc buffer - everything above this
@@ -1142,15 +1143,16 @@ fwdflat_arc_buffer_extend(fwdflat_arc_buffer_t *fab, int next_sf)
     return next_sf - fab->active_sf;
 }
 
-int
+bpidx_t
 fwdflat_arc_buffer_add_bps(fwdflat_arc_buffer_t *fab,
                            bptbl_t *bptbl, bpidx_t start,
                            bpidx_t end)
 {
-    bpidx_t idx;
+    bpidx_t idx, next_idx;
     int n_arcs;
 
     n_arcs = 0;
+    next_idx = -1;
     for (idx = start; idx < end; ++idx) {
         fwdflat_arc_t arc;
         bp_t *ent;
@@ -1167,9 +1169,18 @@ fwdflat_arc_buffer_add_bps(fwdflat_arc_buffer_t *fab,
             ++garray_ent(fab->sf_idx, int, arc.sf);
             ++n_arcs;
         }
+        else {
+            if (arc.sf >= fab->active_sf && next_idx == -1)
+                next_idx = idx;
+        }
     }
 
-    return n_arcs;
+    E_INFO("Added bps from frame %d to %d, index %d to %d\n",
+           fab->active_sf, fab->next_sf,
+           start, end);
+    if (next_idx == -1)
+        next_idx = start;
+    return next_idx;
 }
 
 int
@@ -1188,7 +1199,7 @@ fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
     /* Nothing to do... */
     if (n_active_fr == 0) {
         assert(n_arcs == 0);
-        return;
+        return 0;
     }
 
 #if 0
@@ -1308,6 +1319,7 @@ fwdflat_arc_buffer_release(fwdflat_arc_buffer_t *fab, int first_sf)
 #endif
     garray_shift_from(fab->arcs, next_first_arc);
     garray_set_base(fab->arcs, next_first_arc);
+
     return 0;
 }
 
@@ -1316,6 +1328,7 @@ fwdflat_arc_buffer_reset(fwdflat_arc_buffer_t *fab)
 {
     fab->active_sf = fab->next_sf = 0;
     fab->active_arc = 0;
+    fab->next_idx = 0;
     garray_reset(fab->arcs);
     garray_reset(fab->sf_idx);
 }

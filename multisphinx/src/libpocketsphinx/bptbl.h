@@ -187,6 +187,11 @@ bp_t *bptbl_find_exit(bptbl_t *bptbl, int32 wid);
 int bptbl_push_frame(bptbl_t *bptbl, bpidx_t oldest_bp);
 
 /**
+ * Release retired backpointers before a given index.
+ */
+int bptbl_release(bptbl_t *bptbl, bpidx_t first_idx);
+
+/**
  * Add a backpointer to the table.
  */
 bp_t *bptbl_enter(bptbl_t *bptbl, int32 w, int32 path,

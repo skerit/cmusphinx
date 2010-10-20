@@ -264,8 +264,22 @@ won't get all that big)
 
 The question is do we actually need to do this?  The active bptbl
 never gets very big at all - for the test file which is long and
-pretty noisy it tops out at 128k.  The bigger problem is the rc
-pointers which get pretty huge.  So, incremental lattice generation is
-more of a priority.
+pretty noisy it tops out at 128k.  Again, the point is that its size
+is basically fixed by the longest dictionary word.  The bigger problem
+is the rc pointers which get pretty huge (from 256k up to 8M depending
+on maxwpf).  So, incremental lattice generation is more of a priority.
+We can also totally compress the rc scores, since they are all almost
+exactly the same - store them as 16-bit or even 8-bit deltas.
 
-However fixing the size of the active bptbl
+Fixing the size of the active bptbl is interesting mainly because it
+sounds good in the dissertation, probably should find a way to spin
+it, i.e. "we thought this would be really important but in the end it
+didn't matter" or maybe "we thought this would be really cool but it's
+good enough to just estimate the appropriate size from the dictionary
+and be able to grow it in an emergency"
+
+Actually.  The real reason we'd want to do it is to be able to make it
+a circular buffer.  There is a pretty valid question here which is how
+much more efficient it will be to do that, particularly where memory
+bandwidth is at a premium.  In the current case we have the overhead
+of shifting the active bptbl ents and rc scores

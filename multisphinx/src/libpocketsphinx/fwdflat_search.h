@@ -152,11 +152,14 @@ int fwdflat_arc_buffer_extend(fwdflat_arc_buffer_t *fab, int next_sf);
  * @param bptbl Backpointer table to take arcs from.
  * @param start First backpointer index to add to the buffer.
  * @param end One past the last backpointer index to add to the buffer.
- * @return The number of arcs successfully added.
+ * @return The first backpointer index between start and end which
+ *         starts after the next active frame, i.e. the first
+ *         backpointer index which must be preserved for the next pass
+ *         of arc addition.
  */
-int fwdflat_arc_buffer_add_bps(fwdflat_arc_buffer_t *fab,
-                               bptbl_t *bptbl, bpidx_t start,
-                               bpidx_t end);
+bpidx_t fwdflat_arc_buffer_add_bps(fwdflat_arc_buffer_t *fab,
+                                   bptbl_t *bptbl, bpidx_t start,
+                                   bpidx_t end);
 /**
  * Commit extended arcs to the arc buffer.
  *
@@ -231,6 +234,7 @@ typedef struct fwdflat_search_s {
     bptbl_t *input_bptbl;
     fwdflat_arc_buffer_t *input_arcs;
     uint8 *input_words;       /**< Count of exits for arcs in window. */
+    bpidx_t next_idx;   /**< Next incoming bptbl idx to scan for arcs. */
 
     int16 min_ef_width, max_sf_win;
 

@@ -279,9 +279,9 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
     int active_dest_s_idx;
 
     /* First available backpointer index in retired. */
-    dest = bptbl->first_invert_bp;
+    dest = garray_next_idx(bptbl->retired);
     /* Expand retired if necessary. */
-    garray_expand(bptbl->retired, dest + n_retired);
+    garray_expand_to(bptbl->retired, dest + n_retired);
     /* Note we use the "cooked" backpointer indices here. */
     for (src = bptbl_active_idx(bptbl); src < eidx; ++src) {
         bp_t *src_ent = garray_ptr(bptbl->ent, bp_t, src);
@@ -595,6 +595,12 @@ bptbl_finalize(bptbl_t *bptbl)
     return n_retired;
 }
 
+int
+bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
+{
+    return 0;
+}
+
 bp_t *
 bptbl_find_exit(bptbl_t *bptbl, int32 wid)
 {
@@ -698,7 +704,8 @@ bpidx_t
 bptbl_idx(bptbl_t *bptbl, bp_t *bpe)
 {
     if (bpe->frame < bptbl->active_fr)
-        return bpe - garray_ptr(bptbl->retired, bp_t, 0);
+        return bpe - garray_ptr(bptbl->retired, bp_t, 0)
+            + garray_base(bptbl->retired);
     else
         return bpe - garray_ptr(bptbl->ent, bp_t, garray_base(bptbl->ent))
             + garray_base(bptbl->ent);
