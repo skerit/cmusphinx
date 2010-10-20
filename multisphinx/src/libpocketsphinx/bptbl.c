@@ -137,7 +137,8 @@ bptbl_dump(bptbl_t *bptbl)
     sbmtx_lock(bptbl->mtx);
     E_INFO("Retired backpointers (%d entries, oldest active %d):\n",
            bptbl_retired_idx(bptbl), bptbl->oldest_bp);
-    for (i = 0; i < bptbl_retired_idx(bptbl); ++i) {
+    for (i = garray_base(bptbl->retired);
+         i < bptbl_retired_idx(bptbl); ++i) {
         bp_t *ent = bptbl_ent(bptbl, i);
         assert(ent->valid);
         E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
@@ -623,7 +624,10 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
     bpidx_t base_idx;
     bp_t *ent;
 
+#if 1 /* For debugging purposes... */
     return 0;
+#endif
+
     sbmtx_lock(bptbl->mtx);
     if (first_idx > bptbl_retired_idx(bptbl)) {
         E_DEBUG(2,("%d outside retired, releasing up to %d\n",

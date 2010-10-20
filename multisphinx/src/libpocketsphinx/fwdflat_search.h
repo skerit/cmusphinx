@@ -229,14 +229,22 @@ typedef struct fwdflat_search_s {
                             cleared before each frame */
 
     /**
+     * Cumulative vocabulary for current utterance.
+     */
+    bitvec_t *utt_vocab;
+    garray_t *word_list;
+
+    /**
      * Arc buffer, used for input words.
      */
     bptbl_t *input_bptbl;
     fwdflat_arc_buffer_t *input_arcs;
-    bitvec_t *input_words; /**< Active words in window. */
     bpidx_t next_idx;     /**< Next incoming bptbl idx to scan for arcs. */
-
     int max_sf_win;       /**< Window size for word entries. */
+
+    bitvec_t *expand_words;
+    int32 *expand_word_list;
+    int n_expand_word;
 
     /**
      * First HMMs for multiple-phone words.

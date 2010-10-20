@@ -1777,6 +1777,7 @@ fwdtree_search_finish(ps_search_t *base)
         E_INFO("%8d candidate words for entering last phone (%d/fr)\n",
                fts->st.n_lastphn_cand_utt, fts->st.n_lastphn_cand_utt / (cf + 1));
     }
+    bptbl_dump(fts->bptbl);
 
     return 0;
 }

@@ -76,7 +76,7 @@ static ps_searchfuncs_t fwdflat_funcs = {
     /* seg_iter: */ fwdflat_search_seg_iter,
 };
 
-static void build_fwdflat_chan(fwdflat_search_t *ffs);
+static void build_fwdflat_word_chan(fwdflat_search_t *ffs, int32 wid);
 
 static void
 fwdflat_search_calc_beams(fwdflat_search_t *ffs)
@@ -149,7 +149,12 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     ffs->word_active = bitvec_alloc(ps_search_n_words(ffs));
     ffs->word_idx = ckd_calloc(ps_search_n_words(ffs),
                                sizeof(*ffs->word_idx));
-    ffs->input_words = bitvec_alloc(ps_search_n_words(ffs));
+    ffs->word_list = garray_init(0, sizeof(int32));
+    ffs->utt_vocab = bitvec_alloc(ps_search_n_words(ffs));
+    ffs->expand_words = bitvec_alloc(ps_search_n_words(ffs));
+    /* FIXME: Make this a garray_t */
+    ffs->expand_word_list = ckd_calloc(ps_search_n_words(ffs),
+                                      sizeof(*ffs->expand_word_list));
     ffs->input_arcs = fwdflat_arc_buffer_init();
 
     ffs->bptbl = bptbl_init(d2p, cmd_ln_int32_r(config, "-latsize"), 256);
@@ -202,9 +207,6 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     /* Create word mappings. */
     fwdflat_search_update_widmap(ffs);
 
-    /* Create HMM network. */
-    build_fwdflat_chan(ffs);
-
     return (ps_search_t *)ffs;
 
 error_out:
@@ -213,7 +215,7 @@ error_out:
 }
 
 static void
-fwdflat_search_free_all_rc(fwdflat_search_t *ffs, int32 w)
+fwdflat_search_free_word_chan(fwdflat_search_t *ffs, int32 w)
 {
     internal_node_t *hmm, *thmm;
 
@@ -232,12 +234,16 @@ fwdflat_search_free_all_rc(fwdflat_search_t *ffs, int32 w)
 static void
 destroy_fwdflat_chan(fwdflat_search_t *ffs)
 {
-    int32 wid;
+    int32 i;
 
-    for (wid = 0; wid < ps_search_n_words(ffs); ++wid) {
+    for (i = 0; i < garray_next_idx(ffs->word_list); ++i) {
+        int32 wid = garray_ent(ffs->word_list, int32, i);
         assert(ffs->word_chan[wid] != NULL);
-        fwdflat_search_free_all_rc(ffs, wid);
+        fwdflat_search_free_word_chan(ffs, wid);
+        ffs->word_chan[wid] = NULL;
     }
+    garray_reset(ffs->word_list);
+    bitvec_clear_all(ffs->utt_vocab, ps_search_n_words(ffs));
 }
 
 static int
@@ -255,6 +261,8 @@ fwdflat_search_free(ps_search_t *base)
     ckd_free(ffs->word_idx);
     ckd_free(ffs->word_chan);
     bitvec_free(ffs->word_active);
+    bitvec_free(ffs->expand_words);
+    ckd_free(ffs->expand_word_list);
     bptbl_free(ffs->bptbl);
     ckd_free_2d(ffs->active_word_list);
 
@@ -308,72 +316,69 @@ fwdflat_search_alloc_all_rc(fwdflat_search_t *ffs, int32 w)
     return fhmm;
 }
 
-/**
- * Build HMM network.
- */
 static void
-build_fwdflat_chan(fwdflat_search_t *ffs)
+build_fwdflat_word_chan(fwdflat_search_t *ffs, int32 wid)
 {
-    int32 wid, p;
+    int32 p;
     first_node_t *rhmm;
     internal_node_t *hmm, *prevhmm;
     dict_t *dict;
     dict2pid_t *d2p;
 
+    if (ffs->word_chan[wid] != NULL)
+        return;
+
     dict = ps_search_dict(ffs);
     d2p = ps_search_dict2pid(ffs);
 
-    /* Build word HMMs for each word in the dictionary. */
-    for (wid = 0; wid < ps_search_n_words(ffs); ++wid) {
-        assert(ffs->word_chan[wid] == NULL);
-
-        /* Multiplex root HMM for first phone (one root per word, flat
-         * lexicon). */
-        rhmm = listelem_malloc(ffs->root_chan_alloc);
-        if (dict_is_single_phone(dict, wid)) {
-            rhmm->ciphone = dict_first_phone(dict, wid);
-            rhmm->ci2phone = bin_mdef_silphone(ps_search_acmod(ffs)->mdef);
-        }
-        else {
-            rhmm->ciphone = dict_first_phone(dict, wid);
-            rhmm->ci2phone = dict_second_phone(dict, wid);
-        }
-        rhmm->next = NULL;
-        hmm_init(ffs->hmmctx, &rhmm->hmm, TRUE,
-                 bin_mdef_pid2ssid(ps_search_acmod(ffs)->mdef, rhmm->ciphone),
-                 bin_mdef_pid2tmatid(ps_search_acmod(ffs)->mdef, rhmm->ciphone));
-
-        /* HMMs for word-internal phones */
-        prevhmm = NULL;
-        for (p = 1; p < dict_pronlen(dict, wid) - 1; p++) {
-            hmm = listelem_malloc(ffs->chan_alloc);
-            hmm->ciphone = dict_pron(dict, wid, p);
-            hmm->rc_id = -1;
-            hmm->next = NULL;
-            hmm_init(ffs->hmmctx, &hmm->hmm, FALSE,
-                     dict2pid_internal(d2p,wid,p),
-                     bin_mdef_pid2tmatid(ps_search_acmod(ffs)->mdef,
-                                         hmm->ciphone));
-
-            if (prevhmm)
-                prevhmm->next = hmm;
-            else
-                rhmm->next = hmm;
-
-            prevhmm = hmm;
-        }
-
-        /* Right-context phones */
-        if (!dict_is_single_phone(dict, wid)) {
-            hmm = fwdflat_search_alloc_all_rc(ffs, wid);
-            /* Link in just allocated right-context phones */
-            if (prevhmm)
-                prevhmm->next = hmm;
-            else
-                rhmm->next = hmm;
-        }
-        ffs->word_chan[wid] = rhmm;
+    /* Multiplex root HMM for first phone (one root per word, flat
+     * lexicon). */
+    rhmm = listelem_malloc(ffs->root_chan_alloc);
+    if (dict_is_single_phone(dict, wid)) {
+        rhmm->ciphone = dict_first_phone(dict, wid);
+        rhmm->ci2phone = bin_mdef_silphone(ps_search_acmod(ffs)->mdef);
     }
+    else {
+        rhmm->ciphone = dict_first_phone(dict, wid);
+        rhmm->ci2phone = dict_second_phone(dict, wid);
+    }
+    rhmm->next = NULL;
+    hmm_init(ffs->hmmctx, &rhmm->hmm, TRUE,
+             bin_mdef_pid2ssid(ps_search_acmod(ffs)->mdef, rhmm->ciphone),
+             bin_mdef_pid2tmatid(ps_search_acmod(ffs)->mdef, rhmm->ciphone));
+
+    /* HMMs for word-internal phones */
+    prevhmm = NULL;
+    for (p = 1; p < dict_pronlen(dict, wid) - 1; p++) {
+        hmm = listelem_malloc(ffs->chan_alloc);
+        hmm->ciphone = dict_pron(dict, wid, p);
+        hmm->rc_id = -1;
+        hmm->next = NULL;
+        hmm_init(ffs->hmmctx, &hmm->hmm, FALSE,
+                 dict2pid_internal(d2p,wid,p),
+                 bin_mdef_pid2tmatid(ps_search_acmod(ffs)->mdef,
+                                     hmm->ciphone));
+
+        if (prevhmm)
+            prevhmm->next = hmm;
+        else
+            rhmm->next = hmm;
+
+        prevhmm = hmm;
+    }
+
+    /* Right-context phones */
+    if (!dict_is_single_phone(dict, wid)) {
+        hmm = fwdflat_search_alloc_all_rc(ffs, wid);
+        /* Link in just allocated right-context phones */
+        if (prevhmm)
+            prevhmm->next = hmm;
+        else
+            rhmm->next = hmm;
+    }
+    ffs->word_chan[wid] = rhmm;
+    bitvec_set(ffs->utt_vocab, wid);
+    garray_append(ffs->word_list, &wid);
 }
 
 static int
@@ -390,13 +395,18 @@ fwdflat_search_start(ps_search_t *base)
     for (i = 0; i < ps_search_n_words(ffs); i++)
         ffs->word_idx[i] = NO_BP;
 
+    /* Create word HMM for start, end, and silence words. */
+    for (i = ps_search_start_wid(ffs);
+         i < ps_search_n_words(ffs); ++i)
+        build_fwdflat_word_chan(ffs, i);
+
     /* Start search with <s> */
     rhmm = (first_node_t *) ffs->word_chan[ps_search_start_wid(ffs)];
     hmm_enter(&rhmm->hmm, 0, NO_BP, 0);
     ffs->active_word_list[0][0] = ps_search_start_wid(ffs);
     ffs->n_active_word[0] = 1;
 
-    bitvec_clear_all(ffs->input_words, ps_search_n_words(ffs));
+    bitvec_clear_all(ffs->expand_words, ps_search_n_words(ffs));
     ffs->best_score = 0;
     ffs->renormalized = FALSE;
 
@@ -683,11 +693,13 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
             rssid = dict2pid_rssid(d2p, ent->last_phone, ent->last2_phone);
 
         /* Transition to all successor words. */
-        for (w = 0; w < ps_search_n_words(ffs); w++) {
+        for (i = 0; i < ffs->n_expand_word; ++i) {
             int32 n_used;
 
-            if (ffs->input_bptbl != NULL && !bitvec_is_set(ffs->input_words, w))
-                continue;
+            if (ffs->input_bptbl == NULL)
+                w = i;
+            else
+                w = ffs->expand_word_list[i];
 
             /* Get the exit score we recorded in save_bwd_ptr(), or
              * something approximating it. */
@@ -799,12 +811,60 @@ fwdflat_renormalize_scores(fwdflat_search_t *ffs, int frame_idx, int32 norm)
 }
 
 static int
+fwdflat_create_expand_word_list(fwdflat_search_t *ffs)
+{
+    int32 i, j;
+
+    if (ffs->input_bptbl == NULL) {
+        ffs->n_expand_word = ps_search_n_words(ffs);
+        return 0;
+    }
+    for (i = 0, j = 0; i < garray_next_idx(ffs->word_list); ++i) {
+        int32 wid = garray_ent(ffs->word_list, int32, i);
+        if (bitvec_is_set(ffs->expand_words, wid))
+            ffs->expand_word_list[j++] = wid;
+    }
+    ffs->n_expand_word = j;
+    ffs->st.n_fwdflat_word_transition += ffs->n_expand_word;
+    return 0;
+}
+
+static void
+fwdflat_dump_expand_words(fwdflat_search_t *ffs, int sf, int ef)
+{
+    int i;
+
+    E_INFO("Frame %d word list:", sf);
+    for (i = 0; i < ffs->n_expand_word; ++i) {
+        E_INFOCONT(" %s",
+                   dict_wordstr(ps_search_dict(ffs), ffs->expand_word_list[i]));
+    }
+    E_INFOCONT("\n");
+}
+
+static int
+fwdflat_create_active_word_list(fwdflat_search_t *ffs, int nf)
+{
+    int32 *nawl, i, j;
+
+    nawl = ffs->active_word_list[nf & 0x1];
+    for (i = j = 0; i < garray_next_idx(ffs->word_list); ++i) {
+        int32 wid = garray_ent(ffs->word_list, int32, i);
+        if (bitvec_is_set(ffs->word_active, wid)) {
+            *(nawl++) = wid;
+            ++j;
+        }
+    }
+    ffs->n_active_word[nf & 0x1] = j;
+
+    return 0;
+}
+
+static int
 fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
 {
     acmod_t *acmod = ps_search_acmod(ffs);
     int16 const *senscr;
-    int32 nf, i, j;
-    int32 *nawl;
     int fi;
 
     E_DEBUG(2,("Searching frame %d\n", frame_idx));
@@ -838,41 +898,17 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
     fwdflat_eval_chan(ffs, frame_idx);
     /* Prune HMMs and do phone transitions. */
     fwdflat_prune_chan(ffs, frame_idx);
-    /* Do word transitions. */
-    fwdflat_word_transition(ffs, frame_idx);
 
-    /* Create next active word list */
-    nf = frame_idx + 1;
-    nawl = ffs->active_word_list[nf & 0x1];
-    for (i = 0, j = 0; i < ps_search_n_words(ffs); i++) {
-        if (bitvec_is_set(ffs->word_active, i)) {
-            *(nawl++) = i;
-            j++;
-        }
-    }
-    ffs->n_active_word[nf & 0x1] = j;
+    /* Do word transitions. */
+    fwdflat_create_expand_word_list(ffs);
+    fwdflat_word_transition(ffs, frame_idx);
+    fwdflat_create_active_word_list(ffs, frame_idx + 1);
 
     /* Release the frame just searched. */
     acmod_release(acmod, frame_idx);
 
     /* Return the number of frames processed. */
     return 1;
-}
-
-static void
-fwdflat_dump_active_words(fwdflat_search_t *ffs, int sf, int ef)
-{
-    int i, j;
-
-    E_INFO("Frame %d word list:", sf);
-    for (i = 0; i < ps_search_n_words(ffs); ++i) {
-        if (bitvec_is_set(ffs->input_words, i)) {
-            E_INFOCONT(" %s",
-                       dict_wordstr(ps_search_dict(ffs), i));
-            ++j;
-        }
-    }
-    E_INFOCONT("\n");
 }
 
 static int
@@ -883,16 +919,15 @@ fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
 
     arc_start = fwdflat_arc_buffer_iter(ffs->input_arcs, sf);
     arc_end = fwdflat_arc_buffer_iter(ffs->input_arcs, ef);
-    bitvec_clear_all(ffs->input_words, ps_search_n_words(ffs));
+    bitvec_clear_all(ffs->expand_words, ps_search_n_words(ffs));
     for (arc = arc_start; arc != arc_end;
          arc = fwdflat_arc_next(ffs->input_arcs, arc)) {
-        if (ngram_model_set_known_wid(ffs->lmset, dict_basewid(dict, arc->wid)))
-            bitvec_set(ffs->input_words, arc->wid);
+        if (!bitvec_is_set(ffs->expand_words, arc->wid)
+            && ngram_model_set_known_wid(ffs->lmset, dict_basewid(dict, arc->wid)))
+            bitvec_set(ffs->expand_words, arc->wid);
+        if (!bitvec_is_set(ffs->utt_vocab, arc->wid))
+            build_fwdflat_word_chan(ffs, arc->wid);
     }
-#if 0
-    fwdflat_arc_buffer_dump(ffs->input_arcs);
-    fwdflat_dump_active_words(ffs, sf, ef);
-#endif
     return 0;
 }
 
@@ -999,8 +1034,6 @@ fwdflat_search_finish(ps_search_t *base)
     acmod_t *acmod = ps_search_acmod(ffs);
     int cf;
     
-    bitvec_clear_all(ffs->word_active, ps_search_n_words(ffs));
-
     /* This is the number of frames of input. */
     cf = acmod->output_frame;
 
@@ -1024,6 +1057,10 @@ fwdflat_search_finish(ps_search_t *base)
     E_INFO("Allocated %d arcs and %d start frames\n",
            garray_alloc_size(ffs->input_arcs->arcs),
            garray_alloc_size(ffs->input_arcs->sf_idx));
+    E_INFO("Utterance vocabulary had %d words\n",
+           garray_next_idx(ffs->word_list));
+    /* Reset the utterance vocabulary. */
+    destroy_fwdflat_chan(ffs);
 
     return 0;
 }
