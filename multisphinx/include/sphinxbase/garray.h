@@ -84,6 +84,11 @@ size_t garray_size(garray_t *gar);
 size_t garray_alloc_size(garray_t *gar);
 
 /**
+ * Reserve space for elements in an garray_t
+ */
+size_t garray_reserve(garray_t *gar, size_t n_ent);
+
+/**
  * Extend the array to contain the desired number of elements
  */
 size_t garray_expand(garray_t *gar, size_t n_ent);
