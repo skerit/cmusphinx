@@ -494,12 +494,12 @@ ngram_search_exit_score(ngram_search_t *ngs, bp_t *pbe, int rcphone)
     /* FIXME: This function gets called like 50 zillion times, either
      * it should be inlined or we should find a better way to do
      * this. */
-    E_INFO("ngram_search_exit_score(%d,%d)\n", bptbl_idx(ngs->bptbl, pbe), rcphone);
+    E_DEBUG(99,("ngram_search_exit_score(%d,%d)\n", bptbl_idx(ngs->bptbl, pbe), rcphone));
     assert(pbe->valid);
     if (pbe->last2_phone == -1) {
         /* No right context for single phone predecessor words. */
-        E_INFO("last2_phone = %d s_idx = %d bscore = %d\n", -1,
-               pbe->s_idx, ngs->bptbl->bscore_stack[pbe->s_idx]);
+        E_DEBUG(99,("last2_phone = %d s_idx = %d bscore = %d\n", -1,
+                    pbe->s_idx, ngs->bptbl->bscore_stack[pbe->s_idx]));
         assert(ngs->bptbl->bscore_stack[pbe->s_idx] != WORST_SCORE);
         return ngs->bptbl->bscore_stack[pbe->s_idx];
     }
@@ -509,10 +509,10 @@ ngram_search_exit_score(ngram_search_t *ngs, bp_t *pbe, int rcphone)
          * the first phone of the current word. */
         rssid = dict2pid_rssid(ps_search_dict2pid(ngs),
                                pbe->last_phone, pbe->last2_phone);
-        E_INFO("last2_phone = %d s_idx = %d rc = %d n_rc = %d bscore = %d\n",
-               pbe->last2_phone, pbe->s_idx, rssid->cimap[rcphone],
-               rssid->n_ssid,
-               ngs->bptbl->bscore_stack[pbe->s_idx + rssid->cimap[rcphone]]);
+        E_DEBUG(99,("last2_phone = %d s_idx = %d rc = %d n_rc = %d bscore = %d\n",
+                    pbe->last2_phone, pbe->s_idx, rssid->cimap[rcphone],
+                    rssid->n_ssid,
+                    ngs->bptbl->bscore_stack[pbe->s_idx + rssid->cimap[rcphone]]));
         /* This may be WORST_SCORE, which means that there was no exit
          * with rcphone as right context. */
         return ngs->bptbl->bscore_stack[pbe->s_idx + rssid->cimap[rcphone]];
