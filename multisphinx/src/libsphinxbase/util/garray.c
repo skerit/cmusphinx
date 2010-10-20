@@ -45,12 +45,14 @@
 #include "ckd_alloc.h"
 
 #include <string.h>
+#include <assert.h>
 
 struct garray_s {
     int refcount;
     void *ent;
     size_t ent_size;
     size_t n_ent, n_ent_alloc;
+    size_t base_idx;
 };
 
 garray_t *
@@ -95,6 +97,12 @@ garray_size(garray_t *gar)
 }
 
 size_t
+garray_next_idx(garray_t *gar)
+{
+    return gar->n_ent + gar->base_idx;
+}
+
+size_t
 garray_alloc_size(garray_t *gar)
 {
     return gar->n_ent_alloc;
@@ -119,19 +127,27 @@ garray_expand(garray_t *gar, size_t n_ent)
     return gar->n_ent;
 }
 
+size_t
+garray_expand_to(garray_t *gar, size_t next_idx)
+{
+    return garray_expand(gar, next_idx - gar->base_idx);
+}
+
 void *
 garray_void(garray_t *gar, size_t idx)
 {
-    return (char *)gar->ent + idx * gar->ent_size;
+    if (idx < gar->base_idx)
+        return NULL;
+    return (char *)gar->ent + (idx - gar->base_idx) * gar->ent_size;
 }
 
 void *
 garray_append(garray_t *gar, void *ent)
 {
     garray_expand(gar, gar->n_ent + 1);
-    memcpy(garray_void(gar, gar->n_ent - 1),
+    memcpy(garray_void(gar, gar->n_ent + gar->base_idx - 1),
            ent, gar->ent_size);
-    return garray_void(gar, gar->n_ent - 1);
+    return garray_void(gar, gar->n_ent + gar->base_idx - 1);
 }
 
 size_t
@@ -148,6 +164,7 @@ void
 garray_reset(garray_t *gar)
 {
     gar->n_ent = 0;
+    gar->base_idx = 0;
 }
 
 size_t
@@ -159,10 +176,17 @@ garray_shift(garray_t *gar, size_t n_ent)
         gar->n_ent -= n_ent;
     if (gar->n_ent == 0)
         return 0;
-    memmove(gar->ent, garray_void(gar, n_ent),
+    memmove(gar->ent, garray_void(gar, gar->base_idx + n_ent),
             gar->n_ent * gar->ent_size);
     return gar->n_ent;
 }
+
+size_t
+garray_shift_from(garray_t *gar, size_t first_idx)
+{
+    return garray_shift(gar, first_idx - gar->base_idx);
+}
+
 
 void
 garray_clear(garray_t *gar, size_t start, size_t n_ent)
@@ -175,9 +199,23 @@ garray_slice(garray_t *gar, size_t start, size_t n_ent)
 {
     garray_t *gar2;
 
-    if (start + n_ent > gar->n_ent)
+    if ((start - gar->base_idx) + n_ent > gar->n_ent)
         return NULL;
     gar2 = garray_init(n_ent, gar->ent_size);
     memcpy(gar2->ent, garray_void(gar, start), n_ent * gar->ent_size);
     return gar2;
+}
+
+size_t
+garray_set_base(garray_t *gar, size_t base_idx)
+{
+    size_t old_base = gar->base_idx;
+    gar->base_idx = base_idx;
+    return old_base;
+}
+
+size_t
+garray_base(garray_t *gar)
+{
+    return gar->base_idx;
 }

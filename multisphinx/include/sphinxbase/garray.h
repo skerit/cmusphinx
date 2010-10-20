@@ -79,6 +79,11 @@ int garray_free(garray_t *gar);
 size_t garray_size(garray_t *gar);
 
 /**
+ * Get the next absolute index in a garray_t
+ */
+size_t garray_next_idx(garray_t *gar);
+
+/**
  * Get the number of elements allocated in a garray_t
  */
 size_t garray_alloc_size(garray_t *gar);
@@ -94,6 +99,11 @@ size_t garray_reserve(garray_t *gar, size_t n_ent);
 size_t garray_expand(garray_t *gar, size_t n_ent);
 
 /**
+ * Extend the array up to (but not including) a given absolute index.
+ */
+size_t garray_expand_to(garray_t *gar, size_t next_idx);
+
+/**
  * Append an element to the array, resizing if necessary.
  */
 void *garray_append(garray_t *gar, void *ent);
@@ -107,6 +117,29 @@ size_t garray_pop(garray_t *gar, size_t n_ent);
  * Remove elements from the start of the array.
  */
 size_t garray_shift(garray_t *gar, size_t n_ent);
+
+/**
+ * Remove elements up to an absolute index in the array.
+ */
+size_t garray_shift_from(garray_t *gar, size_t first_idx);
+
+/**
+ * Set the base index of the array.
+ *
+ * This sets a base index which will be subtracted from all indexing
+ * operations into the array.
+ *
+ * You could use this to emulate FORTRAN but that's not actually what
+ * it's for.  Instead, it is used for tables where the array index
+ * corresponds to a non-decreasing series of identifers, such as
+ * backpointer indices.
+ */
+size_t garray_set_base(garray_t *gar, size_t base_idx);
+
+/**
+ * Get the base index of the array.
+ */
+size_t garray_base(garray_t *gar);
 
 /**
  * Remove all elements from the array.
@@ -136,7 +169,7 @@ void *garray_void(garray_t *gar, size_t idx);
 /**
  * Get an individual element in the array.
  */
-#define garray_ent(gar, type, idx) garray_ptr(gar, type, 0)[idx]
+#define garray_ent(gar, type, idx) (*garray_ptr(gar, type, idx))
 
 #ifdef __cplusplus
 }

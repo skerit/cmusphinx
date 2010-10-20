@@ -46,6 +46,9 @@ main(int argc, char *argv[])
 	gar = garray_slice(gar2, 10, 5);
 	garray_free(gar2);
 	TEST_ASSERT(garray_ent(gar, int, 4) == 9);
+
+	TEST_ASSERT(garray_set_base(gar, 68) == 0);
+	TEST_ASSERT(garray_ent(gar, int, 72) == 9);
 	garray_free(gar);
 	return 0;
 }
