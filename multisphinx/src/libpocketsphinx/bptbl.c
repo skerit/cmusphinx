@@ -61,6 +61,7 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
     bptbl->n_frame_alloc = n_frame_alloc;
 
     bptbl->ent = ckd_calloc(bptbl->n_alloc, sizeof(*bptbl->ent));
+    bptbl->permute = ckd_calloc(bptbl->n_alloc, sizeof(*bptbl->permute));
     bptbl->word_idx = ckd_calloc(dict_size(d2p->dict),
                                  sizeof(*bptbl->word_idx));
     bptbl->bscore_stack_size = bptbl->n_alloc * 20;
@@ -86,6 +87,7 @@ bptbl_free(bptbl_t *bptbl)
     dict2pid_free(bptbl->d2p);
     ckd_free(bptbl->word_idx);
     ckd_free(bptbl->ent);
+    ckd_free(bptbl->permute);
     ckd_free(bptbl->bscore_stack);
     if (bptbl->ef_idx != NULL)
         ckd_free(bptbl->ef_idx - 1);
@@ -113,12 +115,15 @@ bptbl_reset(bptbl_t *bptbl)
 }
 
 void
-dump_bptable(bptbl_t *bptbl)
+dump_bptable(bptbl_t *bptbl, int start, int end)
 {
     int i, j;
 
-    E_INFO("Backpointer table (%d entries):\n", bptbl->n_ent);
-    for (j = i = 0; i < bptbl->n_ent; ++i) {
+    if (end == -1)
+        end = bptbl->n_ent;
+    E_INFO("Backpointer table (%d entries from %d to %d):\n",
+           bptbl->n_ent, start, end);
+    for (j = i = start; i < end; ++i) {
         if (bptbl->ent[i].valid == FALSE)
             continue;
         ++j;
@@ -130,154 +135,46 @@ dump_bptable(bptbl_t *bptbl)
                     bptbl->ent[i].bp);
     }
     E_INFO("%d valid entries\n", j);
+    E_INFO("End frame index from %d to %d:\n",
+           bptbl->ent[start].frame, bptbl->ent[end-1].frame);
+    for (i = bptbl->ent[start].frame; i <= bptbl->ent[end-1].frame; ++i) {
+        E_INFO_NOFN("%d: %d\n", i, bptbl->ef_idx[i]);
+        /* FIXME: this must go away once forward sorting is in place */
+        assert(bptbl->ef_idx[i] >= bptbl->ef_idx[i-1]);
+    }
 }
 
+/**
+ * Mark coaccessible entries in the backpointer table.
+ *
+ * @param bptbl Backpointer table
+ * @param sf First frame (as per ef_idx) to mark entries in
+ * @param ef Frame after last frame (as per ef_idx) to mark entries in
+ * @param cf Current frame of search
+ */
 static void
-bptbl_forward_sort(bptbl_t *bptbl, int sf, int ef)
+bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
 {
-    int i, orig_i, new_swindow_sf, last_valid_bp;
-    int *new_idx; /**< map old indices to new ones. */
-    int *prev_sf; /**< map new indices to original sf. */
-
-    /* Sort and compact everything between sf and ef. */
-    E_INFO("Insertion sorting valid backpointers from %d to %d:\n", sf, ef);
-    new_swindow_sf = ef;
-    new_idx = ckd_calloc(bptbl->ef_idx[ef], sizeof(*new_idx));
-    prev_sf = ckd_calloc(bptbl->ef_idx[ef], sizeof(*prev_sf));
-    for (i = 0; i < bptbl->ef_idx[ef]; ++i) {
-        new_idx[i] = i;
-        prev_sf[i] = bp_sf(bptbl, i);
-    }
-    last_valid_bp = bptbl->ef_idx[ef];
-    for (orig_i = i = bptbl->ef_idx[sf]; i < last_valid_bp; ++i, ++orig_i) {
-        int sf, j;
-        bp_t ent;
-
-        /* Note that this has horrible time complexity. */
-        while (bptbl->ent[i].valid == FALSE && i < last_valid_bp) {
-            int k;
-            E_INFO_NOFN("deleting: %-5d %-10s start %-3d\n",
-                        i, dict_wordstr(bptbl->d2p->dict,
-                                        bptbl->ent[i].wid), sf);
-            memmove(bptbl->ent + i, bptbl->ent + i + 1,
-                    (last_valid_bp - i - 1) * sizeof(*bptbl->ent));
-            memmove(prev_sf + i, prev_sf + i + 1,
-                    (last_valid_bp - i - 1) * sizeof(*prev_sf));
-            --last_valid_bp;
-            new_idx[orig_i++] = -1;
-        }
-        if (i == last_valid_bp)
-            break;
-
-        sf = prev_sf[i];
-        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d bp %-5d\n",
-                    i, dict_wordstr(bptbl->d2p->dict,
-                                    bptbl->ent[i].wid),
-                    sf, bptbl->ent[i].frame,
-                    bptbl->ent[i].bp);
-        /* Update start frame pointer. */
-        if (sf < new_swindow_sf)
-            new_swindow_sf = sf;
-        /* Compact and search for insertion point from sf. */
-        for (j = 0; j < i; ++j) {
-            int jsf;
-            jsf = prev_sf[j];
-            if (jsf > sf) {
-                int k;
-
-                E_INFO_NOFN("  inserting to %d\n", j);
-                ent = bptbl->ent[i];
-                memmove(bptbl->ent + j + 1, bptbl->ent + j,
-                        (i - j) * sizeof(*bptbl->ent));
-                memmove(prev_sf + j + 1, prev_sf + j,
-                        (i - j) * sizeof(*prev_sf));
-                bptbl->ent[j] = ent;
-                prev_sf[j] = sf;
-                if (j < bptbl->sf_idx[jsf] || bptbl->sf_idx[jsf] == -1)
-                    bptbl->sf_idx[jsf] = j;
-
-                for (k = j; k < bptbl->ef_idx[ef]; ++k) {
-                    if (new_idx[k] >= j && new_idx[k] < i)
-                        ++new_idx[k];
-                }
-                new_idx[orig_i] = j;
-                E_INFO_NOFN("new_idx:");
-                for (k = 0; k < bptbl->ef_idx[ef]; ++k)
-                    E_INFOCONT(" %-2d", new_idx[k]);
-                E_INFOCONT("\n");
-
-                break;
-            }
-        }
-    }
-    /* Snap backpointers to new positions. */
-    for (i = bptbl->ef_idx[sf]; i < bptbl->ef_idx[ef]; ++i) {
-        if (bptbl->ent[i].bp >= bptbl->ef_idx[sf])
-            bptbl->ent[i].bp = new_idx[bptbl->ent[i].bp];
-    }
-    for (i = bptbl->ef_idx[sf]; i < bptbl->ef_idx[ef]; ++i) {
-        if (bptbl->ent[i].valid == FALSE)
-            continue;
-        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d bp %-5d\n",
-                    i, dict_wordstr(bptbl->d2p->dict,
-                                    bptbl->ent[i].wid),
-                    bp_sf(bptbl, i), bptbl->ent[i].frame,
-                    bptbl->ent[i].bp);
-    }
-    ckd_free(new_idx);
-    ckd_free(prev_sf);
-    /* ef is never actually a valid value for it. */
-    if (new_swindow_sf != ef) {
-        /* This sometimes decreases, which we sadly can't prevent.
-         * That's okay because we don't care about the previous value
-         * of it for sorting. */
-        E_INFO("swindow_sf %d => %d\n", bptbl->swindow_sf, new_swindow_sf);
-        bptbl->swindow_sf = new_swindow_sf;
-    }
-
-    /* Now invalidate ef_idx before ef. */
-    for (i = sf; i < ef; ++i)
-        bptbl->ef_idx[i] = -1;
-}
-
-static void
-bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
-{
-    int prev_window_sf, window_sf;
     int i, j, n_active_fr, last_gc_fr;
 
-    /* window_sf is the first frame which is still active in search
-     * (i.e. for which outgoing word arcs can still be generated).
-     * Therefore, any future backpointer table entries will not point
-     * backwards to any backpointers before (window_sf - 1), and thus
-     * any backpointers which are not reachable from those exiting in
-     * (window_sf - 1) will never be reachable. */
-    prev_window_sf = bptbl->window_sf;
-    window_sf = bptbl->ent[oldest_bp].frame + 1;
-    assert(window_sf >= prev_window_sf);
-    if (window_sf <= prev_window_sf + 1)
-        return;
-    /* If there is nothing to GC then finish up */
-    if (bptbl->ef_idx[prev_window_sf - 1] == bptbl->ef_idx[window_sf - 1]) {
-        bptbl->window_sf = window_sf;
-        return;
-    }
     /* Invalidate all backpointer entries up to window_sf - 1. */
     /* FIXME: actually anything behind window_sf - 1 is fair game. */
-    E_INFO("Garbage collecting from %d to %d:\n",
-           prev_window_sf - 1, window_sf - 1);
-    for (i = bptbl->ef_idx[prev_window_sf - 1];
-         i < bptbl->ef_idx[window_sf - 1]; ++i)
+    E_INFO("Garbage collecting from %d to %d (%d to %d):\n",
+           bptbl->ef_idx[sf], bptbl->ef_idx[ef], sf, ef);
+    for (i = bptbl->ef_idx[sf];
+         i < bptbl->ef_idx[ef]; ++i) {
         bptbl->ent[i].valid = FALSE;
-    /* Now re-activate all ones reachable from the elastic
-     * window. (make sure frame_idx has been pushed!) */
-    E_INFO("Finding accessible frames from backpointers from %d to %d\n",
-           bptbl->ef_idx[window_sf - 1], bptbl->ef_idx[frame_idx]);
-    /* Collect accessible frames from these backpointers */
-    bitvec_clear_all(bptbl->valid_fr, frame_idx);
+    }
+
+    /* Now re-activate all ones backwards reachable from the elastic
+     * window. (make sure cf has been pushed!) */
+    E_INFO("Finding coaccessible frames from backpointers from %d to %d\n",
+           bptbl->ef_idx[ef], bptbl->ef_idx[cf]);
+    /* Collect coaccessible frames from these backpointers */
+    bitvec_clear_all(bptbl->valid_fr, cf);
     n_active_fr = 0;
-    for (i = bptbl->ef_idx[window_sf - 1];
-         i < bptbl->ef_idx[frame_idx]; ++i) {
+    for (i = bptbl->ef_idx[ef];
+         i < bptbl->ef_idx[cf]; ++i) {
         int32 bp = bptbl->ent[i].bp;
         if (bp != NO_BP) {
             int frame = bptbl->ent[bp].frame;
@@ -288,11 +185,11 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
         }
     }
     /* Track the last frame with outgoing backpointers for gc */
-    last_gc_fr = window_sf - 2;
+    last_gc_fr = ef - 1;
     while (n_active_fr > 0) {
         int next_gc_fr = 0;
         n_active_fr = 0;
-        for (i = prev_window_sf - 1; i <= last_gc_fr; ++i) {
+        for (i = sf; i <= last_gc_fr; ++i) {
             if (bitvec_is_set(bptbl->valid_fr, i)) {
                 bitvec_clear(bptbl->valid_fr, i);
                 /* Add all backpointers in this frame (the bogus
@@ -316,7 +213,122 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
         E_INFO("last_gc_fr %d => %d\n", last_gc_fr, next_gc_fr);
         last_gc_fr = next_gc_fr;
     }
-    bptbl_forward_sort(bptbl, prev_window_sf - 1, window_sf - 1);
+    E_INFO("Removed");
+    for (i = bptbl->ef_idx[sf];
+         i < bptbl->ef_idx[ef]; ++i) {
+        if (bptbl->ent[i].valid == FALSE)
+            E_INFOCONT(" %d", i);
+    }
+    E_INFOCONT("\n");
+}
+
+/**
+ * Compact the backpointer table.
+ *
+ * @param bptbl Backpointer table.
+ * @param sidx Index at which to start scanning for invalid entries.
+ * @param eidx First index which cannot be compacted.
+ */
+static void
+bptbl_compact(bptbl_t *bptbl, int sidx, int eidx)
+{
+    int src, dest, ef;
+
+    ef = bptbl->ent[sidx].frame;
+    E_INFO("compacting from %d to %d (%d to %d)\n",
+           sidx, eidx, ef, bptbl->ent[eidx].frame);
+    for (dest = src = sidx; src < eidx; ++src) {
+        /* Update all ef_idx including missing frames (there are many) */
+        while (ef <= bptbl->ent[src].frame)
+            bptbl->ef_idx[ef++] = dest;
+        if (bptbl->ent[src].valid) {
+            if (dest != src) {
+                bptbl->ent[dest] = bptbl->ent[src];
+                bptbl->ent[src].valid = FALSE;
+            }
+            E_INFO("permute %d => %d\n", src, dest);
+            bptbl->permute[src] = dest;
+            ++dest;
+        }
+        else {
+            E_INFO("permute %d => -1\n", src);
+            bptbl->permute[src] = -1;
+        }
+    }
+    if (eidx == bptbl->n_ent)
+        bptbl->n_ent = dest;
+}
+
+/**
+ * Sort retired backpointer entries by start frame.
+ *
+ * @param bptbl Backpointer table.
+ * @param sidx Index of first unordered entry.
+ * @param eidx Index of last unordered entry.
+ */
+static int
+bptbl_forward_sort(bptbl_t *bptbl, int sidx, int eidx)
+{
+    return 0;
+}
+
+/**
+ * Remap backpointers in backpointer table.
+ *
+ * @param bptbl Backpointer table.
+ * @param sidx Index of first backpointer to remap.
+ */
+static void
+bptbl_invert(bptbl_t *bptbl, int sidx, int eidx)
+{
+    int i;
+
+    for (i = 0; i < bptbl->n_ent; ++i) {
+        if (bptbl->ent[i].bp >= sidx && bptbl->ent[i].bp < eidx) {
+            if (bptbl->ent[i].bp != bptbl->permute[bptbl->ent[i].bp])
+                E_INFO("invert %d => %d in %d\n",
+                       bptbl->ent[i].bp, bptbl->permute[bptbl->ent[i].bp], i);
+            bptbl->ent[i].bp = bptbl->permute[bptbl->ent[i].bp];
+            assert(bp_sf(bptbl, i) < bptbl->ent[i].frame);
+        }
+    }
+}
+
+static void
+bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
+{
+    int prev_window_sf, window_sf;
+
+    /* window_sf is the first frame which is still active in search
+     * (i.e. for which outgoing word arcs can still be generated).
+     * Therefore, any future backpointer table entries will not point
+     * backwards to any backpointers before (window_sf - 1), and thus
+     * any backpointers which are not reachable from those exiting in
+     * (window_sf - 1) will never be reachable. */
+    prev_window_sf = bptbl->window_sf;
+    window_sf = bptbl->ent[oldest_bp].frame + 1;
+    assert(window_sf >= prev_window_sf);
+    if (window_sf <= prev_window_sf + 1)
+        return;
+    /* If there is nothing to GC then finish up */
+    if (bptbl->ef_idx[prev_window_sf - 1] == bptbl->ef_idx[window_sf - 1]) {
+        bptbl->window_sf = window_sf;
+        return;
+    }
+
+    bptbl_mark(bptbl, prev_window_sf - 1, window_sf - 1, frame_idx);
+    E_INFO("before compaction\n");
+    dump_bptable(bptbl, 0, -1);
+    bptbl_compact(bptbl, 0, /* bptbl->ef_idx[prev_window_sf - 1], */
+                  bptbl->ef_idx[window_sf - 1]);
+    E_INFO("after compaction\n");
+    dump_bptable(bptbl, 0, -1);
+    bptbl_forward_sort(bptbl, bptbl->ef_idx[prev_window_sf - 1],
+                       bptbl->ef_idx[window_sf - 1]);
+    bptbl_invert(bptbl, 0, /* bptbl->ef_idx[prev_window_sf - 1], */
+                 bptbl->ef_idx[window_sf - 1]);
+    E_INFO("after inversion\n");
+    dump_bptable(bptbl, 0, -1);
     bptbl->window_sf = window_sf;
 }
 
@@ -363,6 +375,9 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx, int32 path,
         bptbl->ent = ckd_realloc(bptbl->ent,
                                  bptbl->n_alloc
                                  * sizeof(*bptbl->ent));
+        bptbl->permute = ckd_realloc(bptbl->permute,
+                                     bptbl->n_alloc
+                                     * sizeof(*bptbl->permute));
         E_INFO("Resized backpointer table to %d entries\n", bptbl->n_alloc);
     }
     if (bptbl->bss_head >= bptbl->bscore_stack_size

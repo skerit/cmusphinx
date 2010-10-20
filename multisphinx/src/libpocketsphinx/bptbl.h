@@ -89,6 +89,7 @@ typedef struct bptbl_s {
     int32 bscore_stack_size;
     int32 n_frame_alloc; /**< Number of frames allocated in bp_table_idx and friends. */
     int32 n_frame;       /**< Number of frames actually present. */
+    int32 *permute;      /**< Current permutation of entries (used for gc/sorting). */
     int32 *ef_idx;       /**< First BPTable entry exiting in each frame */
     int32 *sf_idx;       /**< First BPTable entry entering in each frame */
     int32 *word_idx;     /**< BPTable index for any word in current frame;
@@ -113,7 +114,7 @@ bptbl_t *bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc);
 
 void bptbl_free(bptbl_t *bpt);
 
-void dump_bptable(bptbl_t *bptbl);
+void dump_bptable(bptbl_t *bptbl, int start, int end);
 
 /**
  * Record the current frame's index in the backpointer table.
@@ -127,6 +128,11 @@ int bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx);
  */
 bp_t *bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx,
                   int32 path, int32 score, int rc);
+
+/**
+ * Clear the backpointer table.
+ */
+void bptbl_reset(bptbl_t *bptbl);
 
 /**
  * Cache trigram predecessors for a backpointer table entry.
