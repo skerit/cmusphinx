@@ -68,7 +68,6 @@
 static ps_mgaufuncs_t ptm_mgau_funcs = {
     "ptm",
     &ptm_mgau_frame_eval,      /* frame_eval */
-    &ptm_mgau_mllr_transform,  /* transform */
     &ptm_mgau_copy,            /* copy */
     &ptm_mgau_free             /* free */
 };
@@ -555,14 +554,6 @@ ptm_mgau_init(acmod_t *acmod)
 error_out:
     ptm_mgau_free(ps_mgau_base(s));
     return NULL;
-}
-
-int
-ptm_mgau_mllr_transform(ps_mgau_t *ps,
-                        ps_mllr_t *mllr)
-{
-    ptm_mgau_t *s = (ptm_mgau_t *)ps;
-    return gauden_mllr_transform(s->g, mllr, s->config);
 }
 
 ps_mgau_t *

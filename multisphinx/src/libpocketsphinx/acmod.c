@@ -77,7 +77,7 @@ static int32 acmod_process_mfcbuf(acmod_t *acmod);
 static int
 acmod_init_am(acmod_t *acmod)
 {
-    char const *mdeffn, *tmatfn, *mllrfn;
+    char const *mdeffn, *tmatfn;
 
     /* Read model definition. */
     if ((mdeffn = cmd_ln_str_r(acmod->config, "-mdef")) == NULL) {
@@ -124,14 +124,6 @@ acmod_init_am(acmod_t *acmod)
                     return -1;
             }
         }
-    }
-
-    /* If there is an MLLR transform, apply it. */
-    if ((mllrfn = cmd_ln_str_r(acmod->config, "-mllr"))) {
-        ps_mllr_t *mllr = ps_mllr_read(mllrfn);
-        if (mllr == NULL)
-            return -1;
-        acmod_update_mllr(acmod, mllr);
     }
 
     return 0;
@@ -318,8 +310,6 @@ acmod_free(acmod_t *acmod)
         fclose(acmod->mfcfh);
     if (acmod->rawfh)
         fclose(acmod->rawfh);
-    if (acmod->senfh)
-        fclose(acmod->senfh);
 
     ckd_free(acmod->framepos);
     ckd_free(acmod->senone_scores);
@@ -332,8 +322,6 @@ acmod_free(acmod_t *acmod)
         tmat_free(acmod->tmat);
     if (acmod->mgau)
         ps_mgau_free(acmod->mgau);
-    if (acmod->mllr)
-        ps_mllr_free(acmod->mllr);
 
     logmath_free(acmod->lmath);
     cmd_ln_free_r(acmod->config);
@@ -363,10 +351,6 @@ acmod_copy(acmod_t *other)
     acmod->tmat = tmat_retain(other->tmat);
     acmod->mgau = ps_mgau_copy(other->mgau);
 
-    /* FIXME: Not sure what exactly to do about MLLR. */
-    if (other->mllr)
-        acmod->mllr = ps_mllr_retain(other->mllr);
-
     /* The MFCC buffer needs to be at least as large as the dynamic
      * feature window.  */
     acmod->n_mfc_alloc = acmod->fcb->window_size * 2 + 1;
@@ -388,42 +372,6 @@ acmod_copy(acmod_t *other)
     acmod->log_zero = logmath_get_zero(acmod->lmath);
     acmod->compallsen = cmd_ln_boolean_r(acmod->config, "-compallsen");
     return acmod;
-}
-
-ps_mllr_t *
-acmod_update_mllr(acmod_t *acmod, ps_mllr_t *mllr)
-{
-    if (acmod->mllr)
-        ps_mllr_free(acmod->mllr);
-    acmod->mllr = mllr;
-    ps_mgau_transform(acmod->mgau, mllr);
-
-    return mllr;
-}
-
-int
-acmod_write_senfh_header(acmod_t *acmod, FILE *logfh)
-{
-    char nsenstr[64], logbasestr[64];
-
-    sprintf(nsenstr, "%d", bin_mdef_n_sen(acmod->mdef));
-    sprintf(logbasestr, "%f", logmath_get_base(acmod->lmath));
-    return bio_writehdr(logfh,
-                        "version", "0.1",
-                        "mdef_file", cmd_ln_str_r(acmod->config, "-mdef"),
-                        "n_sen", nsenstr,
-                        "logbase", logbasestr, NULL);
-}
-
-int
-acmod_set_senfh(acmod_t *acmod, FILE *logfh)
-{
-    if (acmod->senfh)
-        fclose(acmod->senfh);
-    acmod->senfh = logfh;
-    if (logfh == NULL)
-        return 0;
-    return acmod_write_senfh_header(acmod, logfh);
 }
 
 int
@@ -527,11 +475,6 @@ acmod_end_utt(acmod_t *acmod)
     if (acmod->rawfh) {
         fclose(acmod->rawfh);
         acmod->rawfh = NULL;
-    }
-
-    if (acmod->senfh) {
-        fclose(acmod->senfh);
-        acmod->senfh = NULL;
     }
 
     return nfr;
@@ -857,52 +800,6 @@ acmod_process_feat(acmod_t *acmod,
     return 1;
 }
 
-static int
-acmod_read_senfh_header(acmod_t *acmod)
-{
-    char **name, **val;
-    int32 swap;
-    int i;
-
-    if (bio_readhdr(acmod->insenfh, &name, &val, &swap) < 0)
-        goto error_out;
-    for (i = 0; name[i] != NULL; ++i) {
-        if (!strcmp(name[i], "n_sen")) {
-            if (atoi(val[i]) != bin_mdef_n_sen(acmod->mdef)) {
-                E_ERROR("Number of senones in senone file (%d) does not match mdef (%d)\n",
-                        atoi(val[i]), bin_mdef_n_sen(acmod->mdef));
-                goto error_out;
-            }
-        }
-        if (!strcmp(name[i], "logbase")) {
-            if (abs(atof(val[i]) - logmath_get_base(acmod->lmath)) > 0.001) {
-                E_ERROR("Logbase in senone file (%f) does not match acmod (%f)\n",
-                        atof(val[i]), logmath_get_base(acmod->lmath));
-                goto error_out;
-            }
-        }
-    }
-    acmod->insen_swap = swap;
-    bio_hdrarg_free(name, val);
-    return 0;
-error_out:
-    bio_hdrarg_free(name, val);
-    return -1;
-}
-
-int
-acmod_set_insenfh(acmod_t *acmod, FILE *senfh)
-{
-    acmod->insenfh = senfh;
-    if (senfh == NULL) {
-        acmod->n_feat_frame = 0;
-        acmod->compallsen = cmd_ln_boolean_r(acmod->config, "-compallsen");
-        return 0;
-    }
-    acmod->compallsen = TRUE;
-    return acmod_read_senfh_header(acmod);
-}
-
 int
 acmod_rewind(acmod_t *acmod)
 {
@@ -991,101 +888,6 @@ error_out:
     return -1;
 }
 
-/**
- * Internal version, used for reading previous frames in acmod_score()
- */
-static int
-acmod_read_scores_internal(acmod_t *acmod)
-{
-    FILE *senfh = acmod->insenfh;
-    int16 n_active;
-    int rv;
-
-    if (acmod->n_feat_frame == acmod->n_feat_alloc) {
-        if (acmod->grow_feat)
-            acmod_grow_feat_buf(acmod, acmod->n_feat_alloc * 2);
-        else
-            return 0;
-    }
-
-    if (senfh == NULL)
-        return -1;
-    if ((rv = fread(&n_active, 2, 1, senfh)) < 0)
-        goto error_out;
-    else if (rv == 0)
-        return 0;
-
-    acmod->n_senone_active = n_active;
-    if (acmod->n_senone_active == bin_mdef_n_sen(acmod->mdef)) {
-        if ((rv = fread(acmod->senone_scores, 2,
-                        acmod->n_senone_active, senfh)) < 0)
-            goto error_out;
-        else if (rv != acmod->n_senone_active)
-            return 0;
-    }
-    else {
-        int i, n;
-        if ((rv = fread(acmod->senone_active, 1,
-                        acmod->n_senone_active, senfh)) < 0)
-            goto error_out;
-        else if (rv != acmod->n_senone_active)
-            return 0;
-        for (i = 0, n = 0; i < acmod->n_senone_active; ++i) {
-            int j, sen = n + acmod->senone_active[i];
-            for (j = n + 1; j < sen; ++j)
-                acmod->senone_scores[j] = SENSCR_DUMMY;
-            if ((rv = fread(acmod->senone_scores + sen, 2, 1, senfh)) < 0)
-                goto error_out;
-            else if (rv == 0)
-                return 0;
-            n = sen;
-        }
-        ++n;
-        while (n < bin_mdef_n_sen(acmod->mdef))
-            acmod->senone_scores[n++] = SENSCR_DUMMY;
-    }
-    return 1;
-error_out:
-    E_ERROR_SYSTEM("Failed to read frame from senone file");
-    return -1;
-}
-
-int
-acmod_read_scores(acmod_t *acmod)
-{
-    int inptr, rv;
-
-    if (acmod->grow_feat) {
-        /* Grow to avoid wraparound if grow_feat == TRUE. */
-        inptr = acmod->feat_outidx + acmod->n_feat_frame;
-        /* Has to be +1, otherwise, next time acmod_advance() is
-         * called, this will wrap around. */
-        while (inptr + 1 >= acmod->n_feat_alloc)
-            acmod_grow_feat_buf(acmod, acmod->n_feat_alloc * 2);
-    }
-    else {
-        inptr = (acmod->feat_outidx + acmod->n_feat_frame) % acmod->n_feat_alloc;
-    }
-
-    if ((rv = acmod_read_scores_internal(acmod)) != 1)
-        return rv;
-
-    /* Set acmod->senscr_frame appropriately so that these scores
-       get reused below in acmod_score(). */
-    acmod->senscr_frame = acmod->output_frame + acmod->n_feat_frame;
-
-    E_DEBUG(1,("Frame %d has %d active states\n",
-               acmod->senscr_frame, acmod->n_senone_active));
-
-    /* Increment the "feature frame counter" and record the file
-     * position for the relevant frame in the (possibly circular)
-     * buffer. */
-    ++acmod->n_feat_frame;
-    acmod->framepos[inptr] = ftell(acmod->insenfh);
-
-    return 1;
-}
-
 static int
 calc_frame_idx(acmod_t *acmod, int *inout_frame_idx)
 {
@@ -1149,9 +951,8 @@ acmod_score(acmod_t *acmod, int *inout_frame_idx)
     /* Calculate the absolute frame index to be scored. */
     frame_idx = calc_frame_idx(acmod, inout_frame_idx);
 
-    /* If all senones are being computed, or we are using a senone file,
-       then we can reuse existing scores. */
-    if ((acmod->compallsen || acmod->insenfh)
+    /* If all senones are being computed, then we can reuse existing scores. */
+    if (acmod->compallsen
         && frame_idx == acmod->senscr_frame) {
         if (inout_frame_idx)
             *inout_frame_idx = frame_idx;
@@ -1162,39 +963,21 @@ acmod_score(acmod_t *acmod, int *inout_frame_idx)
     if ((feat_idx = calc_feat_idx(acmod, frame_idx)) < 0)
         return NULL;
 
-    /* If there is an input senone file locate the appropriate frame and read it. */
-    if (acmod->insenfh) {
-        fseek(acmod->insenfh, acmod->framepos[feat_idx], SEEK_SET);
-        if (acmod_read_scores_internal(acmod) < 0)
-            return NULL;
-    }
-    else {
-        /* Build active senone list. */
-        acmod_flags2list(acmod);
+    /* Build active senone list. */
+    acmod_flags2list(acmod);
 
-        /* Generate scores for the next available frame */
-        ps_mgau_frame_eval(acmod->mgau,
-                           acmod->senone_scores,
-                           acmod->senone_active,
-                           acmod->n_senone_active,
-                           acmod->feat_buf[feat_idx],
-                           frame_idx,
-                           acmod->compallsen);
-    }
+    /* Generate scores for the next available frame */
+    ps_mgau_frame_eval(acmod->mgau,
+                       acmod->senone_scores,
+                       acmod->senone_active,
+                       acmod->n_senone_active,
+                       acmod->feat_buf[feat_idx],
+                       frame_idx,
+                       acmod->compallsen);
 
     if (inout_frame_idx)
         *inout_frame_idx = frame_idx;
     acmod->senscr_frame = frame_idx;
-
-    /* Dump scores to the senone dump file if one exists. */
-    if (acmod->senfh) {
-        if (acmod_write_scores(acmod, acmod->n_senone_active,
-                               acmod->senone_active,
-                               acmod->senone_scores,
-                               acmod->senfh) < 0)
-            return NULL;
-        E_DEBUG(1,("Frame %d has %d active states\n", frame_idx, acmod->n_senone_active));
-    }
 
     return acmod->senone_scores;
 }

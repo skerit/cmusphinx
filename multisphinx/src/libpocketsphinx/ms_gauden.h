@@ -117,9 +117,6 @@ gauden_t *gauden_retain(gauden_t *g);
 /** Release a pointer to a gauden_t. */
 int gauden_free(gauden_t *g); /**< In: The gauden_t to free */
 
-/** Transform Gaussians according to an MLLR matrix (or, eventually, more). */
-int32 gauden_mllr_transform(gauden_t *s, ps_mllr_t *mllr, cmd_ln_t *config);
-
 /**
  * Compute gaussian density values for the given input observation vector wrt the
  * specified mixture gaussian codebook (which may consist of several feature streams).

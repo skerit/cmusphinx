@@ -74,7 +74,6 @@ typedef struct ps_searchfuncs_s {
     int (*reinit)(ps_search_t *search, dict_t *dict, dict2pid_t *d2p);
     void (*free)(ps_search_t *search);
 
-    ps_lattice_t *(*lattice)(ps_search_t *search);
     char const *(*hyp)(ps_search_t *search, int32 *out_score);
     int32 (*prob)(ps_search_t *search);
     ps_seg_t *(*seg_iter)(ps_search_t *search, int32 *out_score);
@@ -90,8 +89,6 @@ struct ps_search_s {
     dict_t *dict;        /**< Pronunciation dictionary. */
     dict2pid_t *d2p;       /**< Dictionary to senone mappings. */
     char *hyp_str;         /**< Current hypothesis string. */
-    ps_lattice_t *dag;	   /**< Current hypothesis word graph. */
-    ps_latlink_t *last_link; /**< Final link in best path. */
     int32 post;            /**< Utterance posterior probability. */
     int32 n_words;         /**< Number of words known to search (may
                               be less than in the dictionary) */

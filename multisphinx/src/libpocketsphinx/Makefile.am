@@ -20,7 +20,6 @@ libpocketsphinx_la_SOURCES =			\
 	ms_mgau.c				\
 	ms_senone.c				\
 	ps_alignment.c				\
-	ps_mllr.c				\
 	ptm_mgau.c				\
 	sendump.c				\
 	s2_semi_mgau.c				\

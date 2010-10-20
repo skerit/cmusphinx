@@ -94,8 +94,6 @@ int ptm_mgau_frame_eval(ps_mgau_t *s,
                         mfcc_t **featbuf,
                         int32 frame,
                         int32 compallsen);
-int ptm_mgau_mllr_transform(ps_mgau_t *s,
-                            ps_mllr_t *mllr);
 ps_mgau_t *ptm_mgau_copy(ps_mgau_t *other);
 
 

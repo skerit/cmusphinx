@@ -1,6 +1,6 @@
 /* -*- c-basic-offset:4; indent-tabs-mode: nil -*- */
 /* ====================================================================
- * Copyright (c) 1999-2008 Carnegie Mellon University.  All rights
+ * Copyright (c) 1999-2010 Carnegie Mellon University.  All rights
  * reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,19 +58,11 @@ extern "C" {
 /* PocketSphinx headers (not many of them!) */
 #include <pocketsphinx_export.h>
 #include <cmdln_macro.h>
-#include <ps_lattice.h>
-#include <ps_mllr.h>
-#include <fsg_set.h>
 
 /**
  * PocketSphinx speech recognizer object.
  */
 typedef struct ps_decoder_s ps_decoder_t;
-
-/**
- * PocketSphinx N-best hypothesis iterator object.
- */
-typedef struct ps_astar_s ps_nbest_t;
 
 /**
  * PocketSphinx segmentation iterator object.
@@ -91,26 +83,6 @@ POCKETSPHINX_EXPORT
 ps_decoder_t *ps_init(cmd_ln_t *config);
 
 /**
- * Reinitialize the decoder with updated configuration.
- *
- * This function allows you to switch the acoustic model, dictionary,
- * or other configuration without creating an entirely new decoding
- * object.
- *
- * @note The decoder retains ownership of the pointer
- * <code>config</code>, so you must not attempt to free it manually.
- * If you wish to reuse it elsewhere, call cmd_ln_retain() on it.
- *
- * @param ps Decoder.
- * @param config An optional new configuration to use.  If this is
- *               NULL, the previous configuration will be reloaded,
- *               with any changes applied.
- * @return 0 for success, <0 for failure.
- */
-POCKETSPHINX_EXPORT
-int ps_reinit(ps_decoder_t *ps, cmd_ln_t *config);
-
-/**
  * Returns the argument definitions used in ps_init().
  *
  * This is here to avoid exporting global data, which is problematic
@@ -126,8 +98,8 @@ arg_t const *ps_args(void);
  * language models if not already set.  It also finds the relevant
  * acoustic model files if only -hmm is provided.
  */
-void
-ps_init_defaults(cmd_ln_t *config);
+POCKETSPHINX_EXPORT
+void ps_init_defaults(cmd_ln_t *config);
 
 /**
  * Retain a pointer to the decoder.
@@ -198,133 +170,6 @@ fe_t *ps_get_fe(ps_decoder_t *ps);
  */
 POCKETSPHINX_EXPORT
 feat_t *ps_get_feat(ps_decoder_t *ps);
-
-/**
- * Adapt current acoustic model using a linear transform.
- *
- * @param mllr The new transform to use, or NULL to update the existing
- *              transform.  The decoder retains ownership of this pointer,
- *              so you should not attempt to free it manually.  Use
- *              ps_mllr_retain() if you wish to reuse it
- *              elsewhere.
- * @return The updated transform object for this decoder, or
- *         NULL on failure.
- */
-POCKETSPHINX_EXPORT
-ps_mllr_t *ps_update_mllr(ps_decoder_t *ps, ps_mllr_t *mllr);
-
-/**
- * Get the language model set object for this decoder.
- *
- * If N-Gram decoding is not enabled, this will return NULL.  You will
- * need to enable it using ps_update_lmset().
- *
- * @return The language model set object for this decoder.  The
- *         decoder retains ownership of this pointer, so you should
- *         not attempt to free it manually.  Use ngram_model_retain()
- *         if you wish to reuse it elsewhere.
- */
-POCKETSPHINX_EXPORT
-ngram_model_t *ps_get_lmset(ps_decoder_t *ps);
-
-/**
- * Update the language model set object for this decoder.
- *
- * This function does several things.  Most importantly, it enables
- * N-Gram decoding if not currently enabled.  It also updates internal
- * data structures to reflect any changes made to the language model
- * set (e.g. switching language models, adding words, etc).
- *
- * @param lmset The new lmset to use, or NULL to update the existing
- *              lmset.  The decoder retains ownership of this pointer,
- *              so you should not attempt to free it manually.  Use
- *              ngram_model_retain() if you wish to reuse it
- *              elsewhere.
- * @return The updated language model set object for this decoder, or
- *         NULL on failure.
- */
-POCKETSPHINX_EXPORT
-ngram_model_t *ps_update_lmset(ps_decoder_t *ps, ngram_model_t *lmset);
-
-/**
- * Get the finite-state grammar set object for this decoder.
- *
- * If FSG decoding is not enabled, this returns NULL.  Call
- * ps_update_fsgset() to enable it.
- *
- * @return The current FSG set object for this decoder, or
- *         NULL if none is available.
- */
-POCKETSPHINX_EXPORT
-fsg_set_t *ps_get_fsgset(ps_decoder_t *ps);
-
-/**
- * Update the finite-state grammar set object for this decoder.
- *
- * This function does several things.  Most importantly, it enables
- * FSG decoding if not currently enabled.  It also updates internal
- * data structures to reflect any changes made to the FSG set.
- *
- * @return The current FSG set object for this decoder, or
- *         NULL on failure.
- */
-POCKETSPHINX_EXPORT
-fsg_set_t *ps_update_fsgset(ps_decoder_t *ps);
-
-/**
- * Reload the pronunciation dictionary from a file.
- *
- * This function replaces the current pronunciation dictionary with
- * the one stored in dictfile.  This also causes the active search
- * module(s) to be reinitialized, in the same manner as calling
- * ps_add_word() with update=TRUE.
- *
- * @param dictfile Path to dictionary file to load.
- * @param fdictfile Path to filler dictionary to load, or NULL to keep
- *                  the existing filler dictionary.
- * @param format Format of the dictionary file, or NULL to determine
- *               automatically (currently unused,should be NULL)
- */
-POCKETSPHINX_EXPORT
-int ps_load_dict(ps_decoder_t *ps, char const *dictfile,
-                 char const *fdictfile, char const *format);
-
-/**
- * Dump the current pronunciation dictionary to a file.
- *
- * This function dumps the current pronunciation dictionary to a tex
- *
- * @param dictfile Path to file where dictionary will be written.
- * @param format Format of the dictionary file, or NULL for the
- *               default (text) format (currently unused, should be NULL)
- */
-POCKETSPHINX_EXPORT
-int ps_save_dict(ps_decoder_t *ps, char const *dictfile, char const *format);
-
-/**
- * Add a word to the pronunciation dictionary.
- *
- * This function adds a word to the pronunciation dictionary and the
- * current language model (but, obviously, not to the current FSG if
- * FSG mode is enabled).  If the word is already present in one or the
- * other, it does whatever is necessary to ensure that the word can be
- * recognized.
- *
- * @param word Word string to add.
- * @param phones Whitespace-separated list of phoneme strings
- *               describing pronunciation of <code>word</code>.
- * @param update If TRUE, update the search module (whichever one is
- *               currently active) to recognize the newly added word.
- *               If adding multiple words, it is more efficient to
- *               pass FALSE here in all but the last word.
- * @return The internal ID (>= 0) of the newly added word, or <0 on
- *         failure.
- */
-POCKETSPHINX_EXPORT
-int ps_add_word(ps_decoder_t *ps,
-                char const *word,
-                char const *phones,
-                int update);
 
 /**
  * Decode a raw audio stream.
@@ -477,22 +322,6 @@ POCKETSPHINX_EXPORT
 int32 ps_get_prob(ps_decoder_t *ps, char const **out_uttid);
 
 /**
- * Get word lattice.
- *
- * There isn't much you can do with this so far, a public API will
- * appear in the future.
- *
- * @param ps Decoder.
- * @return Word lattice object containing all hypotheses so far.  NULL
- *         if no hypotheses are available.  This pointer is owned by
- *         the decoder and you should not attempt to free it manually.
- *         It is only valid until the next utterance, unless you use
- *         ps_lattice_retain() to retain it.
- */
-POCKETSPHINX_EXPORT
-ps_lattice_t *ps_get_lattice(ps_decoder_t *ps);
-
-/**
  * Get an iterator over the word segmentation for the best hypothesis.
  *
  * @param ps Decoder.
@@ -569,59 +398,6 @@ POCKETSPHINX_EXPORT
 void ps_seg_free(ps_seg_t *seg);
 
 /**
- * Get an iterator over the best hypotheses, optionally within a
- * selected region of the utterance.
- *
- * @param ps Decoder.
- * @param sf Start frame for N-best search (0 for whole utterance) 
- * @param ef End frame for N-best search (-1 for whole utterance) 
- * @param ctx1 First word of trigram context (NULL for whole utterance)
- * @param ctx2 First word of trigram context (NULL for whole utterance)
- * @return Iterator over N-best hypotheses.
- */
-POCKETSPHINX_EXPORT
-ps_nbest_t *ps_nbest(ps_decoder_t *ps, int sf, int ef,
-                     char const *ctx1, char const *ctx2);
-
-/**
- * Move an N-best list iterator forward.
- *
- * @param nbest N-best iterator.
- * @return Updated N-best iterator, or NULL if no more hypotheses are
- *         available (iterator is freed ni this case).
- */
-POCKETSPHINX_EXPORT 
-ps_nbest_t *ps_nbest_next(ps_nbest_t *nbest);
-
-/**
- * Get the hypothesis string from an N-best list iterator.
- *
- * @param nbest N-best iterator.
- * @param out_score Output: Path score for this hypothesis.
- * @return String containing next best hypothesis.
- */
-POCKETSPHINX_EXPORT
-char const *ps_nbest_hyp(ps_nbest_t *nbest, int32 *out_score);
-
-/**
- * Get the word segmentation from an N-best list iterator.
- *
- * @param nbest N-best iterator.
- * @param out_score Output: Path score for this hypothesis.
- * @return Iterator over the next best hypothesis.
- */
-POCKETSPHINX_EXPORT
-ps_seg_t *ps_nbest_seg(ps_nbest_t *nbest, int32 *out_score);
-
-/**
- * Finish N-best search early, releasing resources.
- *
- * @param nbest N-best iterator.
- */
-POCKETSPHINX_EXPORT
-void ps_nbest_free(ps_nbest_t *nbest);
-
-/**
  * Get performance information for the current utterance.
  *
  * @param ps Decoder.
@@ -648,14 +424,41 @@ void ps_get_all_time(ps_decoder_t *ps, double *out_nspeech,
 /**
  * @mainpage PocketSphinx API Documentation
  * @author David Huggins-Daines <dhuggins@cs.cmu.edu>
- * @version 0.6
- * @date March, 2010
+ * @version 0.7
+ * @date October, 2010
  *
  * @section intro_sec Introduction
  *
  * This is the API documentation for the PocketSphinx speech
  * recognition engine.  The main API calls are documented in
  * <pocketsphinx.h>.
+ *
+ * Please note that the API has changed since the previous revision,
+ * such that it may no longer be binary-compatible with your program.
+ * The behaviour of some API calls is different as well.
+ *
+ * The main difference is that all calls which involve processing data
+ * are now non-blocking.  Therefore, the @a no_search parameter no
+ * longer has any effect.  In addition, this means that ps_get_hyp()
+ * and ps_seg_iter() return the most recent result available, which
+ * may not correspond to the last block of audio or features
+ * submitted, depending on the speed of your platform.
+ *
+ * As previously, ps_end_utt() is blocking (although this wasn't
+ * explicitly stated before) and will block until the final hypothesis
+ * is available.  Due to the "anytime" nature of PocketSphinx
+ * recognition, a full hypothesis may be available much earlier.
+ * Therefore, a new function, ps_wait(), has been added, which blocks
+ * until a certain timepoint in the input has a result available, with
+ * an option to wait until the final result for that timepoint is
+ * available.  Additionally, this function can be used to wait for all
+ * data submitted so far to be processed.
+ *
+ * The internal handling of dictionaries and language models has
+ * changed to allow dynamic vocabularies and domains to be handled in
+ * a more accurate and principled fashion.  The ps_vocab_t interface
+ * is provided to allow vocabulary manipulation at runtime. (FIXME: at
+ * least, it will be...)
  */
 
 #ifdef __cplusplus

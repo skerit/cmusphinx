@@ -74,7 +74,6 @@
 static ps_mgaufuncs_t ms_mgau_funcs = {
     "ms",
     &ms_cont_mgau_frame_eval, /* frame_eval */
-    &ms_mgau_mllr_transform,  /* transform */
     &ms_mgau_copy,            /* copy */
     &ms_mgau_free             /* free */
 };
@@ -173,14 +172,6 @@ ms_mgau_free(ps_mgau_t * mg)
     ckd_free_3d((void *) msg->dist);
     ckd_free(msg->mgau_active);
     ckd_free(msg);
-}
-
-int
-ms_mgau_mllr_transform(ps_mgau_t *s,
-		       ps_mllr_t *mllr)
-{
-    ms_mgau_model_t *msg = (ms_mgau_model_t *)s;
-    return gauden_mllr_transform(msg->g, mllr, msg->config);
 }
 
 int32

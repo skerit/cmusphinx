@@ -236,63 +236,6 @@ read_mfc_file(FILE *infh, int sf, int ef, int *out_nfr, int ceplen)
 }
 
 static int
-process_mllrctl_line(ps_decoder_t *ps, cmd_ln_t *config, char const *file)
-{
-    char const *mllrdir, *mllrext;
-    char *infile = NULL;
-    ps_mllr_t *mllr;
-    static char *lastfile;
-
-    if (file == NULL)
-        return 0;
-
-    if (lastfile && 0 == strcmp(file, lastfile))
-        return 0;
-
-    ckd_free(lastfile);
-    lastfile = ckd_salloc(file);
-
-    mllrext = cmd_ln_str_r(config, "-mllrext");
-    if ((mllrdir = cmd_ln_str_r(config, "-mllrdir")))
-        infile = string_join(mllrdir, "/", file, 
-                             mllrext ? mllrext : "", NULL);
-    else if (mllrext)
-        infile = string_join(file, mllrext, NULL);
-    else
-        infile = ckd_salloc(file);
-
-    if ((mllr = ps_mllr_read(infile)) == NULL) {
-        ckd_free(infile);
-        return -1;
-    }
-    if (ps_update_mllr(ps, mllr) == NULL) {
-        ps_mllr_free(mllr);
-        ckd_free(infile);
-        return -1;
-    }
-
-    E_INFO("Using MLLR: %s\n", file);
-    ckd_free(infile);
-    return 0;
-}
-
-static int
-process_lmnamectl_line(ps_decoder_t *ps, cmd_ln_t *config, char const *lmname)
-{
-    ngram_model_t *lmset = ps_get_lmset(ps);
-
-    if (lmname == NULL)
-        return 0;
-    E_INFO("Using language model: %s\n", lmname);
-    if (ngram_model_set_select(lmset, lmname) == NULL) {
-        E_ERROR("No such language model: %s\n", lmname);
-        return -1;
-    }
-    ps_update_lmset(ps, lmset);
-    return 0;
-}
-
-static int
 build_outdir_one(cmd_ln_t *config, char const *arg, char const *uttpath)
 {
     char const *dir;
@@ -351,11 +294,7 @@ process_ctl_line(ps_decoder_t *ps, cmd_ln_t *config,
     if (cmd_ln_boolean_r(config, "-build_outdirs"))
         build_outdirs(config, uttid);
 
-    if (cmd_ln_boolean_r(config, "-senin")) {
-        /* start and end frames not supported. */
-        ps_decode_senscr(ps, infh, uttid);
-    }
-    else if (cmd_ln_boolean_r(config, "-adcin")) {
+    if (cmd_ln_boolean_r(config, "-adcin")) {
         
         if (ef != -1) {
             ef = (int32)((ef - sf)
@@ -395,7 +334,6 @@ write_hypseg(FILE *fh, ps_decoder_t *ps, char const *uttid)
 {
     int32 score, lscr, sf, ef;
     ps_seg_t *itor = ps_seg_iter(ps, &score);
-    ngram_model_t *lm = ps_get_lmset(ps);
 
     /* Accumulate language model scores. */
     lscr = 0;
@@ -416,11 +354,7 @@ write_hypseg(FILE *fh, ps_decoder_t *ps, char const *uttid)
 
         ps_seg_prob(itor, &ascr, &wlscr, NULL);
         ps_seg_frames(itor, &sf, &ef);
-        fprintf(fh, " %d %d %d %s",
-                sf, ascr,
-                /* FIXME: This is inconsistent with the total lm
-                   score, but that's the way it's done in S3... */
-                lm ? ngram_score_to_prob(lm, wlscr) : wlscr, w);
+        fprintf(fh, " %d %d %d %s", sf, ascr, wlscr, w);
         itor = ps_seg_next(itor);
     }
     fprintf(fh, " %d\n", ef);
@@ -618,8 +552,6 @@ process_ctl(ps_decoder_t *ps, cmd_ln_t *config, FILE *ctlfh)
             if (nf > 3)
                 uttid = wptr[3];
             /* Do actual decoding. */
-            process_mllrctl_line(ps, config, mllrfile);
-            process_lmnamectl_line(ps, config, lmname);
             process_ctl_line(ps, config, file, uttid, sf, ef);
             hyp = ps_get_hyp(ps, &score, &uttid);
             

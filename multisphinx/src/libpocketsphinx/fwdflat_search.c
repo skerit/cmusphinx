@@ -75,7 +75,6 @@ static ps_searchfuncs_t fwdflat_funcs = {
     /* finish: */ fwdflat_search_finish,
     /* reinit: */ fwdflat_search_reinit,
     /* free: */   fwdflat_search_free,
-    /* lattice: */  NULL,
     /* hyp: */      fwdflat_search_hyp,
     /* prob: */     fwdflat_search_prob,
     /* seg_iter: */ fwdflat_search_seg_iter,

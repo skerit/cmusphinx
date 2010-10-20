@@ -68,7 +68,6 @@
 static ps_mgaufuncs_t s2_semi_mgau_funcs = {
     "s2_semi",
     &s2_semi_mgau_frame_eval,      /* frame_eval */
-    &s2_semi_mgau_mllr_transform,  /* transform */
     &s2_semi_mgau_copy,            /* copy */
     &s2_semi_mgau_free             /* free */
 };
@@ -1019,14 +1018,6 @@ s2_semi_mgau_init(acmod_t *acmod)
 error_out:
     s2_semi_mgau_free(ps_mgau_base(s));
     return NULL;
-}
-
-int
-s2_semi_mgau_mllr_transform(ps_mgau_t *ps,
-                            ps_mllr_t *mllr)
-{
-    s2_semi_mgau_t *s = (s2_semi_mgau_t *)ps;
-    return gauden_mllr_transform(s->g, mllr, s->config);
 }
 
 ps_mgau_t *

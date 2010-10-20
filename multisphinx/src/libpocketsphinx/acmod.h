@@ -55,7 +55,6 @@
 #include <sphinxbase/err.h>
 
 /* Local headers. */
-#include "ps_mllr.h"
 #include "bin_mdef.h"
 #include "tmat.h"
 #include "hmm.h"
@@ -104,8 +103,6 @@ typedef struct ps_mgaufuncs_s {
                       mfcc_t ** feat,
                       int32 frame,
                       int32 compallsen);
-    int (*transform)(ps_mgau_t *mgau,
-                     ps_mllr_t *mllr);
     ps_mgau_t *(*copy)(ps_mgau_t *mgau);
     void (*free)(ps_mgau_t *mgau);
 } ps_mgaufuncs_t;    
@@ -159,7 +156,6 @@ struct acmod_s {
     bin_mdef_t *mdef;          /**< Model definition. */
     tmat_t *tmat;              /**< Transition matrices. */
     ps_mgau_t *mgau;           /**< Model parameters. */
-    ps_mllr_t *mllr;           /**< Speaker transformation. */
 
     /* Senone scoring: */
     int16 *senone_scores;      /**< GMM scores for current frame. */
@@ -174,8 +170,6 @@ struct acmod_s {
     mfcc_t ***feat_buf; /**< Temporary buffer of dynamic features. */
     FILE *rawfh;        /**< File for writing raw audio data. */
     FILE *mfcfh;        /**< File for writing acoustic feature data. */
-    FILE *senfh;        /**< File for writing senone score data. */
-    FILE *insenfh;	/**< Input senone score file. */
     long *framepos;     /**< File positions of recent frames in senone file. */
 
     /* A whole bunch of flags and counters: */
@@ -234,31 +228,6 @@ acmod_t *acmod_retain(acmod_t *acmod);
 int acmod_free(acmod_t *acmod);
 
 /**
- * Adapt acoustic model using a linear transform.
- *
- * FIXME: The semantics of this with respect to copied acoustic models
- * are not defined at the moment.
- *
- * @param mllr The new transform to use, or NULL to update the existing
- *              transform.  The decoder retains ownership of this pointer,
- *              so you should not attempt to free it manually.  Use
- *              ps_mllr_retain() if you wish to reuse it
- *              elsewhere.
- * @return The updated transform object for this decoder, or
- *         NULL on failure.
- */
-ps_mllr_t *acmod_update_mllr(acmod_t *acmod, ps_mllr_t *mllr);
-
-/**
- * Start logging senone scores to a filehandle.
- *
- * @param acmod Acoustic model object.
- * @param logfh Filehandle to log to.
- * @return 0 for success, <0 on error.
- */
-int acmod_set_senfh(acmod_t *acmod, FILE *senfh);
-
-/**
  * Start logging MFCCs to a filehandle.
  *
  * @param acmod Acoustic model object.
@@ -315,21 +284,6 @@ int acmod_advance(acmod_t *acmod);
 int acmod_frame(acmod_t *acmod);
 
 /**
- * Set up a senone score dump file for input.
- *
- * @param insenfh File handle of dump file
- * @return 0 for success, <0 for failure
- */
-int acmod_set_insenfh(acmod_t *acmod, FILE *insenfh);
-
-/**
- * Read one frame of scores from senone score dump file.
- *
- * @return Number of frames read or <0 on error.
- */
-int acmod_read_scores(acmod_t *acmod);
-
-/**
  * Score one frame of data.
  *
  * @param inout_frame_idx Input: frame index to score, or NULL
@@ -344,18 +298,6 @@ int acmod_read_scores(acmod_t *acmod);
  */
 int16 const *acmod_score(acmod_t *acmod,
                          int *inout_frame_idx);
-
-/**
- * Write senone dump file header.
- */
-int acmod_write_senfh_header(acmod_t *acmod, FILE *logfh);
-
-/**
- * Write a frame of senone scores to a dump file.
- */
-int acmod_write_scores(acmod_t *acmod, int n_active, uint8 const *active,
-                       int16 const *senscr, FILE *senfh);
-
 
 /**
  * Get best score and senone index for current frame.

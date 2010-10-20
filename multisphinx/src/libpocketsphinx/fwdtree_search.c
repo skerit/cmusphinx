@@ -75,7 +75,6 @@ static ps_searchfuncs_t fwdtree_funcs = {
     /* finish: */ fwdtree_search_finish,
     /* reinit: */ fwdtree_search_reinit,
     /* free: */   fwdtree_search_free,
-    /* lattice: */  NULL,
     /* hyp: */      fwdtree_search_hyp,
     /* prob: */     fwdtree_search_prob,
     /* seg_iter: */ fwdtree_search_seg_iter,

@@ -295,59 +295,6 @@ ps_get_feat(ps_decoder_t *ps)
     return ps->acmod->fcb;
 }
 
-ps_mllr_t *
-ps_update_mllr(ps_decoder_t *ps, ps_mllr_t *mllr)
-{
-    return NULL;
-}
-
-ngram_model_t *
-ps_get_lmset(ps_decoder_t *ps)
-{
-    return NULL;
-}
-
-ngram_model_t *
-ps_update_lmset(ps_decoder_t *ps, ngram_model_t *lmset)
-{
-    return NULL;
-}
-
-fsg_set_t *
-ps_get_fsgset(ps_decoder_t *ps)
-{
-    return NULL;
-}
-
-fsg_set_t *
-ps_update_fsgset(ps_decoder_t *ps)
-{
-    return NULL;
-}
-
-int
-ps_load_dict(ps_decoder_t *ps, char const *dictfile,
-             char const *fdictfile, char const *format)
-{
-    return -1;
-}
-
-int
-ps_save_dict(ps_decoder_t *ps, char const *dictfile,
-             char const *format)
-{
-    return -1;
-}
-
-int
-ps_add_word(ps_decoder_t *ps,
-            char const *word,
-            char const *phones,
-            int update)
-{
-    return -1;
-}
-
 int
 ps_decode_raw(ps_decoder_t *ps, FILE *rawfh,
               char const *uttid, long maxsamps)
@@ -435,47 +382,10 @@ ps_start_utt(ps_decoder_t *ps, char const *uttid)
         ckd_free(logfn);
         acmod_set_rawfh(ps->acmod, rawfh);
     }
-    if (ps->senlogdir) {
-        char *logfn = string_join(ps->senlogdir, "/",
-                                  ps->uttid, ".sen", NULL);
-        FILE *senfh;
-        E_INFO("Writing senone score log file: %s\n", logfn);
-        if ((senfh = fopen(logfn, "wb")) == NULL) {
-            E_ERROR_SYSTEM("Failed to open senone score log file %s", logfn);
-            ckd_free(logfn);
-            return -1;
-        }
-        ckd_free(logfn);
-        acmod_set_senfh(ps->acmod, senfh);
-    }
 
     if (ps_search_start(ps->fwdtree) < 0)
         return -1;
     return ps_search_start(ps->fwdflat);
-}
-
-int
-ps_decode_senscr(ps_decoder_t *ps, FILE *senfh,
-                 char const *uttid)
-{
-    int nfr, n_searchfr;
-
-    ps_start_utt(ps, uttid);
-    n_searchfr = 0;
-    acmod_set_insenfh(ps->acmod, senfh);
-    /* FIXME: It doesn't work this way anymore. */
-    while ((nfr = acmod_read_scores(ps->acmod)) > 0) {
-        if ((nfr = ps_search_step(ps->fwdtree)) < 0) {
-            ps_end_utt(ps);
-            return nfr;
-        }
-        ps->n_frame += nfr;
-        n_searchfr += nfr;
-    }
-    ps_end_utt(ps);
-    acmod_set_insenfh(ps->acmod, NULL);
-
-    return n_searchfr;
 }
 
 int
@@ -486,9 +396,6 @@ ps_process_raw(ps_decoder_t *ps,
                int full_utt)
 {
     int n_searchfr = 0;
-
-    if (no_search)
-        acmod_set_grow(ps->acmod, TRUE);
 
     while (n_samples) {
         int nfr;
@@ -519,9 +426,6 @@ ps_process_cep(ps_decoder_t *ps,
                int full_utt)
 {
     int n_searchfr = 0;
-
-    if (no_search)
-        acmod_set_grow(ps->acmod, TRUE);
 
     while (n_frames) {
         int nfr;
@@ -664,42 +568,6 @@ void
 ps_seg_free(ps_seg_t *seg)
 {
     ps_search_seg_free(seg);
-}
-
-ps_lattice_t *
-ps_get_lattice(ps_decoder_t *ps)
-{
-    return NULL;
-}
-
-ps_nbest_t *
-ps_nbest(ps_decoder_t *ps, int sf, int ef,
-         char const *ctx1, char const *ctx2)
-{
-    return NULL;
-}
-
-void
-ps_nbest_free(ps_nbest_t *nbest)
-{
-}
-
-ps_nbest_t *
-ps_nbest_next(ps_nbest_t *nbest)
-{
-    return NULL;
-}
-
-char const *
-ps_nbest_hyp(ps_nbest_t *nbest, int32 *out_score)
-{
-    return NULL;
-}
-
-ps_seg_t *
-ps_nbest_seg(ps_nbest_t *nbest, int32 *out_score)
-{
-    return NULL;
 }
 
 int
