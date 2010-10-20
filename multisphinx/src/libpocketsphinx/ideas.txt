@@ -1,3 +1,48 @@
+
+fwdflat sliding window
+
+ * Need to be able to traverse/index backpointer table by start frame
+ * I think this might be useful for garbage collection too
+ * Seems like we ultimately need multiple "views" over the backpointer table
+   - indexes really, so that multiple passes can access it simultaneously
+
+ * Actually what we can do is just refresh the expand word list
+   expiring entries with start frames outside the window and adding new ones
+
+ * Alternately we could just sort the backpointer table according to start frame
+   How efficient/inefficient is it to do this incrementally in fwdflat?
+
+Potential idea:
+
+ * Track oldest backpointer in lexicon tree
+   - once it passes frame K, no more words can start in that frame
+   - therefore we can reorder the bptbl up to frame K
+   - the bptbl is *mostly* sorted, so qsort is a Bad Idea
+   - actually we should just heapify it, it is really a priority queue
+     which fwdtree feeds and fwdflat and lattice generation pull from
+   - actually the decoding pipeline is in fact one big priority queue
+     or rather two+ of them chained together
+ * So what we can do is just change the backpointer insertion function
+   to heapify things
+ * The problem with this is that since it's mostly sorted we could do
+   much better than O(n log n) to sort it, but that's what heapsort
+   gives us
+ * So a modified insertion sort seems like the right way to do this
+
+Track the number of inversions in the backpointer table to determine
+the best algorithm
+
+Damerau-Levenshtein distance
+
+Make fwdflat work without word_lat_idx
+
+bptr garbage collection
+
+Refactoring:
+
+1) split backpointer table / score stack from ngram search
+2) make fwdflat overwrite backpointer table rather than clear it
+
 Insertion sort should be relatively efficient for sorting the
 backpointer table since it contains long runs of the same value and is
 loosely ordered.
