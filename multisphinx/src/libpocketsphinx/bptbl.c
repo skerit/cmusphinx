@@ -236,8 +236,8 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
     int sidx = bptbl->first_invert_bp;
 
     ef = bptbl->ent[sidx].frame;
-    E_DEBUG(2,("compacting from %d to %d (%d to %d)\n",
-               sidx, eidx, ef, bptbl->ent[eidx].frame));
+    E_INFO("compacting from %d to %d (%d to %d)\n",
+           sidx, eidx, ef, bptbl->ent[eidx].frame);
     for (dest = src = sidx; src < eidx; ++src) {
         /* Update all ef_idx including missing frames (there are many) */
         while (ef >= bptbl->active_fr && ef <= bptbl->ent[src].frame) {
@@ -247,9 +247,6 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
         }
         if (bptbl->ent[src].valid) {
             if (dest != src) {
-                /* Track the first compacted entry. */
-                if (bptbl->first_invert_bp == sidx)
-                    bptbl->first_invert_bp = dest;
                 bptbl->ent[dest] = bptbl->ent[src];
                 bptbl->ent[src].valid = FALSE;
             }
@@ -277,13 +274,13 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
 static int
 bptbl_forward_sort(bptbl_t *bptbl, int sidx, int eidx)
 {
-    int16 *orig_sf;
-    int i;
-
+    E_INFO("Sorting forward from %d to %d\n", sidx, eidx);
     /* Straightforward for now, we just insertion sort these dudes and
      * update the permutation table and first_invert_bp as necessary.
      * This could be done in conjunction with compaction but it
      * becomes very complicated and possibly slower. */
+
+    bptbl->first_invert_bp = eidx;
 
     return 0;
 }
@@ -292,19 +289,23 @@ bptbl_forward_sort(bptbl_t *bptbl, int sidx, int eidx)
  * Remap backpointers in backpointer table.
  *
  * @param bptbl Backpointer table.
- * @param eidx Index of first backpointer which cannot be remapped.
+ * @param sidx Index of first backpointer to be updated
+ * @param eidx Index of last backpointer to be updated plus one.
+ * @param last_invert_bp Index of first backpointer which can be remapped plus one.
+ * @param last_invert_bp Index of last backpointer which can be remapped plus one.
  */
 static void
-bptbl_invert(bptbl_t *bptbl, int eidx)
+bptbl_invert(bptbl_t *bptbl, int sidx, int eidx,
+             int first_invert_bp, int last_invert_bp)
 {
-    int sidx = bptbl->first_invert_bp;
     int i;
 
-    for (i = sidx; i < bptbl->n_ent; ++i) {
-        if (bptbl->ent[i].bp >= sidx && bptbl->ent[i].bp < eidx) {
+    E_INFO("inverting %d:%d from %d to %d\n", first_invert_bp, last_invert_bp, sidx, eidx);
+    for (i = sidx; i < eidx; ++i) {
+        if (bptbl->ent[i].bp >= first_invert_bp && bptbl->ent[i].bp < last_invert_bp) {
             if (bptbl->ent[i].bp != bptbl->permute[bptbl->ent[i].bp])
-                E_DEBUG(3,("invert %d => %d in %d\n",
-                           bptbl->ent[i].bp, bptbl->permute[bptbl->ent[i].bp], i));
+                E_INFO("invert %d => %d in %d\n",
+                       bptbl->ent[i].bp, bptbl->permute[bptbl->ent[i].bp], i);
             bptbl->ent[i].bp = bptbl->permute[bptbl->ent[i].bp];
             assert(bp_sf(bptbl, i) < bptbl->ent[i].frame);
         }
@@ -334,6 +335,7 @@ static void
 bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
 {
     int prev_active_fr, active_fr;
+    int last_compacted_bp;
 
     /* active_fr is the first frame which is still active in search
      * (i.e. for which outgoing word arcs can still be generated).
@@ -357,18 +359,17 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     E_INFO("before compaction\n");
     dump_bptable(bptbl, 0, -1);
 #endif
-    bptbl_compact(bptbl, bptbl_ef_idx(bptbl, active_fr));
-#if 0
+    last_compacted_bp = bptbl_compact(bptbl, bptbl_ef_idx(bptbl, active_fr));
+
     E_INFO("after compaction\n");
     dump_bptable(bptbl, 0, -1);
-#endif
-    bptbl_forward_sort(bptbl, bptbl_ef_idx(bptbl, prev_active_fr),
-                       bptbl_ef_idx(bptbl, active_fr));
-    bptbl_invert(bptbl, bptbl_ef_idx(bptbl, active_fr));
-#if 0
+    bptbl_invert(bptbl, bptbl->first_invert_bp, last_compacted_bp,
+                 bptbl->first_invert_bp, bptbl_ef_idx(bptbl, active_fr));
+    bptbl_invert(bptbl, bptbl_ef_idx(bptbl, active_fr), bptbl->n_ent,
+                 bptbl->first_invert_bp, bptbl_ef_idx(bptbl, active_fr));
     E_INFO("after inversion\n");
     dump_bptable(bptbl, 0, -1);
-#endif
+    bptbl_forward_sort(bptbl, bptbl->first_invert_bp, last_compacted_bp);
     bptbl_update_active_fr(bptbl, active_fr);
 }
 
