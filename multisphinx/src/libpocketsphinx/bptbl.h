@@ -99,8 +99,6 @@ typedef struct bptbl_s {
     int32 n_active_alloc; /**< Number of frames allocated for frame-based arrays. */
     int32 *ef_idx;       /**< First BPTable entry exiting in each frame */
     ps_latnode_t **frm_wordlist;   /**< List of active words in each frame. */
-
-    int32 n_valid_alloc; /**< Number of frames allocated in valid_fr. */
     bitvec_t *valid_fr;  /**< Set of accessible frames (used in gc) */
 
     int32 *word_idx;     /**< BPTable index for any word in current frame;

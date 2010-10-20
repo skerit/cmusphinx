@@ -59,7 +59,6 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
     bptbl->d2p = dict2pid_retain(d2p);
     bptbl->n_alloc = n_alloc;
     bptbl->n_active_alloc = n_frame_alloc;
-    bptbl->n_valid_alloc = n_frame_alloc;
 
     bptbl->ent = ckd_calloc(bptbl->n_alloc, sizeof(*bptbl->ent));
     bptbl->permute = ckd_calloc(bptbl->n_alloc, sizeof(*bptbl->permute));
@@ -72,7 +71,7 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
                                sizeof(*bptbl->ef_idx));
     bptbl->frm_wordlist = ckd_calloc(bptbl->n_active_alloc,
                                      sizeof(*bptbl->frm_wordlist));
-    bptbl->valid_fr = bitvec_alloc(bptbl->n_valid_alloc);
+    bptbl->valid_fr = bitvec_alloc(bptbl->n_active_alloc);
 
     return bptbl;
 }
@@ -101,7 +100,7 @@ bptbl_reset(bptbl_t *bptbl)
     for (i = 0; i < bptbl->n_active_alloc; ++i) {
         bptbl->ef_idx[i] = -1;
     }
-    bitvec_clear_all(bptbl->valid_fr, bptbl->n_valid_alloc);
+    bitvec_clear_all(bptbl->valid_fr, bptbl->n_active_alloc);
     bptbl->first_invert_bp = 0;
     bptbl->n_frame = 0;
     bptbl->n_ent = 0;
@@ -167,15 +166,16 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
     E_INFO("Finding coaccessible frames from backpointers from %d to %d\n",
            bptbl_ef_idx(bptbl, ef), bptbl_ef_idx(bptbl, cf));
     /* Collect coaccessible frames from these backpointers */
-    bitvec_clear_all(bptbl->valid_fr, cf);
+    bitvec_clear_all(bptbl->valid_fr, cf - bptbl->active_fr);
     n_active_fr = 0;
     for (i = bptbl_ef_idx(bptbl, ef);
          i < bptbl_ef_idx(bptbl, cf); ++i) {
         int32 bp = bptbl->ent[i].bp;
         if (bp != NO_BP) {
             int frame = bptbl->ent[bp].frame;
-            if (bitvec_is_clear(bptbl->valid_fr, frame)) {
-                bitvec_set(bptbl->valid_fr, frame);
+            if (frame >= bptbl->active_fr
+                && bitvec_is_clear(bptbl->valid_fr, frame - bptbl->active_fr)) {
+                bitvec_set(bptbl->valid_fr, frame - bptbl->active_fr);
                 ++n_active_fr;
             }
         }
@@ -186,8 +186,9 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
         int next_gc_fr = 0;
         n_active_fr = 0;
         for (i = sf; i <= last_gc_fr; ++i) {
-            if (bitvec_is_set(bptbl->valid_fr, i)) {
-                bitvec_clear(bptbl->valid_fr, i);
+            if (i >= bptbl->active_fr
+                && bitvec_is_set(bptbl->valid_fr, i - bptbl->active_fr)) {
+                bitvec_clear(bptbl->valid_fr, i - bptbl->active_fr);
                 /* Add all backpointers in this frame (the bogus
                  * lattice generation algorithm) */
                 for (j = bptbl_ef_idx(bptbl, i);
@@ -196,8 +197,11 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
                     bptbl->ent[j].valid = TRUE;
                     if (bp != NO_BP) {
                         int frame = bptbl->ent[bp].frame;
-                        if (bitvec_is_clear(bptbl->valid_fr, frame)) {
-                            bitvec_set(bptbl->valid_fr, frame);
+                        if (frame >= bptbl->active_fr
+                            && bitvec_is_clear(bptbl->valid_fr,
+                                               frame - bptbl->active_fr)) {
+                            bitvec_set(bptbl->valid_fr,
+                                       frame - bptbl->active_fr);
                             ++n_active_fr;
                         }
                         if (frame > next_gc_fr)
@@ -365,11 +369,7 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
         bptbl->frm_wordlist = ckd_realloc(bptbl->frm_wordlist,
                                           bptbl->n_active_alloc
                                           * sizeof(*bptbl->frm_wordlist));
-    }
-    if (frame_idx >= bptbl->n_valid_alloc) {
-        bptbl->n_valid_alloc *= 2;
-        E_INFO("reallocating valid bitvector to %d\n", bptbl->n_valid_alloc);
-        bptbl->valid_fr = bitvec_realloc(bptbl->valid_fr, bptbl->n_valid_alloc);
+        bptbl->valid_fr = bitvec_realloc(bptbl->valid_fr, bptbl->n_active_alloc);
     }
     bptbl->ef_idx[frame_idx - bptbl->active_fr] = bptbl->n_ent;
     bptbl->n_frame = frame_idx + 1;
