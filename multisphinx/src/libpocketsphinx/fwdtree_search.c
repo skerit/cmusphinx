@@ -1805,7 +1805,7 @@ fwdtree_search_finish(ps_search_t *base)
     /* Add a mark in the backpointer table for one past the final frame. */
     /* FIXME: BPTBL: Replace this with a final GC operation that
      * retires all backpointers from this bptbl. */
-    fi = bptbl_push_frame(fts->bptbl, fts->oldest_bp);
+    fi = bptbl_push_frame(fts->bptbl, fts->bptbl->n_ent);
     assert(fi == cf);
 
     /* Deactivate channels lined up for the next frame */

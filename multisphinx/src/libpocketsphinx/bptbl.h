@@ -153,6 +153,13 @@ void dump_bptable(bptbl_t *bptbl);
 void bptbl_reset(bptbl_t *bptbl);
 
 /**
+ * Finalize the backpointer table.
+ *
+ * Garbage collects and retires all active backpointers.
+ */
+int bptbl_finalize(bptbl_t *bptbl);
+
+/**
  * Record the current frame's index in the backpointer table.
  *
  * @param oldest_bp Index of the oldest backpointer still active in

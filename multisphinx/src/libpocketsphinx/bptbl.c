@@ -336,9 +336,6 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
      * to be able to call this to sweep all active backpointers) */
     if (eidx == bptbl->n_ent)
         bptbl->n_ent = dest;
-    E_INFO("Retired %d bps (%d to %d)\n",
-           dest - bptbl->first_invert_bp,
-           bptbl->first_invert_bp, dest);
     return dest;
 }
 
@@ -374,11 +371,14 @@ bptbl_remap(bptbl_t *bptbl, int last_retired_bp, int last_remapped_bp)
                            bptbl->permute[bptbl->retired[i].bp - bptbl->ef_idx[0]], i));
             bptbl->retired[i].bp
                 = bptbl->permute[bptbl->retired[i].bp - bptbl->ef_idx[0]];
-            assert(bptbl_sf(bptbl, i) < bptbl->retired[i].frame);
+            E_INFO("sf %d frame %d\n", bptbl_sf(bptbl, i), bptbl->retired[i].frame);
+            assert(bptbl_sf(bptbl, i) <= bptbl->retired[i].frame);
         }
     }
     /* Now remap backpointers in still-active bps (which point to the
      * newly retired ones) */
+    if (last_retired_bp == bptbl->n_ent)
+        return;
     for (i = 0; i < bptbl->n_ent - bptbl->ef_idx[0]; ++i) {
         if (bptbl->ent[i].bp >= bptbl->ef_idx[0]
             && bptbl->ent[i].bp < last_remapped_bp) {
@@ -477,6 +477,8 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     assert(n_retired == last_retired_bp - bptbl->first_invert_bp);
     bptbl_remap(bptbl, last_retired_bp, bptbl_ef_idx(bptbl, active_fr));
     bptbl_update_active(bptbl, active_fr, last_retired_bp);
+    E_INFO("Retired %d bps: now %d retired, %d active\n", n_retired,
+           bptbl->first_invert_bp, bptbl->n_ent - bptbl->ef_idx[0]);
 }
 
 int
@@ -498,19 +500,34 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp)
     bptbl->ef_idx[frame_idx - bptbl->active_fr] = bptbl->n_ent;
     bptbl->n_frame = frame_idx + 1;
     bptbl_gc(bptbl, oldest_bp, frame_idx);
-#if 0
-    if (bptbl->first_invert_bp > 0 && bptbl->ef_idx[0] > bptbl->first_invert_bp) {
-        E_INFO("%d active bps (%d to %d)\n",
-               bptbl->n_ent - bptbl->ef_idx[0],
-               bptbl->ef_idx[0], bptbl->n_ent);
-        assert(bptbl->ent[bptbl->first_invert_bp - 1].valid == TRUE);
-        assert(bptbl->ent[bptbl->first_invert_bp].valid == FALSE);
-        assert(bptbl->ent[bptbl->ef_idx[0] - 1].valid == FALSE);
-        assert(bptbl->ent[bptbl->ef_idx[0]].valid == TRUE);
-    }
-#endif
     return frame_idx;
 }
+
+int
+bptbl_finalize(bptbl_t *bptbl)
+{
+    int n_retired, last_retired_bp;
+
+    E_DEBUG(2,("Final GC from frame %d to %d\n",
+               bptbl->active_fr, bptbl->n_frame));
+    /* If there is nothing to GC then finish up. */
+    if (bptbl->n_ent == bptbl->ef_idx[0])
+        return 0;
+    /* Mark and GC everything from the last frame. */
+    n_retired = bptbl_mark(bptbl, bptbl->n_frame - 1, bptbl->n_frame);
+    E_DEBUG(2,("About to retire %d bps\n", n_retired));
+    last_retired_bp = bptbl_retire(bptbl, n_retired, bptbl->n_ent);
+    /* Last retired bp should be the same as bptbl->n_ent */
+    bptbl_remap(bptbl, last_retired_bp, bptbl->n_ent);
+    /* Just invalidate active entries, no need to move anything. */
+    bptbl->first_invert_bp = last_retired_bp;
+    bptbl->active_fr = bptbl->n_frame;
+    bptbl->ef_idx[0] = bptbl->n_ent;
+    E_INFO("Retired %d bps: now %d retired, %d active\n", n_retired,
+           bptbl->first_invert_bp, bptbl->n_ent - bptbl->ef_idx[0]);
+    return n_retired;
+}
+
 
 int32
 bptbl_ef_idx(bptbl_t *bptbl, int frame_idx)
@@ -604,7 +621,7 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
     /* Expand the backpointer tables if necessary. */
     if (bptbl->n_ent - bptbl->ef_idx[0] >= bptbl->n_ent_alloc) {
         bptbl->n_ent_alloc *= 2;
-        assert(bptbl->n_ent + bptbl->ef_idx[0] < bptbl->n_ent_alloc);
+        assert(bptbl->n_ent - bptbl->ef_idx[0] < bptbl->n_ent_alloc);
         bptbl->ent = ckd_realloc(bptbl->ent,
                                  bptbl->n_ent_alloc
                                  * sizeof(*bptbl->ent));

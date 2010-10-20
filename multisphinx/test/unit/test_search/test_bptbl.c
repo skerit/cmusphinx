@@ -112,6 +112,11 @@ main(int argc, char *argv[])
 		bp = bptbl_enter(bptbl, 42, 5, 6 + i, 0);
 	}
 
+	/* Finalize the backpointer table (i.e. retire all active) */
+	dump_bptable(bptbl);
+	bptbl_finalize(bptbl);
+	dump_bptable(bptbl);
+
 	bptbl_free(bptbl);
 	ps_free(ps);
 
