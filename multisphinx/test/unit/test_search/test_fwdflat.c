@@ -18,6 +18,7 @@ main(int argc, char *argv[])
 	logmath_t *lmath;
 	cmd_ln_t *config;
 	acmod_t *acmod;
+	featbuf_t *fb;
 	ps_search_t *fwdflat;
 	mfcc_t ***feat;
 	int nfr, i;
@@ -30,32 +31,50 @@ main(int argc, char *argv[])
 			     "-dict", TESTDATADIR "/hub4.5000.dic",
 			     NULL);
 	ps_init_defaults(config);
+	fb = featbuf_init(config);
+
+	/* Create acoustic model and search. */
 	lmath = logmath_init(cmd_ln_float32_r(config, "-logbase"),
 			     0, FALSE);
-	acmod = acmod_init(config, lmath, NULL, NULL);
+	acmod = acmod_init(config, lmath, fb);
 	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));
 	dict = dict_init(config, mdef);
 	d2p = dict2pid_build(mdef, dict);
 	fwdflat = fwdflat_search_init(config, acmod, dict, d2p, NULL);
 
+	/* Launch a search thread. */
+	ps_search_run(fwdflat);
+
+	/* Feed it a bunch of data. */
 	nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
 			      ".mfc", 0, -1, NULL, -1);
 	feat = feat_array_alloc(acmod->fcb, nfr);
 	if ((nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
 				   ".mfc", 0, -1, feat, -1)) < 0)
 		E_FATAL("Failed to read mfc file\n");
-	ps_search_start(fwdflat);
-	for (i = 0; i < nfr; ++i) {
-		acmod_process_feat(acmod, feat[i]);
-		ps_search_step(fwdflat);
-	}
-	ps_search_finish(fwdflat);
+	featbuf_start_utt(fb);
+	for (i = 0; i < 200; ++i)
+		featbuf_process_feat(fb, feat[i]);
+
+	/* This will wait for search to complete. */
+	printf("Waiting for end of utt\n");
+	featbuf_end_utt(fb, -1);
+	printf("Done waiting\n");
+
+	/* Retrieve the hypothesis from the search thread. */
 	hyp = ps_search_hyp(fwdflat, &score);
 	printf("hyp: %s (%d)\n", hyp, score);
 
+	/* Reap the search thread. */
+	printf("Reaping the search thread\n");
+	ps_search_stop(fwdflat);
+	printf("Done reaping\n");
 	ps_search_free(fwdflat);
-	feat_array_free(feat);
 	acmod_free(acmod);
+	featbuf_free(fb);
+
+	/* Clean everything else up. */
+	feat_array_free(feat);
 	logmath_free(lmath);
 	cmd_ln_free_r(config);
 
