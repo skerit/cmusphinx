@@ -288,7 +288,7 @@ bptbl_invert(bptbl_t *bptbl, int eidx)
     int sidx = bptbl->first_invert_bp;
     int i;
 
-    for (i = 0; i < bptbl->n_ent; ++i) {
+    for (i = sidx; i < bptbl->n_ent; ++i) {
         if (bptbl->ent[i].bp >= sidx && bptbl->ent[i].bp < eidx) {
             if (bptbl->ent[i].bp != bptbl->permute[bptbl->ent[i].bp])
                 E_INFO("invert %d => %d in %d\n",
