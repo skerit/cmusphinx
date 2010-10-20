@@ -171,6 +171,7 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
     assert(sf >= bptbl->active_fr);
 
     /* Invalidate all backpointer entries between sf and ef. */
+    /* FIXME: might be good to keep track of ones that have already been invalidated by maxwpf? */
     E_DEBUG(2,("Garbage collecting from %d to %d (%d to %d):\n",
                bptbl_ef_idx(bptbl, sf), bptbl_ef_idx(bptbl, ef), sf, ef));
     for (i = bptbl_ef_idx(bptbl, sf);

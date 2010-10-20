@@ -859,6 +859,9 @@ ngram_search_prob(ps_search_t *search)
     }
 }
 
+/**
+ * Group all backpointer entries by word ID and starting frame.
+ */
 static void
 create_dag_nodes(ngram_search_t *ngs, ps_lattice_t *dag)
 {
@@ -882,7 +885,7 @@ create_dag_nodes(ngram_search_t *ngs, ps_lattice_t *dag)
         if ((wid == ps_search_finish_wid(ngs)) && (ef < dag->n_frames - 1))
             continue;
 
-        /* Skip if word not in LM */
+        /* Skip if word not in LM (FIXME: how could this happen?!) */
         if ((!dict_filler_word(ps_search_dict(ngs), wid))
             && (!ngram_model_set_known_wid(ngs->lmset,
                                            dict_basewid(ps_search_dict(ngs), wid))))
@@ -1028,6 +1031,8 @@ ngram_search_lattice(ps_search_t *search)
     dag = ps_lattice_init_search(search, ngs->bptbl->n_frame);
     /* Compute these such that they agree with the fwdtree language weight. */
     lwf = ngs->fwdflat ? ngs->fwdflat_fwdtree_lw_ratio : 1.0;
+    /* Create one node for each <wid,bp> pair with lower and upper
+     * bounds of associated backpointers. */
     create_dag_nodes(ngs, dag);
     if ((dag->start = find_start_node(ngs, dag)) == NULL)
         goto error_out;
@@ -1037,6 +1042,7 @@ ngram_search_lattice(ps_search_t *search)
            dict_wordstr(search->dict, dag->start->wid), dag->start->sf,
            dict_wordstr(search->dict, dag->end->wid), dag->end->sf);
 
+    /* Compute score for final node (which has no explicit exit) */
     ngram_compute_seg_score(ngs, bptbl_ent(ngs->bptbl, dag->end->lef), lwf,
                             &dag->final_node_ascr, &lscr);
 
@@ -1057,6 +1063,8 @@ ngram_search_lattice(ps_search_t *search)
         for (from = to->next; from; from = from->next) {
             bp_t *from_bpe, *lef_bpe;
 
+            /* Lower and upper bounds of backpointer entries
+             * corresponding to this node. */
             from_bpe = bptbl_ent(ngs->bptbl, from->fef);
             lef_bpe = bptbl_ent(ngs->bptbl, from->lef);
             assert(from_bpe != NULL);

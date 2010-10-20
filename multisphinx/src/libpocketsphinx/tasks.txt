@@ -2,10 +2,24 @@
 * Sort entries before window_sf and track start frames - DONE
 * Split fwdtree and fwdflat from ngram_search - DONE
 * Give fwdflat its own bptbl - DONE
-* Figure out bscorestack problems
+* Figure out bscorestack problems - DONE (apparently)
+
 * Split bptbl into active and retired
-  - Retire bps at end of frame:
-    * Push new frame
-    * Update oldest bp in pruning
-    * Retire to separate table instead of compacting (do this first)
+  - Retire bps to separate table
+    * Partition the permute array into retired and active indices
+    * Switch dest to the retired table in bptbl_compact
+    * Do bp remapping in two parts again
   - Retire all remaining bps at end of utterance
+  - Pull end frame finding into bptbl
+  - Backtraces and lattice gen then refer to the retired portion
+  - Test this on standalone fwdtree first
+
+* Rewrite lattice generation to be incremental on retired bps
+  - No problem with doing this
+  - oldest_bp represents the last node which is still generating arcs
+  - current code basically does selection sort
+  - makes more sense to radix sort them by start frame
+    * this is what fwdflat expects
+    * radix sort by frame, insertion sort by word id
+    * lattice generation is now very, very easy
+    * count start frames in retirement process
