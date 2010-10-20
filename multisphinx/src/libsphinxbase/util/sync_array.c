@@ -100,8 +100,17 @@ sync_array_free(sync_array_t *sa)
     sbmtx_lock(sa->mtx);
     if (--sa->refcount > 0) {
         int refcount = sa->refcount;
+        size_t i;
+        /* FIXME: This may lead to memory leaks.  We don't know
+         * exactly which elements this thread had laid claim to, so we
+         * have to decrement the count on all of them.  Best practice,
+         * as described in the header, is to have a consumer release
+         * all remaining elements before freeing the array. */
+        for (i = garray_base(sa->count);
+             i < garray_next_idx(sa->count); ++i)
+            if (garray_ent(sa->count, uint8, i) > 0)
+                --garray_ent(sa->count, uint8, i);
         sbmtx_unlock(sa->mtx);
-        sync_array_release(sa, 0, (size_t)-1);
         return refcount;
     }		
     sbmtx_unlock(sa->mtx);
@@ -159,7 +168,7 @@ sync_array_get(sync_array_t *sa, size_t idx, void *out_ent)
 }
 
 
-void *
+int
 sync_array_append(sync_array_t *sa, void *ent)
 {
     int zero = 0;
@@ -169,17 +178,17 @@ sync_array_append(sync_array_t *sa, void *ent)
     /* Not allowed to append to a finalized array. */
     if (garray_next_idx(sa->data) == sa->final_next_idx) {
         sbmtx_unlock(sa->mtx);
-        return NULL;
+        return -1;
     }
     new_ent = garray_append(sa->data, ent);
     garray_append(sa->count, &zero);
     sbevent_signal(sa->evt);
     sbmtx_unlock(sa->mtx);
 
-    return new_ent;
+    return 0;
 }
 
-int
+size_t
 sync_array_finalize(sync_array_t *sa)
 {
     sbmtx_lock(sa->mtx);

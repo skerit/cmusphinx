@@ -24,12 +24,14 @@ consumer(sbthread_t *th)
 	for (i = 0; i < 20; ++i) {
 		if (sync_array_wait(sa, i, -1, -1) == 0) {
 			int ent;
-			sync_array_get(sa, i, &ent);
+			TEST_ASSERT(sync_array_get(sa, i, &ent) == 0);
 			printf("Thread %p got element %d = %d\n",
 			       th, i, ent);
+			TEST_ASSERT(i == ent);
 			sync_array_release(sa, i, i + 1);
 		}
 	}
+	printf("Thread %p freeing array and exiting\n", th);
 	sync_array_free(sa);
 	return 0;
 }
@@ -58,6 +60,7 @@ main(int argc, char *argv[])
 		sync_array_append(sa, &i);
 		sleep(1);
 	}
+	printf("Finalizing array\n");
 	sync_array_finalize(sa);
 	for (i = 0; i < 10; ++i) {
 		sbthread_wait(threads[i]);
