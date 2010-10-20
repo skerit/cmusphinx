@@ -95,6 +95,7 @@ typedef struct bptbl_s {
     int32 *word_idx;     /**< BPTable index for any word in current frame;
                             cleared before each frame */
     bitvec_t *valid_fr;  /**< Set of accessible frames (used in gc) */
+    int32 first_invert_bp; /**< First reordered backpointer (used in gc) */
     ps_latnode_t **frm_wordlist;   /**< List of active words in each frame. */
 } bptbl_t;
 

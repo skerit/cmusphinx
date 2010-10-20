@@ -107,6 +107,7 @@ bptbl_reset(bptbl_t *bptbl)
         bptbl->ef_idx[i] = -1;
     }
     bitvec_clear_all(bptbl->valid_fr, bptbl->n_frame_alloc);
+    bptbl->first_invert_bp = 0;
     bptbl->n_frame = 0;
     bptbl->n_ent = 0;
     bptbl->bss_head = 0;
@@ -226,13 +227,13 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
  * Compact the backpointer table.
  *
  * @param bptbl Backpointer table.
- * @param sidx Index at which to start scanning for invalid entries.
  * @param eidx First index which cannot be compacted.
  */
 static void
-bptbl_compact(bptbl_t *bptbl, int sidx, int eidx)
+bptbl_compact(bptbl_t *bptbl, int eidx)
 {
     int src, dest, ef;
+    int sidx = bptbl->first_invert_bp;
 
     ef = bptbl->ent[sidx].frame;
     E_INFO("compacting from %d to %d (%d to %d)\n",
@@ -243,6 +244,9 @@ bptbl_compact(bptbl_t *bptbl, int sidx, int eidx)
             bptbl->ef_idx[ef++] = dest;
         if (bptbl->ent[src].valid) {
             if (dest != src) {
+                /* Track the first compacted entry. */
+                if (bptbl->first_invert_bp == sidx)
+                    bptbl->first_invert_bp = dest;
                 bptbl->ent[dest] = bptbl->ent[src];
                 bptbl->ent[src].valid = FALSE;
             }
@@ -276,11 +280,12 @@ bptbl_forward_sort(bptbl_t *bptbl, int sidx, int eidx)
  * Remap backpointers in backpointer table.
  *
  * @param bptbl Backpointer table.
- * @param sidx Index of first backpointer to remap.
+ * @param eidx Index of first backpointer which cannot be remapped.
  */
 static void
-bptbl_invert(bptbl_t *bptbl, int sidx, int eidx)
+bptbl_invert(bptbl_t *bptbl, int eidx)
 {
+    int sidx = bptbl->first_invert_bp;
     int i;
 
     for (i = 0; i < bptbl->n_ent; ++i) {
@@ -319,14 +324,12 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     bptbl_mark(bptbl, prev_window_sf - 1, window_sf - 1, frame_idx);
     E_INFO("before compaction\n");
     dump_bptable(bptbl, 0, -1);
-    bptbl_compact(bptbl, 0, /* bptbl->ef_idx[prev_window_sf - 1], */
-                  bptbl->ef_idx[window_sf - 1]);
+    bptbl_compact(bptbl, bptbl->ef_idx[window_sf - 1]);
     E_INFO("after compaction\n");
     dump_bptable(bptbl, 0, -1);
     bptbl_forward_sort(bptbl, bptbl->ef_idx[prev_window_sf - 1],
                        bptbl->ef_idx[window_sf - 1]);
-    bptbl_invert(bptbl, 0, /* bptbl->ef_idx[prev_window_sf - 1], */
-                 bptbl->ef_idx[window_sf - 1]);
+    bptbl_invert(bptbl, bptbl->ef_idx[window_sf - 1]);
     E_INFO("after inversion\n");
     dump_bptable(bptbl, 0, -1);
     bptbl->window_sf = window_sf;
