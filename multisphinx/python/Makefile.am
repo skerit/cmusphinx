@@ -1,10 +1,15 @@
 EXTRA_DIST = pocketsphinx.c \
 	pocketsphinx.pyx \
 	pocketsphinx.pxd \
+	sphixnbase.c \
+	sphinxbase.pyx \
+	sphinxbase.pxd \
+	sb_test.py \
+	hufftest2.py \
 	ps_test.py \
 	setup_win32.py
 
-pkginclude_HEADERS = pocketsphinx.pxd
+pkginclude_HEADERS = pocketsphinx.pxd sphinxbase.pxd
 
 noinst_HEADERS = bogus_pygobject.h
 
@@ -28,14 +33,17 @@ clean-local:
 	$(RM) -r *.egg-info
 	$(RM) pymod-build-stamp filelist.txt
 
-pymod-build-stamp: $(srcdir)/pocketsphinx.c
+pymod-build-stamp: $(srcdir)/pocketsphinx.c $(srcdir)/sphinxbase.c
 # This is dumb, but distutils is completely incapable of VPATH building
 	test -z "$(VPATH)" || cp "$(srcdir)/pocketsphinx.c" pocketsphinx.c
+	test -z "$(VPATH)" || cp "$(srcdir)/sphinxbase.c" sphinxbase.c
 	$(PYTHON) setup.py build
 	touch $@
 endif
 
 if BUILD_CYTHON
 $(srcdir)/pocketsphinx.c: $(srcdir)/pocketsphinx.pyx $(srcdir)/pocketsphinx.pxd
+	cython -o $@ $< $(CPPFLAGS) -I$(sphinxbase)/python
+$(srcdir)/sphinxbase.c: $(srcdir)/sphinxbase.pyx $(srcdir)/sphinxbase.pxd
 	cython -o $@ $< $(CPPFLAGS) -I$(sphinxbase)/python
 endif

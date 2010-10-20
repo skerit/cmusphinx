@@ -60,16 +60,6 @@ try:
 except KeyError:
     pygtk_includes = []
 
-# If there is no @sphinxbase@ and friends use pkg-config
-if '@sphinxbase@' == '' or '@sphinxbasebuild@' == '':
-    sbconf = pkgconfig('sphinxbase')
-    sb_libdirs = sbconf.get('library_dirs', [])
-    sb_includes = sbconf.get('include_dirs', [])
-else:
-    sb_includes = ['@sphinxbasebuild@/include',
-                   '@sphinxbase@/include']
-    sb_libdirs = ['@sphinxbasebuild@/src/libsphinxbase/.libs']
-
 setup(name = 'PocketSphinx',
       version = '@VERSION@',
       author = 'David Huggins-Daines',
@@ -84,8 +74,16 @@ setup(name = 'PocketSphinx',
                    include_dirs=['@top_builddir@/include',
                                  '@top_srcdir@/include',
                                  '@top_srcdir@/python',
-                                 ] + sb_includes + pygtk_includes,
-                   library_dirs=['@top_builddir@/src/libpocketsphinx/.libs'] + sb_libdirs)
+                                 ] + pygtk_includes,
+                   library_dirs=['@top_builddir@/src/libpocketsphinx/.libs',
+                                 '@top_builddir@/src/libsphinxbase/.libs'
+                                 ]),
+        Extension('sphinxbase',
+                   sources=['sphinxbase.c'],
+                   libraries=['sphinxbase'],
+                   include_dirs=['@top_builddir@/include',
+                                 '@top_srcdir@/include'],
+                   library_dirs=['@top_builddir@/src/libsphinxbase/.libs'])
         ],
       cmdclass = {'bogus_uninstall' : bogus_uninstall}
      ) 
