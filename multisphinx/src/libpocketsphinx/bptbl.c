@@ -501,6 +501,53 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp)
 }
 
 int
+bptbl_commit(bptbl_t *bptbl)
+{
+    bpidx_t src, dest, eidx;
+    int frame_idx, dest_s_idx;
+
+    /* This is the frame we're working on and its bps. */
+    frame_idx = bptbl->n_frame - 1;
+    dest = bptbl_ef_idx(bptbl, frame_idx);
+    dest_s_idx = bptbl_ent(bptbl, dest)->s_idx;
+    eidx = bptbl_end_idx(bptbl);
+    E_DEBUG(4,("compacting %d bps\n", eidx - dest));
+    if (eidx == dest)
+        return 0;
+    /* Remove invalid bps and their rc entries. */
+    for (src = dest; src < eidx; ++src) {
+        bp_t *src_ent = bptbl_ent(bptbl, src);
+        bp_t *dest_ent = bptbl_ent(bptbl, dest);
+        if (src_ent->valid) {
+            int rcsize = bptbl_rcsize(bptbl, src_ent);
+            if (src_ent->s_idx != dest_s_idx) {
+                E_DEBUG(4,("Moving %d rc scores from %d to %d for bptr %d\n",
+                           rcsize, src_ent->s_idx, dest_s_idx, dest));
+                assert(src_ent->s_idx > dest_s_idx);
+                if (src < bptbl_end_idx(bptbl) - 1) {
+                    bp_t *src1_ent = bptbl_ent(bptbl, src + 1);
+                    assert(dest_s_idx + rcsize <= src1_ent->s_idx);
+                }
+                garray_move(bptbl->rc, dest_s_idx, src_ent->s_idx, rcsize);
+            }
+            *dest_ent = *src_ent;
+            dest_ent->s_idx = dest_s_idx;
+            dest_s_idx += rcsize;
+            ++dest;
+        }
+    }
+    E_DEBUG(4, ("Frame %d removed %d invalid bps out of %d\n",
+                frame_idx, eidx - dest,
+                eidx - bptbl_ef_idx(bptbl, frame_idx)));
+
+    /* Truncate active arrays. */
+    garray_pop_from(bptbl->rc, dest_s_idx);
+    garray_pop_from(bptbl->ent, dest);
+
+    return dest - src;
+}
+
+int
 bptbl_finalize(bptbl_t *bptbl)
 {
     int n_retired, last_retired_bp;
@@ -749,13 +796,14 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
     bss_head = garray_next_idx(bptbl->rc);
     garray_expand_to(bptbl->rc, bss_head + rcsize);
     bss = garray_ptr(bptbl->rc, int32, bss_head);
-    for (i = 0; i < rcsize; ++i)
+      for (i = 0; i < rcsize; ++i)
         *bss++ = WORST_SCORE;
     garray_ent(bptbl->rc, int32, bss_head + rc) = score;
 
-    E_DEBUG(3,("Entered bp %d sf %d ef %d active_fr %d\n", bptbl_end_idx(bptbl) - 1,
+    E_DEBUG(3,("Entered bp %d sf %d ef %d s_idx %d active_fr %d\n",
+               bptbl_end_idx(bptbl) - 1,
                bptbl_sf(bptbl, bptbl_end_idx(bptbl) - 1),
-               bptbl->n_frame - 1, bptbl->active_fr));
+               bptbl->n_frame - 1, bss_head, bptbl->active_fr));
     assert(bptbl_sf(bptbl, bptbl_end_idx(bptbl) - 1) >= bptbl->active_fr);
     return bpe;
 }

@@ -98,7 +98,6 @@ static void deinit_search_tree(fwdtree_search_t *fts);
 static int32 update_oldest_bp(fwdtree_search_t *fts, hmm_t *hmm);
 static void deactivate_channels(fwdtree_search_t *fts, int frame_idx);
 static void word_transition(fwdtree_search_t *fts, int frame_idx);
-static void bptable_maxwpf(fwdtree_search_t *fts, int frame_idx);
 static void prune_channels(fwdtree_search_t *fts, int frame_idx);
 static void prune_word_chan(fwdtree_search_t *fts, int frame_idx);
 static int too_old_too_cold(fwdtree_search_t *fts, int bp, int frame_idx);
@@ -1432,68 +1431,68 @@ prune_channels(fwdtree_search_t *fts, int frame_idx)
     prune_word_chan(fts, frame_idx);
 }
 
-/*
- * Limit the number of word exits in each frame to maxwpf.  And also limit the number of filler
- * words to 1.
- */
-static void
-bptable_maxwpf(fwdtree_search_t *fts, int frame_idx)
+static int
+fwdtree_maxwpf(fwdtree_search_t *fts, int frame_idx)
 {
-    int32 bp, n;
+    int32 n, maxwpf;
     int32 bestscr, worstscr;
     bp_t *bpe, *bestbpe, *worstbpe;
+    bp_t *start, *end;
+    bptbl_t *bptbl;
 
     /* Don't prune if no pruing. */
-    if (fts->maxwpf == -1 || fts->maxwpf >= ps_search_n_words(fts))
-        return;
+    maxwpf = fts->maxwpf;
+    bptbl = fts->bptbl;
+    if (maxwpf == -1)
+        return 0;
 
+    /* Get bps. */
+    start = bptbl_ent(bptbl, bptbl_ef_idx(bptbl, frame_idx));
+    end = bptbl_ent(bptbl, bptbl_end_idx(bptbl));
     /* Allow only one filler word exit (the best) per frame */
     bestscr = (int32) 0x80000000;
     bestbpe = NULL;
     n = 0;
-    /* BPTBL: Replace this with explicit iteration over the current
-     * frame (which frame_idx always is).  Also note that when bptbl
-     * becomes circular this will have to change. */
-    for (bp = bptbl_ef_idx(fts->bptbl, frame_idx);
-         bp < bptbl_ef_idx(fts->bptbl, frame_idx + 1); bp++) {
-        bpe = bptbl_ent(fts->bptbl, bp);
-        if (dict_filler_word(ps_search_dict(fts), bpe->wid)) {
+    for (bpe = start; bpe != end; ++bpe) {
+        if (dict_filler_word(bptbl->d2p->dict, bpe->wid)) {
             if (bpe->score BETTER_THAN bestscr) {
                 bestscr = bpe->score;
                 bestbpe = bpe;
             }
             bpe->valid = FALSE; /* Flag to indicate invalidation */
+            fts->word_idx[bpe->wid] = NO_BP;
             n++;                /* No. of filler words */
         }
     }
     /* Restore bestbpe to valid state */
     if (bestbpe != NULL) {
+        fts->word_idx[bestbpe->wid] = bptbl_idx(bptbl, bestbpe);
         bestbpe->valid = TRUE;
         --n;
     }
 
-    /* Allow up to maxwpf best entries to survive; mark the remaining with valid = 0 */
-    /* BPTBL: replace this with a count created above (duh) */
-    n = bptbl_ef_count(fts->bptbl, frame_idx) - n; /* No. of entries after limiting fillers */
-    for (; n > fts->maxwpf; --n) {
+    /* Allow up to maxwpf best entries to survive; mark the remaining
+     * with valid = 0 */
+    /* No. of entries after limiting fillers */
+    n = bptbl_ef_count(bptbl, frame_idx) - n;
+    for (; n > maxwpf; --n) {
         /* Find worst BPTable entry */
         worstscr = (int32) 0x7fffffff;
         worstbpe = NULL;
         /* BPTBL: Replace this with explicit iteration over the
          * current frame (which frame_idx always is). */
-        for (bp = bptbl_ef_idx(fts->bptbl, frame_idx);
-             bp < bptbl_ef_idx(fts->bptbl, frame_idx + 1); bp++) {
-            bpe = bptbl_ent(fts->bptbl, bp);
+        for (bpe = start; bpe != end; ++bpe) {
             if (bpe->valid && (bpe->score WORSE_THAN worstscr)) {
                 worstscr = bpe->score;
                 worstbpe = bpe;
             }
         }
-        /* FIXME: Don't panic! */
-        if (worstbpe == NULL)
-            E_FATAL("PANIC: No worst BPtable entry remaining\n");
+        assert(worstbpe != NULL);
         worstbpe->valid = 0;
+        fts->word_idx[worstbpe->wid] = NO_BP;
     }
+
+    return n;
 }
 
 static void
@@ -1755,8 +1754,9 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     evaluate_channels(fts, senscr, frame_idx);
     /* Prune HMMs and do phone transitions. */
     prune_channels(fts, frame_idx);
-    /* Do absolute pruning on word exits. */
-    bptable_maxwpf(fts, frame_idx);
+    /* Prune and commit new word exits. */
+    fwdtree_maxwpf(fts, frame_idx);
+    bptbl_commit(fts->bptbl);
     /* Do word transitions. */
     word_transition(fts, frame_idx);
     /* Deactivate pruned HMMs. */
@@ -1910,7 +1910,7 @@ fwdtree_search_exit_score(fwdtree_search_t *fts, bp_t *pbe, int rcphone)
      * it should be inlined or we should find a better way to do
      * this. */
     E_DEBUG(99,("fwdtree_search_exit_score(%d,%d)\n", bptbl_idx(fts->bptbl, pbe), rcphone));
-    //assert(pbe->valid);
+    assert(pbe->valid);
     if (pbe->last2_phone == -1) {
         int32 *bss = bptbl_rcscores(fts->bptbl, pbe);
         /* No right context for single phone predecessor words. */
@@ -1960,6 +1960,8 @@ fwdtree_search_save_bp(fwdtree_search_t *fts, int frame_idx,
     bp = fts->word_idx[w];
     if (bp != NO_BP) {
         bp_t *bpe = bptbl_ent(fts->bptbl, bp);
+        assert(bp >= bptbl_ef_idx(fts->bptbl, frame_idx));
+        assert(frame_idx == bpe->frame);
         /* Keep only the best scoring one (this is a potential source
          * of search errors...) */
         if (bpe->score WORSE_THAN score) {

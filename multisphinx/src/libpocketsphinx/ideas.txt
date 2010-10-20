@@ -194,3 +194,46 @@ can just use a freelist to allocate new backpointers as needed.
 
 ngram_search_exit_score gets called A LOT.  Not sure what to do about
 that.
+
+---
+
+Wrote about doing the fixed size bptbl stuff a bunch in the
+dissertation draft.  However I haven't really figured out how to do it
+yet.  The idea is to combine maxwpf (or really maxhistpf, but in
+pocketsphinx these are the same thing) with a duration model, such
+that the size of the bptbl is set as maxwpf * longest_word.
+
+The problem is that maxwpf doesn't work right with bptbl and gc.  The
+reason for this is that bptbl gc uses the valid flag for gc, so the
+maxwpf information gets erased.  This isn't a huge problem since we
+have a bunch of bits in that valid flag.
+
+The other issue is that the old maxwpf never actually removed anything
+from the bptbl, just marked it as invalid, so if things got screwed up
+it wouldn't lead to weird recognition failures.  It *should* be the
+case that invalidated bps will never be used to enter successor words
+and thus they will never show up in the search graph.
+
+Currently the way the maxwpf works is:
+
+ * Generate a bunch of word exits in final phone pruning
+ * Invalidate some of them
+ * Use the valid ones to re-enter the search graph
+
+Actually this takes place in a different part of the bptbl - it's only
+the entries that have just been generated for the current frame, and
+don't yet even have any references in the search graph.  So there
+should not be any conflict between this and the bptbl gc, AS LONG AS
+the pruned exits are actually removed from the graph before
+word_transition is called.
+
+Basically this is an entirely different phase of garbage collection.
+In fact, it may be reasonable to split out the current frame's bptbl
+entries from the active ones, since they aren't actually active yet,
+and since there could potentially be a large number of them - in
+theory it could be up to the number of words in the vocabulary.
+
+In this scheme bptbl would work similarly to arc_buffer in that there
+will be a "mark" operation (currently bptbl_push_frame()) and a
+"commit" operation - in this case rather than sorting, the commit
+operation would do pruning.

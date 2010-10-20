@@ -193,6 +193,11 @@ bp_t *bptbl_enter(bptbl_t *bptbl, int32 w, int32 path,
                   int32 score, int rc);
 
 /**
+ * Commit all valid backpointers from the current frame.
+ */
+int bptbl_commit(bptbl_t *bptbl);
+
+/**
  * Get the index of the current frame from the backpointer table.
  */
 int bptbl_frame_idx(bptbl_t *bptbl);

@@ -26,6 +26,7 @@
 * Make fwdflat work properly with arc buffer input - DONE
 
 * Make maxwpf work again with bptbl
+  - This only kind of works
 
 * Implement fixed size bptbls
 
