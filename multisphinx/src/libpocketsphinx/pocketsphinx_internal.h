@@ -103,6 +103,8 @@ struct ps_decoder_s {
     ptmr_t perf;        /**< Performance counter for all of decoding. */
     uint32 n_frame;     /**< Total number of frames processed. */
     featbuf_t *fb;      /**< Feature buffer. */
+    logmath_t *lmath;   /**< Global log-math computation. */
+    acmod_t *acmod;     /**< Initial, global acoustic model. */
     
     /* Search modules (each of which has its own thread and its own
      * acmod_t, which may be cloned). */
@@ -111,9 +113,6 @@ struct ps_decoder_s {
     ps_search_t *fwdtree;
     ps_search_t *fwdflat;
 
-    /* FIXME: Stuff that will go away but we need this to still compile. */
-    acmod_t *acmod;
-    logmath_t *lmath;
 };
 
 #endif /* __POCKETSPHINX_INTERNAL_H__ */

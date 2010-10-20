@@ -143,12 +143,20 @@ int featbuf_wait(featbuf_t *fb, int fidx, int timeout, mfcc_t *out_frame);
  * the data processing functions below is a Bad Idea, but that should
  * be obvious.
  *
+ * In order to avoid deadlock, a consumer must release all remaining
+ * frames when finished with utterance processing.  This can be
+ * accomplished by calling this function with @a eidx of -1.  If the
+ * first frame to be released is also not known, @a sidx of 0 can also
+ * be passed.
+ *
  * @param fb Feature buffer.
  * @param sidx Index of first frame to be released.
- * @param eidx One past index of last frame to be released.
+ * @param eidx One past index of last frame to be released, or -1 to
+ *             release all remaining frames.
  * @return 0, or <0 on error (but that is unlikely)
  */
 int featbuf_release(featbuf_t *fb, int sidx, int eidx);
+
 
 /**
  * Start processing for an utterance.

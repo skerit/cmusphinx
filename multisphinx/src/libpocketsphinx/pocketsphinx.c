@@ -192,11 +192,15 @@ ps_init(cmd_ln_t *config)
         ((float64)cmd_ln_float32_r(ps->config, "-logbase"), 0,
          cmd_ln_boolean_r(ps->config, "-bestpath"));
 
+    /* Feature buffer. */
+    ps->fb = featbuf_init(ps->config);
+
     /* FIXME: For the time being we will just clone a single acmod
      * between search passes.  We may use different models in the
      * future (would require good posterior probability calculation). */
-    if ((ps->acmod = acmod_init(ps->config, ps->lmath, NULL, NULL)) == NULL)
+    if ((ps->acmod = acmod_init(ps->config, ps->lmath, ps->fb)) == NULL)
         goto error_out;
+    acmod2 = acmod_copy(ps->acmod);
 
     /* FIXME: For the time being we share a single dict (and dict2pid)
      * between search passes, but this will change in the future. */
@@ -205,10 +209,7 @@ ps_init(cmd_ln_t *config)
     if ((d2p = dict2pid_build(ps->acmod->mdef, dict)) == NULL)
         goto error_out;
 
-    /* FIXME: For the time being hardcode fwdflat and fwdtree as the
-     * two searches. */
     ps->fwdtree = fwdtree_search_init(config, ps->acmod, dict, d2p);
-    acmod2 = acmod_copy(ps->acmod);
     ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
                                       ((fwdtree_search_t *)ps->fwdtree)->bptbl);
 
@@ -254,7 +255,7 @@ ps_free(ps_decoder_t *ps)
 
     ps_search_free(ps->fwdtree);
     ps_search_free(ps->fwdflat);
-    acmod_free(ps->acmod);
+    featbuf_free(ps->fb);
     logmath_free(ps->lmath);
     cmd_ln_free_r(ps->config);
     ckd_free(ps->uttid);
@@ -283,13 +284,13 @@ ps_get_logmath(ps_decoder_t *ps)
 fe_t *
 ps_get_fe(ps_decoder_t *ps)
 {
-    return ps->acmod->fe;
+    return featbuf_get_fe(ps->fb);
 }
 
 feat_t *
 ps_get_feat(ps_decoder_t *ps)
 {
-    return ps->acmod->fcb;
+    return featbuf_get_fcb(ps->fb);
 }
 
 int

@@ -11,7 +11,6 @@
 /* This will be a prototype for how acmod works. */
 typedef struct feat_reader_s {
 	featbuf_t *src;
-	int done;
 	int fr;
 } feat_reader_t;
 
@@ -22,7 +21,7 @@ consumer(sbthread_t *th)
 	mfcc_t feat[52];
 
 	printf("Consumer %p started\n", fr);
-	while (!fr->done) {
+	while (1) {
 		/* Wait for frame to be available. */
 		if (featbuf_wait(fr->src, fr->fr, -1, feat) < 0)
 			break;
@@ -35,6 +34,9 @@ consumer(sbthread_t *th)
 		featbuf_release(fr->src, fr->fr, fr->fr + 1);
 		++fr->fr;
 	}
+	featbuf_release(fr->src, fr->fr, -1);
+	printf("Consumer %p done\n", fr);
+	sleep(2);
 	printf("Consumer %p exiting\n", fr);
 	return 0;
 }
@@ -83,7 +85,9 @@ main(int argc, char *argv[])
 		TEST_ASSERT(rv == 0);
 	}
 	fclose(raw);
+	printf("Waiting for consumers\n");
 	featbuf_end_utt(fb, -1);
+	printf("Finished waiting\n");
 
 	/* Reap those threads. */
 	for (i = 0; i < 5; ++i) {

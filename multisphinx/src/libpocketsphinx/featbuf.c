@@ -69,6 +69,7 @@ struct featbuf_s {
     int beginutt, endutt;
     FILE *mfcfh;
     FILE *rawfh;
+    sbevent_t *evt;
 };
 
 static int
@@ -154,6 +155,7 @@ featbuf_init(cmd_ln_t *config)
     fb->sa = sync_array_init(0,
                              feat_dimension(fb->fcb)
                              * sizeof(mfcc_t));
+    fb->evt = sbevent_init();
     return fb;
 error_out:
     featbuf_free(fb);
@@ -187,13 +189,14 @@ featbuf_free(featbuf_t *fb)
     /* cmd_ln_free_r(fb->config); */
 
     /* Non-refcounted things. */
+    sbevent_free(fb->evt);
     ckd_free(fb->cepbuf);
     feat_array_free(fb->featbuf);
-    ckd_free(fb);
     if (fb->mfcfh)
         fclose(fb->mfcfh);
     if (fb->rawfh)
         fclose(fb->rawfh);
+    ckd_free(fb);
     return 0;
 }
 
@@ -234,7 +237,14 @@ featbuf_wait(featbuf_t *fb, int fidx, int timeout, mfcc_t *out_frame)
 int
 featbuf_release(featbuf_t *fb, int sidx, int eidx)
 {
-    return sync_array_release(fb->sa, sidx, eidx);
+    int rv;
+
+    if (eidx == -1)
+        eidx = sync_array_next_idx(fb->sa);
+    if ((rv = sync_array_release(fb->sa, sidx, eidx)) < 0)
+        return rv;
+    sbevent_signal(fb->evt);
+    return rv;
 }
 
 int
@@ -255,7 +265,8 @@ featbuf_start_utt(featbuf_t *fb)
 int
 featbuf_end_utt(featbuf_t *fb, int timeout)
 {
-    int nfr;
+    int nfr, tsec, tnsec, nwait = 0;
+    size_t last_idx;
 
     /* Set utterance processing state. */
     fb->endutt = TRUE;
@@ -287,19 +298,43 @@ featbuf_end_utt(featbuf_t *fb, int timeout)
     }
 
     /* Finalize. */
-    sync_array_finalize(fb->sa);
+    last_idx = sync_array_finalize(fb->sa);
 
-    /* Wait for everybody to be done (FIXME: not quite sure how to do
-     * that yet) */
+    /* Wait for everybody to be done. */
+    if (timeout == -1) {
+        tsec = 0;
+        tnsec = 50000; /* Arbitrary polling interval. */
+    }
+    else {
+        tsec = 0;
+        tnsec = timeout;
+    }
+    while (sync_array_available(fb->sa) < last_idx) {
+        if (nwait > 0)
+            return -1;
+        if (sbevent_wait(fb->evt, tsec, tnsec) < 0)
+            return -1;
+        if (timeout != -1)
+            ++nwait;
+    }
+    
     return 0;
 }
 
 int
 featbuf_abort_utt(featbuf_t *fb)
 {
-    sync_array_force_quit(fb->sa);
+    size_t last_idx;
 
-    /* Wait for everybody to quit (FIXME: can we do this?!) */
+    sync_array_force_quit(fb->sa);
+    last_idx = sync_array_next_idx(fb->sa);
+
+    while (sync_array_available(fb->sa) < last_idx) {
+        /* Arbitrary polling interval. */
+        if (sbevent_wait(fb->evt, 0, 50000) < 0)
+            return -1;
+    }
+
     return 0;
 }
 

@@ -1,6 +1,7 @@
 check_PROGRAMS = \
 	test_sync_array \
-	test_featbuf
+	test_featbuf \
+	test_acmod
 
 TESTS = $(check_PROGRAMS)
 

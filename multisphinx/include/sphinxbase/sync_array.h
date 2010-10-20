@@ -102,6 +102,17 @@ sync_array_t *sync_array_retain(sync_array_t *sa);
 int sync_array_free(sync_array_t *sa);
 
 /**
+ * Get the index of the first available element in an array.
+ *
+ * This function returns the index of the first element which has not
+ * yet been released by all consumers.  It can also be used to detect
+ * when all consumers have finished, as the index returned will then
+ * be equal to the one returned by sync_array_finalize() or
+ * sync_array_next_idx().
+ */
+size_t sync_array_available(sync_array_t *sa);
+
+/**
  * Get the index of the next element to become available.
  *
  * This is the same as the number of elements currently in the array.
@@ -177,6 +188,9 @@ size_t sync_array_finalize(sync_array_t *sa);
  * return an error.  It is, of course, up to those consumers to exit
  * cleanly.
  *
+ * It is recommended that consumers release all elements of the array
+ * by calling sync_array_release_all() upon encountering such an error.
+ *
  * @param sa Array.
  * @return 0, or <0 on failure (which is not allowed to happen)
  */
@@ -202,11 +216,6 @@ int sync_array_reset(sync_array_t *sa);
  * consumers release all elements before an index, those elements will
  * be freed and their memory returned to the operating system.
  *
- * This function does bounds-checking.  Therefore to release all
- * elements it can be called with start_idx = 0 and end_idx = (size_t)
- * -1.  However, it DOES NOT guard against multiple releases of the
- * same elements by the same consumer.  So don't do that.
- *
  * @param sa Array.
  * @param start_idx First index to release.
  * @param end_idx One past the last index to release.
@@ -215,5 +224,16 @@ int sync_array_reset(sync_array_t *sa);
 size_t sync_array_release(sync_array_t *sa,
 			  size_t start_idx, size_t end_idx);
 
+/**
+ * Release all elements in an array.
+ *
+ * This fuction is called by consumers to release all elements in the
+ * array, such as when they wish to signal completion or respond to a
+ * timeout error.
+ *
+ * @param sa Array.
+ * @return Actual last index released.
+ */
+size_t sync_array_release_all(sync_array_t *sa);
 
 #endif /* __SYNC_ARRAY_H__ */

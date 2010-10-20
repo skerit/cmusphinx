@@ -55,38 +55,15 @@
 #include <sphinxbase/err.h>
 
 /* Local headers. */
+#include "featbuf.h"
 #include "bin_mdef.h"
 #include "tmat.h"
 #include "hmm.h"
 
 /**
- * States in utterance processing.
- */
-typedef enum acmod_state_e {
-    ACMOD_IDLE,		/**< Not in an utterance. */
-    ACMOD_STARTED,      /**< Utterance started, no data yet. */
-    ACMOD_PROCESSING,   /**< Utterance in progress. */
-    ACMOD_ENDED         /**< Utterance ended, still buffering. */
-} acmod_state_t;
-
-/**
  * Dummy senone score value for unintentionally active states.
  */
 #define SENSCR_DUMMY 0x7fff
-
-/**
- * Feature space linear transform structure.
- */
-struct ps_mllr_s {
-    int refcnt;     /**< Reference count. */
-    int n_class;    /**< Number of MLLR classes. */
-    int n_feat;     /**< Number of feature streams. */
-    int *veclen;    /**< Length of input vectors for each stream. */
-    float32 ****A;  /**< Rotation part of mean transformations. */
-    float32 ***b;   /**< Bias part of mean transformations. */
-    float32 ***h;   /**< Diagonal transformation of variances. */
-    int32 *cb2mllr; /**< Mapping from codebooks to transformations. */
-};
 
 /**
  * Acoustic model parameter structure. 
@@ -126,31 +103,22 @@ struct ps_mgau_s {
 /**
  * Acoustic model structure.
  *
- * This object encapsulates all stages of acoustic processing, from
- * raw audio input to acoustic score output.  The reason for grouping
- * all of these modules together is that they all have to "agree" in
- * their parameterizations, and the configuration of the acoustic and
- * dynamic feature computation is completely dependent on the
- * parameters used to build the original acoustic model (which should
- * by now always be specified in a feat.params file).
- *
- * Because there is not a one-to-one correspondence from blocks of
- * input audio or frames of input features to frames of acoustic
- * scores (due to dynamic feature calculation), results may not be
- * immediately available after input, and the output results will not
- * correspond to the last piece of data input.
+ * This object corresponds to the acoustic scoring portion of acoustic
+ * evaluation.  Feature computation and buffering is done by
+ * featbuf_t.  Since the two objects must agree on the parameters for
+ * feature computation it is suggested that the same configuration
+ * (cmd_ln_t) be used to initialize them.  Compatibility will be
+ * checked at initialization time, however.
  */
 struct acmod_s {
     int refcount;
 
-    /* Global objects, not retained (FIXME: unsure if that's wise or not). */
+    /* Global objects. */
     cmd_ln_t *config;          /**< Configuration. */
     logmath_t *lmath;          /**< Log-math computation. */
     glist_t strings;           /**< Temporary acoustic model filenames. */
-
-    /* Feature computation: */
-    fe_t *fe;                  /**< Acoustic feature computation. */
-    feat_t *fcb;               /**< Dynamic feature computation. */
+    featbuf_t *fb;             /**< Source of features. */
+    feat_t *fcb;               /**< Feature parameters (belongs to @a fb) */
 
     /* Model parameters: */
     bin_mdef_t *mdef;          /**< Model definition. */
@@ -158,52 +126,28 @@ struct acmod_s {
     ps_mgau_t *mgau;           /**< Model parameters. */
 
     /* Senone scoring: */
+    mfcc_t ***feat_buf;        /**< Features for current frame. */
     int16 *senone_scores;      /**< GMM scores for current frame. */
     bitvec_t *senone_active_vec; /**< Active GMMs in current frame. */
     uint8 *senone_active;      /**< Array of deltas to active GMMs. */
-    int senscr_frame;          /**< Frame index for senone_scores. */
     int n_senone_active;       /**< Number of active GMMs. */
     int log_zero;              /**< Zero log-probability value. */
 
-    /* Utterance processing: */
-    mfcc_t **mfc_buf;   /**< Temporary buffer of acoustic features. */
-    mfcc_t ***feat_buf; /**< Temporary buffer of dynamic features. */
-    FILE *rawfh;        /**< File for writing raw audio data. */
-    FILE *mfcfh;        /**< File for writing acoustic feature data. */
-    long *framepos;     /**< File positions of recent frames in senone file. */
-
-    /* A whole bunch of flags and counters: */
-    uint8 state;        /**< State of utterance processing. */
-    uint8 compallsen;   /**< Compute all senones? */
-    uint8 grow_feat;    /**< Whether to grow feat_buf. */
-    uint8 insen_swap;   /**< Whether to swap input senone score. */
-    int16 output_frame; /**< Index of next frame of dynamic features. */
-    int16 n_mfc_alloc;  /**< Number of frames allocated in mfc_buf */
-    int16 n_mfc_frame;  /**< Number of frames active in mfc_buf */
-    int16 mfc_outidx;   /**< Start of active frames in mfc_buf */
-    int16 n_feat_alloc; /**< Number of frames allocated in feat_buf */
-    int16 n_feat_frame; /**< Number of frames active in feat_buf */
-    int16 feat_outidx;  /**< Start of active frames in feat_buf */
+    /* Flags and counters: */
+    int output_frame;          /**< Index of next frame to score. */
+    int compallsen;            /**< Compute all senone scores. */
 };
 typedef struct acmod_s acmod_t;
 
 /**
  * Initialize an acoustic model.
  *
- * @param config a command-line object containing parameters.  This
- *               pointer is not retained by this object.
- * @param lmath global log-math parameters.
- * @param fe a previously-initialized acoustic feature module to use,
- *           or NULL to create one automatically.  If this is supplied
- *           and its parameters do not match those in the acoustic
- *           model, this function will fail.  This pointer is not retained.
- * @param fcb a previously-initialized dynamic feature module to use,
- *           or NULL to create one automatically.  If this is supplied
- *           and its parameters do not match those in the acoustic
- *           model, this function will fail.  This pointer is not retained.
+ * @param config A command-line object containing parameters.
+ * @param lmath Global log-math parameters.
+ * @param featbuf_t Feature buffer to obtain features from.
  * @return a newly initialized acmod_t, or NULL on failure.
  */
-acmod_t *acmod_init(cmd_ln_t *config, logmath_t *lmath, fe_t *fe, feat_t *fcb);
+acmod_t *acmod_init(cmd_ln_t *config, logmath_t *lmath, featbuf_t *fb);
 
 /**
  * Create a partial copy of an acoustic model.
@@ -228,76 +172,66 @@ acmod_t *acmod_retain(acmod_t *acmod);
 int acmod_free(acmod_t *acmod);
 
 /**
- * Start logging MFCCs to a filehandle.
+ * Wait for a new frame of data to become available.
  *
- * @param acmod Acoustic model object.
- * @param logfh Filehandle to log to.
- * @return 0 for success, <0 on error.
+ * This function is used by the first pass of recognition, which is
+ * entirely driven by the acoustic model.
+ *
+ * If an error, timeout, or end-of-utterance condition is signalled
+ * this function will return a negative number.
+ *
+ * @param acmod Acoustic model.
+ * @param timeout Number of nanoseconds to wait, or -1 to wait indefinitely.
+ * @return Index of next available frame, or <0 on timeout or end of
+ *         utterance.
  */
-int acmod_set_mfcfh(acmod_t *acmod, FILE *logfh);
+int acmod_wait(acmod_t *acmod, int timeout);
 
 /**
- * Start logging raw audio to a filehandle.
+ * Calculate acoustic scores for a given frame index.
  *
- * @param acmod Acoustic model object.
- * @param logfh Filehandle to log to.
- * @return 0 for success, <0 on error.
+ * This function does not block.  If the given frame index is not
+ * available it will return NULL.
+ *
+ * The scores returned will only persist until the next call to
+ * acmod_score().  It is not safe to call this function from multiple
+ * threads.
+ *
+ * @param acmod Acoustic model.
+ * @param frame_idx Index of requested frame.
+ * @return Pointer to temporary senone scores.
  */
-int acmod_set_rawfh(acmod_t *acmod, FILE *logfh);
+int16 const *acmod_score(acmod_t *acmod, int frame_idx);
 
 /**
- * Mark the start of an utterance.
+ * Relinquish interest in a frame index.
+ *
+ * Once the scores for a given frame index are no longer needed, that
+ * frame should be released with this function in order to save memory.
+ *
+ * @param acmod Acoustic model.
+ * @param frame_idx Index of frame to release.
+ * @return 0, or <0 on error.
  */
-int acmod_start_utt(acmod_t *acmod);
+int acmod_release(acmod_t *acmod, int frame_idx);
 
 /**
- * Mark the end of an utterance.
+ * Report an end-of-utterance condition.
+ *
+ * @return TRUE if an end-of-utterance has been signalled.
  */
-int acmod_end_utt(acmod_t *acmod);
+int acmod_eou(acmod_t *acmod);
 
 /**
- * Get the number of frames of available feature data.
+ * Reset acoustic model for a new utterance.
  *
- * @return Number of available frames of feature data.
+ * This function resets the internal frame counter and other data
+ * structures in the acmod_t.
+ *
+ * @param acmod Acoustic model.
+ * @return 0, or <0 on error.
  */
-int acmod_available(acmod_t *acmod);
-
-/**
- * Advance the frame index.
- *
- * This function moves to the next frame of input data.  Subsequent
- * calls to acmod_score() will return scores for that frame, until the
- * next call to acmod_advance().
- *
- * If no new frames of input data are available, it does nothing, and
- * returns -1.
- *
- * @return New frame index, or -1 if no frames are available.
- */
-int acmod_advance(acmod_t *acmod);
-
-/**
- * Get the current frame index.
- *
- * @return Index of current frame to be scored.
- */
-int acmod_frame(acmod_t *acmod);
-
-/**
- * Score one frame of data.
- *
- * @param inout_frame_idx Input: frame index to score, or NULL
- *                        to obtain scores for the most recent frame.
- *                        Output: frame index corresponding to this
- *                        set of scores.
- * @return Array of senone scores for this frame, or NULL if no frame
- *         is available for scoring (such as if a frame index is
- *         requested that is not yet or no longer available).  The
- *         data pointed to persists only until the next call to
- *         acmod_score() or acmod_advance().
- */
-int16 const *acmod_score(acmod_t *acmod,
-                         int *inout_frame_idx);
+int acmod_reset(acmod_t *acmod);
 
 /**
  * Get best score and senone index for current frame.

@@ -283,3 +283,15 @@ sync_array_release(sync_array_t *sa, size_t start_idx, size_t end_idx)
 
     return i;
 }
+
+size_t
+sync_array_release_all(sync_array_t *sa)
+{
+    return sync_array_release(sa, 0, (size_t)-1);
+}
+
+size_t
+sync_array_available(sync_array_t *sa)
+{
+    return garray_base(sa->count);
+}
