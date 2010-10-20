@@ -19,6 +19,10 @@ typedef struct sync_array_s {
 	size_t final_next_idx;
 } sync_array_t;
 
+size_t sync_array_release(sync_array_t *sa,
+			  size_t start_idx, size_t end_idx);
+
+
 sync_array_t *
 sync_array_init(size_t n_ent, size_t ent_size)
 {
@@ -56,13 +60,13 @@ sync_array_free(sync_array_t *sa)
 {
 	if (sa == NULL)
 		return 0;
-
 	sbmtx_lock(sa->mtx);
 	if (--sa->refcount > 0) {
 		int refcount = sa->refcount;
 		sbmtx_unlock(sa->mtx);
+		sync_array_release(sa, 0, (size_t)-1);
 		return refcount;
-	}
+	}		
 	sbmtx_unlock(sa->mtx);
 	printf("Freeing sync array\n");
 	garray_free(sa->data);
@@ -143,19 +147,24 @@ sync_array_finalize(sync_array_t *sa)
 }
 
 size_t
-sync_array_release(sync_array_t *sa, size_t idx)
+sync_array_release(sync_array_t *sa, size_t start_idx, size_t end_idx)
 {
 	size_t i;
-	int count;
 
 	sbmtx_lock(sa->mtx);
-	if (idx < garray_base(sa->count)
-	    || idx > garray_next_idx(sa->count)) {
+	if (start_idx < garray_base(sa->count))
+		start_idx = garray_base(sa->count);
+	if (start_idx > garray_next_idx(sa->count))
+		start_idx = garray_next_idx(sa->count);
+	if (end_idx > garray_next_idx(sa->count))
+		end_idx = garray_next_idx(sa->count);
+	if (end_idx <= start_idx) {
 		sbmtx_unlock(sa->mtx);
-		return idx;
+		return start_idx;
 	}
-	/* Increment count for idx. */
-	count = ++garray_ent(sa->count, uint8, idx);
+	/* Increment count for all indices. */
+	for (i = start_idx; i < end_idx; ++i)
+		++garray_ent(sa->count, uint8, i);
 
 	/* Print stuff for debugging. */
 	printf("rc %d counts[%d:%d]:", (int)sa->refcount,
@@ -166,20 +175,25 @@ sync_array_release(sync_array_t *sa, size_t idx)
 		printf(" %d", (int)garray_ent(sa->count, uint8, i));
 	printf("\n");
 
-	/* Release unreachable elements (this assumes that the
-	 * producer will retain a pointer to the array). */
-	if (count >= sa->refcount - 1) {
-		/* FIXME... Assumes everybody releases everything in
-		 * order, which might not happen.... */
-		printf("Releasing up to %d\n", (int)idx);
-		garray_shift_from(sa->count, idx + 1);
-		garray_shift_from(sa->data, idx + 1);
-		garray_set_base(sa->count, idx + 1);
-		garray_set_base(sa->data, idx + 1);
+	/* Find first reachable element. */
+	for (i = garray_base(sa->count);
+	     i < garray_next_idx(sa->count); ++i)
+		/* Note that we assume the producer retains one
+		 * reference to the array. */
+		if (garray_ent(sa->count, uint8, i) < sa->refcount - 1)
+			break;
+
+	/* Release unreachable elements. */
+	if (i > garray_base(sa->count)) {
+		printf("Releasing up to %d\n", (int)i);
+		garray_shift_from(sa->count, i);
+		garray_shift_from(sa->data, i);
+		garray_set_base(sa->count, i);
+		garray_set_base(sa->data, i);
 	}
 	sbmtx_unlock(sa->mtx);
 
-	return idx;
+	return i;
 }
 
 static int
@@ -198,7 +212,7 @@ consumer(sbthread_t *th)
 		if (ent != NULL) {
 			printf("Thread %p got element %d = %d\n",
 			       th, i, *ent);
-			sync_array_release(sa, i);
+			sync_array_release(sa, i, i + 1);
 		}
 	}
 	sync_array_free(sa);
