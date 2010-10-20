@@ -311,9 +311,6 @@ typedef struct fwdtree_search_s {
 
     /** Maximum number of frames a silence word is allowed to persist. */
     int max_silence;
-
-    /** Are we done? */
-    int done;
 } fwdtree_search_t;
 
 /**

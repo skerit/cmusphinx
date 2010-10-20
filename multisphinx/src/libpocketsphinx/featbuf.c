@@ -238,7 +238,7 @@ featbuf_next(featbuf_t *fb)
 int
 featbuf_wait_utt(featbuf_t *fb, int timeout)
 {
-    int s = timeout == -1 ? -1 : 0;
+    int s = (timeout == -1) ? -1 : 0;
     int rc;
 
     if ((rc = sbevent_wait(fb->start, s, timeout)) < 0)
@@ -298,8 +298,10 @@ featbuf_start_utt(featbuf_t *fb)
 int
 featbuf_end_utt(featbuf_t *fb, int timeout)
 {
-    int nfr;
+    int nfr, s;
     size_t last_idx;
+
+    s = (timeout == -1) ? -1 : 0;
 
     /* Set utterance processing state. */
     fb->endutt = TRUE;
@@ -335,7 +337,7 @@ featbuf_end_utt(featbuf_t *fb, int timeout)
 
     /* Wait for everybody to be done. */
     while (sync_array_available(fb->sa) < last_idx) {
-        if (sbevent_wait(fb->release, 0, timeout) < 0)
+        if (sbevent_wait(fb->release, s, timeout) < 0)
             return -1;
         sbevent_reset(fb->release);
     }

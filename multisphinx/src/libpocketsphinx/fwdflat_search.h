@@ -265,9 +265,6 @@ typedef struct fwdflat_search_s {
     int32 fillpen;
     int32 silpen;
     int32 pip;
-
-    /** Are we done? */
-    int done;
 } fwdflat_search_t;
 
 /**

@@ -645,7 +645,6 @@ fwdtree_search_start(ps_search_t *base)
     ngram_model_flush(fts->lmset);
 
     /* Reset utterance statistics. */
-    fts->done = FALSE;
     memset(&fts->st, 0, sizeof(fts->st));
 
     /* Reset backpointer table. */
@@ -1784,7 +1783,6 @@ fwdtree_search_finish(ps_search_t *base)
     }
 
     /* Mark the current utterance as done. */
-    fts->done = TRUE;
     return 0;
 }
 
