@@ -45,8 +45,58 @@
 /* SphinxBase headers. */
 
 /* Local headers. */
-#include "ngram_search.h"
 #include "bptbl.h"
+
+/**
+ * Lexical tree node data type.
+ *
+ * Not the first HMM for words, which multiplex HMMs based on
+ * different left contexts.  This structure is used both in the
+ * dynamic HMM tree structure and in the per-word last-phone right
+ * context fanout.
+ */
+typedef struct nonroot_node_s {
+    hmm_t hmm;                  /**< Basic HMM structure.  This *must*
+                                   be first in the structure because
+                                   nonroot_node_t and root_node_t are
+                                   sometimes used interchangeably */
+    struct nonroot_node_s *next;/**< first descendant of this channel; or, in the
+				   case of the last phone of a word, the next
+				   alternative right context channel */
+    struct nonroot_node_s *alt;	/**< sibling; i.e., next descendant of parent HMM */
+
+    int32    ciphone;		/**< ciphone for this node */
+    union {
+	int32 penult_phn_wid;	/**< list of words whose last phone follows this one;
+				   this field indicates the first of the list; the
+				   rest must be built up in a separate array.  Used
+				   only within HMM tree.  -1 if none */
+	int32 rc_id;		/**< right-context id for last phone of words */
+    } info;
+} nonroot_node_t;
+
+/**
+ * Lexical tree node data type for the first phone (root) of each dynamic HMM tree
+ * structure.
+ *
+ * Each state may have a different parent static HMM.  Most fields are
+ * similar to those in nonroot_node_t.
+ */
+typedef struct root_node_s {
+    hmm_t hmm;                  /**< Basic HMM structure.  This *must* be first in
+                                   the structure because nonroot_node_t and root_node_t are
+                                   sometimes used interchangeably. */
+    nonroot_node_t *next;	/**< first descendant of this channel */
+
+    int32  penult_phn_wid;
+    int32  this_phn_wid;	/**< list of words consisting of this single phone;
+				   actually the first of the list, like penult_phn_wid;
+				   -1 if none */
+    int16    ciphone;		/**< first ciphone of this node; all words rooted at this
+				   node begin with this ciphone */
+    int16    ci2phone;		/**< second ciphone of this node; one root HMM for each
+                                   unique right context */
+} root_node_t;
 
 /**
  * Candidate words for entering their last phones.
@@ -103,6 +153,22 @@ typedef struct bestbp_rc_s {
 } bestbp_rc_t;
 
 /**
+ * Various statistics for profiling.
+ */
+typedef struct ngram_search_stats_s {
+    int32 n_phone_eval;
+    int32 n_root_chan_eval;
+    int32 n_nonroot_chan_eval;
+    int32 n_last_chan_eval;
+    int32 n_word_lastchan_eval;
+    int32 n_lastphn_cand_utt;
+    int32 n_fwdflat_chan;
+    int32 n_fwdflat_words;
+    int32 n_fwdflat_word_transition;
+    int32 n_senone_active_utt;
+} ngram_search_stats_t;
+
+/**
  * Approximate tree-based forward search.
  */
 typedef struct fwdtree_search_s {
@@ -110,8 +176,8 @@ typedef struct fwdtree_search_s {
     ngram_model_t *lmset;
     hmm_context_t *hmmctx;
 
-    listelem_alloc_t *chan_alloc;      /**< For chan_t */
-    listelem_alloc_t *root_chan_alloc; /**< For root_chan_t */
+    listelem_alloc_t *chan_alloc;      /**< For nonroot_node_t */
+    listelem_alloc_t *root_chan_alloc; /**< For root_node_t */
 
     /**
      * Backpointer table (temporary storage for active word arcs).
@@ -135,21 +201,21 @@ typedef struct fwdtree_search_s {
      * linked lists of CHANs, one list per word, and each CHAN in this
      * set is allocated only on demand and freed if inactive.
      */
-    root_chan_t *root_chan;  /**< Roots of search tree. */
+    root_node_t *root_chan;  /**< Roots of search tree. */
     int32 n_root_chan_alloc; /**< Number of root_chan allocated */
     int32 n_root_chan;       /**< Number of valid root_chan */
     int32 n_nonroot_chan;    /**< Number of valid non-root channels */
     int32 max_nonroot_chan;  /**< Maximum possible number of non-root channels */
-    root_chan_t *rhmm_1ph;   /**< Root HMMs for single-phone words */
+    root_node_t *rhmm_1ph;   /**< Root HMMs for single-phone words */
 
     /**
      * Channels associated with a given word (only used for right
      * contexts and single-phone words).  WARNING: For single-phone
-     * words this actually contains pointers to root_chan_t, which are
+     * words this actually contains pointers to root_node_t, which are
      * allocated using root_chan_alloc.  This is a suboptimal state of
      * affairs.
      */
-    chan_t **word_chan;
+    nonroot_node_t **word_chan;
     bitvec_t *word_active;      /**< array of active flags for all words. */
 
     /**
@@ -178,7 +244,7 @@ typedef struct fwdtree_search_s {
      * active_chan_list[f mod 2] = list of nonroot channels in the HMM
      * tree active in frame f.
      */
-    chan_t ***active_chan_list;
+    nonroot_node_t ***active_chan_list;
     int32 n_active_chan[2];  /**< Number entries in active_chan_list */
     /**
      * Array of active multi-phone words for current and next frame.
@@ -226,15 +292,36 @@ typedef struct fwdtree_search_s {
     int32 last_phone_best_score; /**< Best Viterbi path score for last phone. */
     int32 renormalized; /**< renormalized? (FIXME: allow multiple renorms) */
 
+    ngram_search_stats_t st; /**< Various statistics for profiling. */
+
+    /* A children's treasury of beam widths. */
+    int32 beam;
+    int32 dynamic_beam;
+    int32 pbeam;
+    int32 wbeam;
+    int32 lpbeam;
+    int32 lponlybeam;
+    int32 fwdflatbeam;
+    int32 fwdflatwbeam;
+    int32 fillpen;
+    int32 silpen;
+    int32 wip;
+    int32 nwpen;
+    int32 pip;
+    int32 maxwpf;
+    int32 maxhmmpf;
+
     /** Maximum number of frames a silence word is allowed to persist. */
     int max_silence;
+
+    /** Are we done? */
+    int done;
 } fwdtree_search_t;
 
 /**
  * Initialize fwdtree search.
  */
-ps_search_t *
-fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
-                    dict_t *dict, dict2pid_t *d2p)
+ps_search_t *fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
+                                 dict_t *dict, dict2pid_t *d2p);
 
 #endif /* __FWDTREE_SEARCH_H__ */

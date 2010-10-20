@@ -16,6 +16,7 @@ libpocketsphinx_la_SOURCES =			\
 	fsg_history.c				\
 	fsg_lextree.c				\
 	fsg_search.c				\
+	fwdtree_search.c			\
 	hmm.c					\
 	mdef.c					\
 	ms_gauden.c				\
@@ -47,6 +48,7 @@ noinst_HEADERS =				\
 	fsg_history.h				\
 	fsg_lextree.h				\
 	fsg_search_internal.h			\
+	fwdtree_search.h			\
 	hmm.h					\
 	mdef.h					\
 	ms_gauden.h				\

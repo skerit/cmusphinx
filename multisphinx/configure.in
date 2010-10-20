@@ -116,4 +116,5 @@ test/unit/test_string/Makefile
 test/unit/test_fe/Makefile
 test/unit/test_util/Makefile
 test/unit/test_logmath/Makefile
+test/unit/test_search/Makefile
 ])
