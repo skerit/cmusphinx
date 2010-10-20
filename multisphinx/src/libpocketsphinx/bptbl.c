@@ -68,7 +68,10 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
                                      sizeof(*bptbl->bscore_stack));
     bptbl->ef_idx = ckd_calloc(bptbl->n_frame_alloc + 1,
                                sizeof(*bptbl->ef_idx));
-    ++bptbl->ef_idx; /* Make bptableidx[-1] valid */
+    ++bptbl->ef_idx; /* Make ef_idx[-1] valid */
+    bptbl->sf_idx = ckd_calloc(bptbl->n_frame_alloc,
+                               sizeof(*bptbl->sf_idx));
+    bptbl->valid_fr = bitvec_alloc(bptbl->n_frame_alloc);
     bptbl->frm_wordlist = ckd_calloc(bptbl->n_frame_alloc,
                                      sizeof(*bptbl->frm_wordlist));
 
@@ -86,7 +89,9 @@ bptbl_free(bptbl_t *bptbl)
     ckd_free(bptbl->bscore_stack);
     if (bptbl->ef_idx != NULL)
         ckd_free(bptbl->ef_idx - 1);
+    ckd_free(bptbl->sf_idx);
     ckd_free(bptbl->frm_wordlist);
+    bitvec_free(bptbl->valid_fr);
     ckd_free(bptbl);
 }
 
@@ -115,8 +120,7 @@ static void
 bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
 {
     int prev_window_sf, window_sf;
-    glist_t agenda;
-    int i, j;
+    int i, j, n_active_fr, last_gc_fr;
 
     /* window_sf is the first frame which is still active in search
      * (i.e. for which outgoing word arcs can still be generated).
@@ -130,8 +134,7 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     if (window_sf <= prev_window_sf + 1)
         return;
     /* Invalidate all backpointer entries up to window_sf - 1. */
-    /* FIXME: actually anything behind window_sf - 1 is fair game, but
-     * we haven't yet figured out how to do that efficiently. */
+    /* FIXME: actually anything behind window_sf - 1 is fair game. */
     E_INFO("Garbage collecting from %d to %d:\n",
            prev_window_sf - 1, window_sf - 1);
     for (i = bptbl->ef_idx[prev_window_sf - 1];
@@ -147,47 +150,50 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     }
     /* Now re-activate all ones reachable from the elastic
      * window. (make sure frame_idx has been pushed!) */
-    E_INFO("Finding accessible from backpointers from %d to %d\n",
-           bptbl->ef_idx[window_sf], bptbl->ef_idx[frame_idx]);
-    agenda = NULL;
-    for (i = bptbl->ef_idx[window_sf];
+    E_INFO("Finding accessible frames from backpointers from %d to %d\n",
+           bptbl->ef_idx[window_sf - 1], bptbl->ef_idx[frame_idx]);
+    /* Collect accessible frames from these backpointers */
+    bitvec_clear_all(bptbl->valid_fr, frame_idx);
+    n_active_fr = 0;
+    for (i = bptbl->ef_idx[window_sf - 1];
          i < bptbl->ef_idx[frame_idx]; ++i) {
-        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
-               i, dict_wordstr(bptbl->d2p->dict,
-                                bptbl->ent[i].wid),
-               bp_sf(bptbl, i),
-               bptbl->ent[i].frame,
-               bptbl->ent[i].score,
-               bptbl->ent[i].bp);
-        agenda = glist_add_int32(agenda, i);
-    }
-    while (agenda) {
-        int32 bp = gnode_int32(agenda);
-        bp = bptbl->ent[bp].bp;
-        agenda = gnode_free(agenda, NULL);
-        /* Add all adjacent backpointers (the bogus lattice generation
-         * algorithm) */
-        if (bp != NO_BP && bptbl->ent[bp].frame >= prev_window_sf - 1) {
-            bptbl->ent[bp].valid = TRUE;
-            for (j = bptbl->ef_idx[bptbl->ent[bp].frame];
-                 j < bptbl->ef_idx[bptbl->ent[bp].frame + 1];
-                 ++j) {
-                agenda = glist_add_int32(agenda, j);
+        int32 bp = bptbl->ent[i].bp;
+        if (bp != NO_BP) {
+            int frame = bptbl->ent[bp].frame;
+            if (bitvec_is_clear(bptbl->valid_fr, frame)) {
+                bitvec_set(bptbl->valid_fr, frame);
+                ++n_active_fr;
             }
         }
     }
-    E_INFO("Invalidated entries:\n");
-    for (i = bptbl->ef_idx[prev_window_sf];
-         i < bptbl->ef_idx[window_sf]; ++i) {
-        if (bptbl->ent[i].valid == FALSE) {
-            E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
-                        i, dict_wordstr(bptbl->d2p->dict,
-                                        bptbl->ent[i].wid),
-                        bp_sf(bptbl, i),
-                        bptbl->ent[i].frame,
-                        bptbl->ent[i].score,
-                        bptbl->ent[i].bp);
+    /* Track the last frame with outgoing backpointers for gc */
+    last_gc_fr = window_sf - 2;
+    while (n_active_fr > 0) {
+        int next_gc_fr = 0;
+        n_active_fr = 0;
+        for (i = prev_window_sf - 1; i <= last_gc_fr; ++i) {
+            if (bitvec_is_set(bptbl->valid_fr, i)) {
+                bitvec_clear(bptbl->valid_fr, i);
+                /* Add all backpointers in this frame (the bogus
+                 * lattice generation algorithm) */
+                for (j = bptbl->ef_idx[i];
+                     j < bptbl->ef_idx[i + 1]; ++j) {
+                    int32 bp = bptbl->ent[j].bp;
+                    bptbl->ent[j].valid = TRUE;
+                    if (bp != NO_BP) {
+                        int frame = bptbl->ent[bp].frame;
+                        if (bitvec_is_clear(bptbl->valid_fr, frame)) {
+                            bitvec_set(bptbl->valid_fr, bptbl->ent[bp].frame);
+                            ++n_active_fr;
+                        }
+                        if (frame > next_gc_fr)
+                            next_gc_fr = frame;
+                    }
+                }
+            }
         }
+        E_INFO("last_gc_fr %d => %d\n", last_gc_fr, next_gc_fr);
+        last_gc_fr = next_gc_fr;
     }
     bptbl->window_sf = window_sf;
 }
@@ -204,6 +210,10 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
         bptbl->ef_idx = ckd_realloc(bptbl->ef_idx - 1,
                                     (bptbl->n_frame_alloc + 1)
                                     * sizeof(*bptbl->ef_idx));
+        bptbl->sf_idx = ckd_realloc(bptbl->sf_idx,
+                                    bptbl->n_frame_alloc
+                                    * sizeof(*bptbl->sf_idx));
+        bptbl->valid_fr = bitvec_realloc(bptbl->valid_fr, bptbl->n_frame_alloc);
         bptbl->frm_wordlist = ckd_realloc(bptbl->frm_wordlist,
                                           bptbl->n_frame_alloc
                                           * sizeof(*bptbl->frm_wordlist));
