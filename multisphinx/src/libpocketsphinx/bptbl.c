@@ -633,6 +633,18 @@ bptbl_ent(bptbl_t *bptbl, bpidx_t bpidx)
 }
 
 bpidx_t
+bptbl_active_idx(bptbl_t *bptbl)
+{
+    return bptbl->ef_idx[0];
+}
+
+bpidx_t
+bptbl_end_idx(bptbl_t *bptbl)
+{
+    return bptbl->n_ent;
+}
+
+bpidx_t
 bptbl_idx(bptbl_t *bptbl, bp_t *bpe)
 {
     if (bpe->frame < bptbl->active_fr)

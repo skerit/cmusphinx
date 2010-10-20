@@ -108,9 +108,8 @@ typedef struct bptbl_s {
      * backpointers.  Although no new backpointers will be generated
      * with starting frames before active_fr, and thus all
      * backpointers before active_fr can be retired, existing active
-     * backpointers will still have starting frames before it.  This
-     * marks the first backpointer which can not be removed entirely
-     * from the bptbl.
+     * backpointers will still have starting frames before active_fr.
+     * However, no active backpointer has a starting frame before
      */
     int32 oldest_bp;
     /**
@@ -209,6 +208,16 @@ int bptbl_frame_idx(bptbl_t *bptbl);
  * Obtain the index of the first word exit for a given frame.
  */
 bpidx_t bptbl_ef_idx(bptbl_t *bptbl, int frame_idx);
+
+/**
+ * Obtain the first active backpointer index.
+ */
+bpidx_t bptbl_active_idx(bptbl_t *bptbl);
+
+/**
+ * Obtain the index of the end of the backpointer table (the last index plus one).
+ */
+bpidx_t bptbl_end_idx(bptbl_t *bptbl);
 
 /**
  * Obtain a pointer to the backpointer with a given index.

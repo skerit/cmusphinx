@@ -158,10 +158,7 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     ffs->input_words = ckd_calloc(ps_search_n_words(ffs), sizeof(*ffs->input_words));
     E_INFO("Allocated %d KiB for active word flags\n",
            (int)ps_search_n_words(ffs) * sizeof(*ffs->input_words) / 1024);
-    ffs->n_input_arcs_alloc = 256;
-    ffs->input_arcs = ckd_calloc(ffs->n_input_arcs_alloc, sizeof(*ffs->input_arcs));
-    ffs->n_input_sf_alloc = 256;
-    ffs->input_sf_idx = ckd_calloc(ffs->n_input_sf_alloc, sizeof(*ffs->input_sf_idx));
+    ffs->input_arcs = fwdflat_arc_buffer_init(256, 256);
 
     ffs->bptbl = bptbl_init(d2p, cmd_ln_int32_r(config, "-latsize"), 256);
     if (input_bptbl)
@@ -445,11 +442,6 @@ fwdflat_search_start(ps_search_t *base)
     ffs->n_active_word[0] = 1;
 
     memset(ffs->input_words, 0, ps_search_n_words(ffs) * sizeof(*ffs->input_words));
-    ffs->input_next_bp = 0;
-    ffs->n_input_arcs = 0;
-    ffs->input_first_sf = 0;
-    ffs->input_n_sf = 0;
-
     ffs->best_score = 0;
     ffs->renormalized = FALSE;
 
@@ -926,13 +918,80 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
 }
 
 static int
+fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
+{
+    fwdflat_arc_t *arc_start, *arc_end, *arc;
+
+    arc_start = fwdflat_arc_buffer_iter(ffs->input_arcs, sf);
+    arc_end = fwdflat_arc_buffer_iter(ffs->input_arcs, ef);
+    for (arc = arc_start; arc != arc_end;
+         arc = fwdflat_arc_next(ffs->input_arcs, arc)) {
+    }
+    return 0;
+}
+
+static int
 fwdflat_search_step(ps_search_t *base, int frame_idx)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
 
     if (ffs->input_bptbl) {
+        int next_sf; /**< First frame pointed to by active bps. */
+        int nfr, narc;
 
-        return 0;
+        /* next_sf is the first starting frame that is still active.  The
+         * bptbl code tracks this for us in the form of the oldest
+         * backpointer referenced by the active part of the bptbl. */
+        /* FIXME: Add a function/macro for this. */
+        if (ffs->input_bptbl->oldest_bp == NO_BP) {
+            /* Can't do anything yet, everything is active. */
+            next_sf = 0;
+            return 0;
+        }
+        else {
+            /* FIXME: Add a function/macro for this. */
+            next_sf = bptbl_ent(ffs->input_bptbl,
+                                ffs->input_bptbl->oldest_bp)->frame + 1;
+            E_INFO("next_sf %d\n", next_sf);
+        }
+
+        /* Extend the arc buffer the appropriate number of frames. */
+        fwdflat_arc_buffer_extend(ffs->input_arcs, next_sf);
+
+        /* Add the next chunk of bps to the arc buffer.  FIXME: For
+         * the time being we just try to add them all, the arc buffer
+         * code will filter out the irrelevant ones. */
+        narc = fwdflat_arc_buffer_add_bps(ffs->input_arcs, ffs->input_bptbl,
+                                          0, ffs->input_bptbl->oldest_bp);
+        fwdflat_arc_buffer_commit(ffs->input_arcs);
+        E_INFO("narc %d\n", narc);
+
+        /* Now pull things from the arc buffer - everything above this
+         * line will be done in a separate thread in the near
+         * future.
+         *
+         * Basically we just want to wait until (frame_idx +
+         * max_sf_win - 1) is available in the arc buffer.  At that
+         * point we consume as many frames as possible (FIXME: this
+         * may or may not be the right policy but we'll deal with that
+         * later).
+         *
+         * In the non-threaded case we just figure out how many frames
+         * there are, and step through them.
+         */
+        /* First incarnation, just scan the entire arc buffer every
+         * time - we don't need to do this but it is a useful
+         * baseline. */
+        nfr = 0;
+        while (fwdflat_arc_buffer_iter(ffs->input_arcs,
+                                       frame_idx + ffs->max_sf_win - 1) != NULL) {
+            fwdflat_search_expand_arcs(ffs, frame_idx, frame_idx + ffs->max_sf_win);
+            fwdflat_search_one_frame(ffs, frame_idx);
+            ++frame_idx;
+            ++nfr;
+        }
+
+        return nfr;
     }
     else {
         /* Search one frame. */
@@ -994,4 +1053,84 @@ fwdflat_search_seg_iter(ps_search_t *base, int32 *out_score)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
     return bptbl_seg_iter(ffs->bptbl, out_score, ps_search_finish_wid(ffs));
+}
+
+fwdflat_arc_buffer_t *
+fwdflat_arc_buffer_init(int n_sf, int n_arc)
+{
+    fwdflat_arc_buffer_t *fab;
+
+    fab = ckd_calloc(1, sizeof(*fab));
+    fab->refcount = 1;
+    fab->n_arcs_alloc = n_arc;
+    fab->n_arcs = 0;
+    fab->arcs = ckd_calloc(fab->n_arcs_alloc, sizeof(*fab->arcs));
+    fab->n_sf_alloc = n_sf;
+    fab->n_sf = 0;
+    fab->sf_idx = ckd_calloc(fab->n_sf_alloc, sizeof(*fab->sf_idx));
+
+    return fab;
+}
+
+fwdflat_arc_buffer_t *
+fwdflat_arc_buffer_retain(fwdflat_arc_buffer_t *fab)
+{
+    ++fab->refcount;
+    return fab;
+}
+
+int
+fwdflat_arc_buffer_free(fwdflat_arc_buffer_t *fab)
+{
+    if (fab == NULL)
+        return 0;
+    if (--fab->refcount > 0)
+        return fab->refcount;
+
+    ckd_free(fab->sf_idx);
+    ckd_free(fab->arcs);
+    ckd_free(fab);
+    return 0;
+}
+
+int
+fwdflat_arc_buffer_extend(fwdflat_arc_buffer_t *fab, int next_sf)
+{
+    /* FIXME: Reuse old indices in the future, but not for now. */
+    if (next_sf > fab->n_sf_alloc) {
+        while (next_sf > fab->n_sf_alloc)
+            fab->n_sf_alloc *= 2;
+    }
+}
+
+int
+fwdflat_arc_buffer_add_bps(fwdflat_arc_buffer_t *fab,
+                           bptbl_t *bptbl, bpidx_t start,
+                           bpidx_t end)
+{
+}
+
+int
+fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
+{
+}
+
+fwdflat_arc_t *
+fwdflat_arc_buffer_iter(fwdflat_arc_buffer_t *fab, int sf)
+{
+}
+
+fwdflat_arc_t *
+fwdflat_arc_next(fwdflat_arc_buffer_t *fab, fwdflat_arc_t *ab)
+{
+}
+
+fwdflat_arc_t *
+fwdflat_arc_buffer_wait(fwdflat_arc_buffer_t *fab, int sf)
+{
+}
+
+int
+fwdflat_arc_buffer_release(fwdflat_arc_buffer_t *fab, int first_sf)
+{
 }
