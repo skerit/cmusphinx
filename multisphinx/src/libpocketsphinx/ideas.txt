@@ -276,7 +276,9 @@ sounds good in the dissertation, probably should find a way to spin
 it, i.e. "we thought this would be really important but in the end it
 didn't matter" or maybe "we thought this would be really cool but it's
 good enough to just estimate the appropriate size from the dictionary
-and be able to grow it in an emergency"
+and be able to grow it in an emergency".  In addition what we can do
+is present some empirical data about the connection between the
+vocabulary and the size of the active backpointer table.
 
 Actually.  The real reason we'd want to do it is to be able to make it
 a circular buffer.  There is a pretty valid question here which is how

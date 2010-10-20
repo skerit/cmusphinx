@@ -118,7 +118,6 @@ bptbl_reset(bptbl_t *bptbl)
     garray_reset(bptbl->permute);
     garray_reset(bptbl->ef_idx);
     garray_reset(bptbl->rc);
-    bptbl->first_invert_bp = 0;
     bptbl->dest_s_idx = 0;
     bptbl->n_frame = 0;
     bptbl->oldest_bp = NO_BP;
@@ -279,7 +278,7 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
     int active_dest_s_idx;
 
     /* First available backpointer index in retired. */
-    dest = garray_next_idx(bptbl->retired);
+    dest = bptbl_retired_idx(bptbl);
     /* Expand retired if necessary. */
     garray_expand_to(bptbl->retired, dest + n_retired);
     /* Note we use the "cooked" backpointer indices here. */
@@ -343,8 +342,8 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
  * Remap backpointer indices in backpointer table.
  *
  * This needs to be done both in newly retired backpointers (which
- * range from first_invert_bp to last_retired_bp) as well as in still
- * active backpointers, which range from first_active_bp to bptbl->n_ent.
+ * start at first_retired_bp) as well as in still active backpointers,
+ * which range from first_active_bp to bptbl->n_ent.
  *
  * This has the side effect of setting bptbl->oldest_bp
  *
@@ -354,17 +353,19 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
  * @param first_active_bp Index of first remaining active backpointer
  */
 static void
-bptbl_remap(bptbl_t *bptbl, int last_retired_bp,
+bptbl_remap(bptbl_t *bptbl, int first_retired_bp,
             int last_remapped_bp, int first_active_bp)
 {
+    int last_retired_bp;
     int i;
 
-    E_DEBUG(2,("inverting %d:%d from %d to %d and %d to %d\n",
-               bptbl->first_invert_bp, last_remapped_bp,
-               bptbl->first_invert_bp, last_retired_bp,
+    last_retired_bp = bptbl_retired_idx(bptbl);
+    E_DEBUG(2,("remapping %d:%d from %d to %d and %d to %d\n",
+               first_retired_bp, last_remapped_bp,
+               first_retired_bp, last_retired_bp,
                first_active_bp, bptbl_end_idx(bptbl)));
     /* First remap backpointers in newly retired bps. */
-    for (i = bptbl->first_invert_bp; i < last_retired_bp; ++i) {
+    for (i = first_retired_bp; i < last_retired_bp; ++i) {
         bp_t *bpe = garray_ptr(bptbl->retired, bp_t, i);
         /* Remember, these are the *source* backpointer indices, so
          * they fall in the range between prev_active_fr (which is the
@@ -401,7 +402,7 @@ bptbl_remap(bptbl_t *bptbl, int last_retired_bp,
  * Update the active frame pointer and backpointer array.
  */
 static void
-bptbl_update_active(bptbl_t *bptbl, int active_fr, int last_retired_bp)
+bptbl_update_active(bptbl_t *bptbl, int active_fr)
 {
     /* This means nothing happened. */
     if (active_fr == bptbl_active_frame(bptbl))
@@ -423,16 +424,14 @@ bptbl_update_active(bptbl_t *bptbl, int active_fr, int last_retired_bp)
                active_fr, bptbl_active_frame(bptbl)));
     garray_shift_from(bptbl->ef_idx, active_fr);
     garray_set_base(bptbl->ef_idx, active_fr);
-
-    /* Update external frame indices (FIXME: probably no longer necessary). */
-    bptbl->first_invert_bp = last_retired_bp;
 }
 
 static void
 bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
 {
     int next_active_fr;
-    int n_retired, last_retired_bp;
+    int n_retired;
+    int first_retired_bp;
 
     /* active_fr is the first frame which is still active in search
      * (i.e. for which outgoing word arcs can still be generated).
@@ -451,22 +450,24 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     /* If there is nothing to GC then finish up. */
     if (bptbl_ef_idx(bptbl, bptbl_active_frame(bptbl))
         == bptbl_ef_idx(bptbl, next_active_fr)) {
-        bptbl_update_active(bptbl, next_active_fr, bptbl->first_invert_bp);
+        bptbl_update_active(bptbl, next_active_fr);
         return;
     }
-    E_DEBUG(2,("GC from frame %d to %d\n", bptbl_active_frame(bptbl), next_active_fr));
+    E_DEBUG(2,("GC from frame %d to %d\n", bptbl_active_frame(bptbl),
+               next_active_fr));
     /* Expand the permutation table if necessary. */
     garray_expand_to(bptbl->permute, bptbl_ef_idx(bptbl, next_active_fr));
     garray_set_base(bptbl->permute, bptbl_active_idx(bptbl));
     /* Mark, compact, snap pointers. */
     n_retired = bptbl_mark(bptbl, next_active_fr, frame_idx);
     E_DEBUG(2,("About to retire %d bps\n", n_retired));
-    last_retired_bp = bptbl_retire(bptbl, n_retired, bptbl_ef_idx(bptbl, next_active_fr));
-    assert(n_retired == last_retired_bp - bptbl->first_invert_bp);
-    bptbl_remap(bptbl, last_retired_bp,
+    first_retired_bp = bptbl_retired_idx(bptbl);
+    bptbl_retire(bptbl, n_retired,
+                 bptbl_ef_idx(bptbl, next_active_fr));
+    bptbl_remap(bptbl, first_retired_bp,
                 bptbl_ef_idx(bptbl, next_active_fr),
                 bptbl_ef_idx(bptbl, next_active_fr));
-    bptbl_update_active(bptbl, next_active_fr, last_retired_bp);
+    bptbl_update_active(bptbl, next_active_fr);
     E_INFO("Retired %d bps: now %d retired, %d active\n", n_retired,
            bptbl_retired_idx(bptbl),
            bptbl_end_idx(bptbl) - bptbl_active_idx(bptbl));
@@ -549,7 +550,7 @@ bptbl_commit(bptbl_t *bptbl)
 int
 bptbl_finalize(bptbl_t *bptbl)
 {
-    int n_retired, last_retired_bp;
+    int n_retired, first_retired_bp;
 
     E_DEBUG(2,("Final GC from frame %d to %d\n",
                bptbl_active_frame(bptbl), bptbl->n_frame));
@@ -564,10 +565,11 @@ bptbl_finalize(bptbl_t *bptbl)
     /* Include the last frame in the retired count. */
     n_retired += bptbl_ef_count(bptbl, bptbl->n_frame - 1);
     E_DEBUG(2,("About to retire %d bps\n", n_retired));
-    last_retired_bp = bptbl_retire(bptbl, n_retired, bptbl_end_idx(bptbl));
-    bptbl_remap(bptbl, last_retired_bp, bptbl_end_idx(bptbl), bptbl_end_idx(bptbl));
+    first_retired_bp = bptbl_retired_idx(bptbl);
+    bptbl_retire(bptbl, n_retired, bptbl_end_idx(bptbl));
+    bptbl_remap(bptbl, first_retired_bp,
+                bptbl_end_idx(bptbl), bptbl_end_idx(bptbl));
     /* Just invalidate active entries, no need to move anything. */
-    bptbl->first_invert_bp = last_retired_bp;
     /* Empty the active entry table and set its base index to the
      * final index, which implicitly sets bptbl_active_idx (sorry
      * about that).  Do the same thing for bptbl_active_frame. */
@@ -613,8 +615,10 @@ bptbl_find_exit(bptbl_t *bptbl, int32 wid)
     if (bptbl_active_idx(bptbl) == bptbl_end_idx(bptbl)) {
         bp_t *first_retired = garray_ptr(bptbl->retired, bp_t, 0);
         /* Final, so it's in retired. */
-        start = garray_ptr(bptbl->retired, bp_t, bptbl->first_invert_bp - 1);
-        end = garray_ptr(bptbl->retired, bp_t, bptbl->first_invert_bp);
+        start = garray_ptr(bptbl->retired, bp_t,
+                           bptbl_retired_idx(bptbl) - 1);
+        end = garray_ptr(bptbl->retired, bp_t,
+                         bptbl_retired_idx(bptbl));
         ef = start->frame;
         while (start >= first_retired && start->frame == ef)
             --start;
@@ -680,7 +684,7 @@ bptbl_active_idx(bptbl_t *bptbl)
 bpidx_t
 bptbl_retired_idx(bptbl_t *bptbl)
 {
-    return bptbl->first_invert_bp;
+    return garray_next_idx(bptbl->retired);
 }
 
 
