@@ -705,7 +705,7 @@ ngram_search_finish(ps_search_t *search)
 
     if (ngs->fwdtree) {
         ngram_fwdtree_finish(ngs);
-        /* dump_bptable(ngs); */
+        dump_bptable(ngs);
 
         /* Now do fwdflat search in its entirety, if requested. */
         if (ngs->fwdflat) {

@@ -1,0 +1,21 @@
+Insertion sort should be relatively efficient for sorting the
+backpointer table since it contains long runs of the same value and is
+loosely ordered.
+
+We can speed it up by speeding up the search for an insertion location
+- we track the oldest backpointer in the lexicon tree and its
+corresponding location in the backpointer table, and there is no need
+to search before it for insertion.  This also has the consequence that
+all backpointer entries before it are frozen in place and can thus be
+converted to lattice nodes or used for fwdflat search.
+
+This gives us one version of the elastic lookahead window.  The other
+version uses the "convergence" property of the lattice, which is
+defined hence:
+
+---
+
+So we will add another phase to each frame of search, which is sorting
+and garbage collection of the lattice (in the future we can hopefully
+put this in its own thread) This task gets inserted between fwdflat
+and fwdtree, and between fwdtree and bestpath/lattice generation.

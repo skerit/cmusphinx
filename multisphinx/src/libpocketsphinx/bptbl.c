@@ -51,13 +51,13 @@
 /* Local headers. */
 #include "ngram_search.h"
 
-static void
+void
 dump_bptable(ngram_search_t *ngs)
 {
     int i;
     E_INFO("Backpointer table (%d entries):\n", ngs->bpidx);
     for (i = 0; i < ngs->bpidx; ++i) {
-        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp\n", /* %-3d history %08x\n", */
+        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
                     i, dict_wordstr(ps_search_dict(ngs), ngs->bp_table[i].wid),
                     ngs->bp_table[i].bp == -1 ? 0 : 
                     ngs->bp_table[ngs->bp_table[i].bp].frame + 1,

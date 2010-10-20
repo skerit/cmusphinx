@@ -394,4 +394,6 @@ ps_lattice_t *ngram_search_lattice(ps_search_t *search);
  */
 int32 ngram_search_exit_score(ngram_search_t *ngs, bp_t *pbe, int rcphone);
 
+void dump_bptable(ngram_search_t *ngs);
+
 #endif /* __NGRAM_SEARCH_H__ */
