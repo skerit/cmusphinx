@@ -43,14 +43,21 @@
 /* System headers. */
 #include <string.h>
 #include <assert.h>
+#include <config.h>
 
 /* SphinxBase headers. */
 #include <sphinxbase/sync_array.h>
 #include <sphinxbase/sbthread.h>
 #include <sphinxbase/ckd_alloc.h>
+#include <sphinxbase/byteorder.h>
 
 /* Local headers. */
 #include "featbuf.h"
+
+/* We use normal C conditionals for this not preprocessor ones. */
+#ifndef WORDS_BIGENDIAN
+#define WORDS_BIGENDIAN 0
+#endif
 
 struct featbuf_s {
     sync_array_t *sa;
@@ -60,6 +67,8 @@ struct featbuf_s {
     mfcc_t *cepbuf;
     mfcc_t ***featbuf;
     int beginutt, endutt;
+    FILE *mfcfh;
+    FILE *rawfh;
 };
 
 static int
@@ -181,6 +190,10 @@ featbuf_free(featbuf_t *fb)
     ckd_free(fb->cepbuf);
     feat_array_free(fb->featbuf);
     ckd_free(fb);
+    if (fb->mfcfh)
+        fclose(fb->mfcfh);
+    if (fb->rawfh)
+        fclose(fb->rawfh);
     return 0;
 }
 
@@ -254,6 +267,24 @@ featbuf_end_utt(featbuf_t *fb, int timeout)
     /* Drain remaining frames from fb->fcb.*/
     if (featbuf_process_cep(fb, &fb->cepbuf, nfr, FALSE) < 0)
         return -1;
+
+    /* Close out log files. */
+    if (fb->mfcfh) {
+        int32 outlen, rv;
+        outlen = (ftell(fb->mfcfh) - 4) / 4;
+        if (!WORDS_BIGENDIAN)
+            SWAP_INT32(&outlen);
+        /* Try to seek and write */
+        if ((rv = fseek(fb->mfcfh, 0, SEEK_SET)) == 0) {
+            fwrite(&outlen, 4, 1, fb->mfcfh);
+        }
+        fclose(fb->mfcfh);
+        fb->mfcfh = NULL;
+    }
+    if (fb->rawfh) {
+        fclose(fb->rawfh);
+        fb->rawfh = NULL;
+    }
 
     /* Finalize. */
     sync_array_finalize(fb->sa);
@@ -337,6 +368,8 @@ featbuf_process_raw(featbuf_t *fb,
     int16 const *rptr;
 
     /* Write audio to log file. */
+    if (fb->rawfh)
+        fwrite(raw, 2, n_samps, fb->rawfh);
 
     /* Full utt, process it all (CMN, etc)... */
     if (full_utt)
@@ -358,6 +391,34 @@ featbuf_process_raw(featbuf_t *fb,
     return 0;
 }
 
+static int
+featbuf_log_mfc(featbuf_t *fb,
+                mfcc_t **cep, int n_frames)
+{
+    int i, n;
+    int32 *ptr = (int32 *)cep[0];
+
+    n = n_frames * feat_cepsize(fb->fcb);
+    /* Swap bytes. */
+    if (!WORDS_BIGENDIAN) {
+        for (i = 0; i < (n * sizeof(mfcc_t)); ++i) {
+            SWAP_INT32(ptr + i);
+        }
+    }
+    /* Write features. */
+    if (fwrite(cep[0], sizeof(mfcc_t), n, fb->mfcfh) != n) {
+        E_ERROR_SYSTEM("Failed to write %d values to log file", n);
+    }
+
+    /* Swap them back. */
+    if (!WORDS_BIGENDIAN) {
+        for (i = 0; i < (n * sizeof(mfcc_t)); ++i) {
+            SWAP_INT32(ptr + i);
+        }
+    }
+    return 0;
+}
+
 int
 featbuf_process_cep(featbuf_t *fb,
                     mfcc_t **cep,
@@ -367,6 +428,8 @@ featbuf_process_cep(featbuf_t *fb,
     mfcc_t **cptr;
 
     /* Write frames to log file. */
+    if (fb->mfcfh)
+        featbuf_log_mfc(fb, cep, n_frames);
 
     /* Full utt, process it all (CMN, etc)... */
     if (full_utt)
@@ -402,3 +465,25 @@ featbuf_process_feat(featbuf_t *fb,
     /* This one is easy, at least... */
     return sync_array_append(fb->sa, feat[0]);
 }
+
+int
+featbuf_set_mfcfh(featbuf_t *fb, FILE *logfh)
+{
+    int rv = 0;
+
+    if (fb->mfcfh)
+        fclose(fb->mfcfh);
+    fb->mfcfh = logfh;
+    fwrite(&rv, 4, 1, fb->mfcfh);
+    return rv;
+}
+
+int
+featbuf_set_rawfh(featbuf_t *fb, FILE *logfh)
+{
+    if (fb->rawfh)
+        fclose(fb->rawfh);
+    fb->rawfh = logfh;
+    return 0;
+}
+

@@ -113,6 +113,9 @@ sync_array_free(sync_array_t *sa)
     }		
     sbmtx_unlock(sa->mtx);
     printf("Freeing sync array\n");
+    E_INFO("Maximum allocation %d items (%d KiB)\n",
+           garray_alloc_size(sa->data),
+           garray_alloc_size(sa->data) * (garray_ent_size(sa->data) + 1) / 1024);
     garray_free(sa->data);
     garray_free(sa->count);
     sbevent_free(sa->evt);
