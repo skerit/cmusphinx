@@ -370,11 +370,8 @@ ngram_fwdflat_start(ngram_search_t *ngs)
     build_fwdflat_wordlist(ngs);
     build_fwdflat_chan(ngs);
 
-    ngs->bptbl->n_ent = 0;
-    ngs->bptbl->bss_head = 0;
-    ngs->bptbl->window_sf = 0;
+    bptbl_reset(ngs->bptbl);
     ngs->oldest_bp = -1;
-
     for (i = 0; i < ps_search_n_words(ngs); i++)
         ngs->bptbl->word_idx[i] = NO_BP;
 

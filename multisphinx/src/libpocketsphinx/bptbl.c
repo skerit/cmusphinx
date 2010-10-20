@@ -96,6 +96,23 @@ bptbl_free(bptbl_t *bptbl)
 }
 
 void
+bptbl_reset(bptbl_t *bptbl)
+{
+    int i;
+
+    for (i = 0; i < bptbl->n_frame_alloc; ++i) {
+        bptbl->sf_idx[i] = -1;
+        bptbl->ef_idx[i] = -1;
+    }
+    bitvec_clear_all(bptbl->valid_fr, bptbl->n_frame_alloc);
+    bptbl->n_frame = 0;
+    bptbl->n_ent = 0;
+    bptbl->bss_head = 0;
+    bptbl->window_sf = 0;
+    bptbl->swindow_sf = 0;
+}
+
+void
 dump_bptable(bptbl_t *bptbl)
 {
     int i, j;
@@ -115,6 +132,85 @@ dump_bptable(bptbl_t *bptbl)
     E_INFO("%d valid entries\n", j);
 }
 
+static void
+bptbl_forward_sort(bptbl_t *bptbl, int sf, int ef)
+{
+    int i, new_swindow_sf, last_valid_bp;
+    int *prev_idx;
+    int *prev_sf;
+
+    /* Sort and compact everything between sf and ef. */
+    E_INFO("Insertion sorting valid backpointers from %d to %d:\n", sf, ef);
+    new_swindow_sf = ef;
+    prev_idx = ckd_calloc(bptbl->ef_idx[ef], sizeof(*prev_idx));
+    prev_sf = ckd_calloc(bptbl->ef_idx[ef], sizeof(*prev_sf));
+    for (i = 0; i < bptbl->ef_idx[ef]; ++i) {
+        prev_idx[i] = i;
+        prev_sf[i] = bp_sf(bptbl, i);
+    }
+    last_valid_bp = bptbl->ef_idx[ef];
+    for (i = bptbl->ef_idx[sf]; i < last_valid_bp; ++i) {
+        int sf, j;
+        bp_t ent;
+
+        while (bptbl->ent[i].valid == FALSE && i < last_valid_bp) {
+            E_INFO_NOFN("deleting: %-5d %-10s start %-3d\n",
+                        i, dict_wordstr(bptbl->d2p->dict,
+                                        bptbl->ent[i].wid), sf);
+            memmove(bptbl->ent + i, bptbl->ent + i + 1,
+                    (last_valid_bp - i - 1) * sizeof(*bptbl->ent));
+            memmove(prev_idx + i, prev_idx + i + 1,
+                    (last_valid_bp - i - 1) * sizeof(*prev_idx));
+            memmove(prev_sf + i, prev_sf + i + 1,
+                    (last_valid_bp - i - 1) * sizeof(*prev_sf));
+            --last_valid_bp;
+        }
+        if (i == last_valid_bp)
+            break;
+        sf = prev_sf[i];
+        E_INFO_NOFN("%-5d %-10s start %-3d\n",
+                    i, dict_wordstr(bptbl->d2p->dict,
+                                    bptbl->ent[i].wid), sf);
+        /* Update start frame pointer. */
+        if (sf < new_swindow_sf)
+            new_swindow_sf = sf;
+        /* Compact and search for insertion point from sf. */
+        for (j = 0; j < i; ++j) {
+            int jsf;
+            jsf = prev_sf[j];
+            if (jsf >= sf) {
+                E_INFO("  inserting to %d\n", j);
+                ent = bptbl->ent[i];
+                memmove(bptbl->ent + j + 1, bptbl->ent + j,
+                        (i - j) * sizeof(*bptbl->ent));
+                memmove(prev_idx + j + 1, prev_idx + j,
+                        (i - j) * sizeof(*prev_idx));
+                memmove(prev_sf + j + 1, prev_sf + j,
+                        (i - j) * sizeof(*prev_sf));
+                bptbl->ent[j] = ent;
+                prev_idx[j] = i;
+                prev_sf[j] = sf;
+                if (j < bptbl->sf_idx[jsf] || bptbl->sf_idx[jsf] == -1)
+                    bptbl->sf_idx[jsf] = j;
+                break;
+            }
+        }
+    }
+    ckd_free(prev_idx);
+    ckd_free(prev_sf);
+    /* ef is never actually a valid value for it. */
+    if (new_swindow_sf != ef) {
+        /* This sometimes decreases, which we sadly can't prevent.
+         * That's okay because we don't care about the previous value
+         * of it for sorting. */
+        E_INFO("swindow_sf %d => %d\n", bptbl->swindow_sf, new_swindow_sf);
+        bptbl->swindow_sf = new_swindow_sf;
+    }
+
+    /* Now invalidate ef_idx before ef. */
+    for (i = sf; i < ef; ++i)
+        bptbl->ef_idx[i] = -1;
+}
 
 static void
 bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
@@ -133,21 +229,18 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     assert(window_sf >= prev_window_sf);
     if (window_sf <= prev_window_sf + 1)
         return;
+    /* If there is nothing to GC then finish up */
+    if (bptbl->ef_idx[prev_window_sf - 1] == bptbl->ef_idx[window_sf - 1]) {
+        bptbl->window_sf = window_sf;
+        return;
+    }
     /* Invalidate all backpointer entries up to window_sf - 1. */
     /* FIXME: actually anything behind window_sf - 1 is fair game. */
     E_INFO("Garbage collecting from %d to %d:\n",
            prev_window_sf - 1, window_sf - 1);
     for (i = bptbl->ef_idx[prev_window_sf - 1];
-         i < bptbl->ef_idx[window_sf - 1]; ++i) {
-        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
-               i, dict_wordstr(bptbl->d2p->dict,
-                                bptbl->ent[i].wid),
-               bp_sf(bptbl, i),
-               bptbl->ent[i].frame,
-               bptbl->ent[i].score,
-               bptbl->ent[i].bp);
+         i < bptbl->ef_idx[window_sf - 1]; ++i)
         bptbl->ent[i].valid = FALSE;
-    }
     /* Now re-activate all ones reachable from the elastic
      * window. (make sure frame_idx has been pushed!) */
     E_INFO("Finding accessible frames from backpointers from %d to %d\n",
@@ -195,6 +288,7 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
         E_INFO("last_gc_fr %d => %d\n", last_gc_fr, next_gc_fr);
         last_gc_fr = next_gc_fr;
     }
+    bptbl_forward_sort(bptbl, prev_window_sf - 1, window_sf - 1);
     bptbl->window_sf = window_sf;
 }
 

@@ -106,21 +106,3 @@ clear its path scores and re-enter it.
 Note that if the threshold is too small this can cause errors at the
 beginning of the sentence - not sure why this happens (something to do
 with scores i guess) but it should be fixable somehow.
-
----
-
-Garbage collection is essentially useless.  This is because the
-forward lattice is a tree, therefore the set of coaccessible states
-from the from the final state is actually just the best path.
-
-However, the points at which the oldest backpointer jumps might be
-useful convergence points - need to think a bit more about what they
-represent, and do some experiments.
-
-Basically the right thing to do for now is to run the lattice
-generation pass in a pipeline with the other passes, and retire
-backpointer entries after they're processed by it.
-
-We should however apply the bogus algorithm to see how much we can
-remove.  It can work incrementally since the existence of an active
-backpointer im that frame implies that it will have a successor.

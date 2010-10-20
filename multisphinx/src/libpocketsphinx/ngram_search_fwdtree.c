@@ -468,9 +468,8 @@ ngram_fwdtree_start(ngram_search_t *ngs)
     memset(&ngs->st, 0, sizeof(ngs->st));
 
     /* Reset backpointer table. */
-    ngs->bptbl->n_ent = 0;
-    ngs->bptbl->bss_head = 0;
-    ngs->bptbl->window_sf = 0;
+    bptbl_reset(ngs->bptbl);
+    ngs->oldest_bp = -1;
 
     /* Reset word lattice. */
     for (i = 0; i < n_words; ++i)
@@ -982,6 +981,11 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
 
     /* Compute best LM score and bp for new cands entered in the sorted lists above */
     for (i = 0; i < n_cand_sf; i++) {
+        /* This is the last frame that contains end-sorted
+         * backpointers.  Luckily by the definition of window_sf it's
+         * not possible to have any candidates that fail this
+         * assertion. */
+        assert(ngs->cand_sf[i].bp_ef >= ngs->bptbl->window_sf - 1);
         /* For the i-th unique end frame... */
         bp = ngs->bptbl->ef_idx[ngs->cand_sf[i].bp_ef];
         bplast = ngs->bptbl->ef_idx[ngs->cand_sf[i].bp_ef + 1] - 1;

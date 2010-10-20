@@ -83,6 +83,7 @@ typedef struct bptbl_s {
     int32 n_ent;             /* First free BPTable entry */
     int32 n_alloc;
     int32 window_sf;      /**< Start of elastic window of end-sorted arcs */
+    int32 swindow_sf;     /**< Start of elastic window of start-sorted arcs */
     int32 *bscore_stack;     /* Score stack for all possible right contexts */
     int32 bss_head;          /* First free BScoreStack entry */
     int32 bscore_stack_size;
