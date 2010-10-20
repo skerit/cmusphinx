@@ -178,7 +178,7 @@ bptbl_forward_sort(bptbl_t *bptbl, int sf, int ef)
         for (j = 0; j < i; ++j) {
             int jsf;
             jsf = prev_sf[j];
-            if (jsf >= sf) {
+            if (jsf > sf) {
                 E_INFO("  inserting to %d\n", j);
                 ent = bptbl->ent[i];
                 memmove(bptbl->ent + j + 1, bptbl->ent + j,
@@ -195,6 +195,21 @@ bptbl_forward_sort(bptbl_t *bptbl, int sf, int ef)
                 break;
             }
         }
+    }
+    for (i = bptbl->ef_idx[sf]; i < bptbl->ef_idx[ef]; ++i) {
+        E_INFO("idx %d => %d\n", i, prev_idx[i]);
+        if (bptbl->ent[i].bp >= bptbl->ef_idx[sf]) {
+            E_INFO("bp %d => %d\n",
+                   bptbl->ent[i].bp, prev_idx[bptbl->ent[i].bp]);
+            bptbl->ent[i].bp = prev_idx[bptbl->ent[i].bp];
+        }
+    }
+    for (i = bptbl->ef_idx[sf]; i < bptbl->ef_idx[ef]; ++i) {
+        if (bptbl->ent[i].valid == FALSE)
+            continue;
+        E_INFO_NOFN("%-5d %-10s start %-3d\n",
+                    i, dict_wordstr(bptbl->d2p->dict,
+                                    bptbl->ent[i].wid), bp_sf(bptbl, i));
     }
     ckd_free(prev_idx);
     ckd_free(prev_sf);
