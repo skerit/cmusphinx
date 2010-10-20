@@ -48,6 +48,7 @@
 #include <sphinxbase/ngram_model.h>
 #include <sphinxbase/listelem_alloc.h>
 #include <sphinxbase/err.h>
+#include <sphinxbase/garray.h>
 
 /* Local headers. */
 #include "pocketsphinx_internal.h"
@@ -83,13 +84,8 @@ typedef struct bptbl_s {
     int refcount;        /**< Reference count. */
     dict2pid_t *d2p;     /**< Tied state mapping. */
 
-    bp_t *retired;       /**< Retired backpointer entries. */
-    int32 n_retired;     /**< Number of retired entries. */
-    int32 n_retired_alloc; /**< Allocated size of retired array. */
-
-    bp_t *ent;           /**< Active backpointer entries. */
-    int32 n_ent;         /**< First free BPTable entry. */
-    int32 n_ent_alloc;   /**< Allocated size of active array. */
+    garray_t *retired;   /**< Retired backpointer entries. */
+    garray_t *ent;       /**< Active backpointer entries. */
 
     int32 *bscore_stack;     /**< Array containing right context scores for word exits. */
     int32 bss_head;          /**< First free BScoreStack entry */
@@ -218,6 +214,11 @@ bpidx_t bptbl_active_idx(bptbl_t *bptbl);
  * Obtain the index of the end of the backpointer table (the last index plus one).
  */
 bpidx_t bptbl_end_idx(bptbl_t *bptbl);
+
+/**
+ * Obtain the index of the end of the retired portion of the table (last index plus one).
+ */
+bpidx_t bptbl_retired_idx(bptbl_t *bptbl);
 
 /**
  * Obtain a pointer to the backpointer with a given index.

@@ -17,8 +17,8 @@
 * Implement arc buffers - DONE (mostly)
   - Release old arcs - DONE
   - Rewrite bptbl and friends to use the new garray_t
-    * Need to extend garray_t to include a base index
-    * Then update arcbuffer code for this
+    * Need to extend garray_t to include a base index - DONE
+    * Then update arcbuffer code for this - DONE
     * This will also make it easier to transition to circular buffers
 
 * Implement semi-shared acoustic models for search passes - DONE

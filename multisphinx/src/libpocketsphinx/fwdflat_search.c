@@ -480,7 +480,7 @@ compute_fwdflat_sen_active(fwdflat_search_t *ffs, int frame_idx)
     internal_node_t *hmm;
 
     acmod_clear_active(ps_search_acmod(ffs));
-    ffs->oldest_bp = ffs->bptbl->n_ent;
+    ffs->oldest_bp = bptbl_end_idx(ffs->bptbl);
 
     i = ffs->n_active_word[frame_idx & 0x1];
     awl = ffs->active_word_list[frame_idx & 0x1];
@@ -499,7 +499,7 @@ compute_fwdflat_sen_active(fwdflat_search_t *ffs, int frame_idx)
             }
         }
     }
-    assert(ffs->oldest_bp < ffs->bptbl->n_ent);
+    assert(ffs->oldest_bp < bptbl_end_idx(ffs->bptbl));
 }
 
 static void
@@ -1042,7 +1042,7 @@ fwdflat_search_finish(ps_search_t *base)
     /* Print out some statistics. */
     if (cf > 0) {
         E_INFO("%8d words recognized (%d/fr)\n",
-               ffs->bptbl->n_ent, (ffs->bptbl->n_ent + (cf >> 1)) / (cf + 1));
+               bptbl_end_idx(ffs->bptbl), (bptbl_end_idx(ffs->bptbl) + (cf >> 1)) / (cf + 1));
         E_INFO("%8d senones evaluated (%d/fr)\n", ffs->st.n_senone_active_utt,
                (ffs->st.n_senone_active_utt + (cf >> 1)) / (cf + 1));
         E_INFO("%8d channels searched (%d/fr)\n",

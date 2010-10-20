@@ -66,26 +66,24 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
     bptbl_t *bptbl = ckd_calloc(1, sizeof(*bptbl));
 
     bptbl->d2p = dict2pid_retain(d2p);
-    bptbl->n_ent_alloc = n_alloc;
-    bptbl->n_retired_alloc = n_alloc;
-    bptbl->n_frame_alloc = n_frame_alloc;
-    bptbl->n_permute_alloc = n_frame_alloc;
 
-    bptbl->ent = ckd_calloc(bptbl->n_ent_alloc, sizeof(*bptbl->ent));
-    E_INFO("Allocated %d KiB for active backpointers\n",
-           bptbl->n_ent_alloc * sizeof(*bptbl->ent) / 1024);
+    bptbl->ent = garray_init(0, sizeof(bp_t));
+    garray_reserve(bptbl->ent, n_alloc / 2);
+    bptbl->retired = garray_init(0, sizeof(bp_t));
+    garray_reserve(bptbl->retired, n_alloc / 2);
+
+    bptbl->n_permute_alloc = n_frame_alloc;
     bptbl->permute = ckd_calloc(bptbl->n_permute_alloc, sizeof(*bptbl->permute));
     E_INFO("Allocated %d KiB for permutation table\n",
            bptbl->n_permute_alloc * sizeof(*bptbl->permute) / 1024);
 
-    bptbl->retired = ckd_calloc(bptbl->n_retired_alloc, sizeof(*bptbl->retired));
-    E_INFO("Allocated %d KiB for retired backpointers\n",
-           bptbl->n_retired_alloc * sizeof(*bptbl->retired) / 1024);
-    bptbl->bscore_stack_size = bptbl->n_ent_alloc * 20;
+    bptbl->bscore_stack_size = n_alloc * 20;
     bptbl->bscore_stack = ckd_calloc(bptbl->bscore_stack_size,
                                      sizeof(*bptbl->bscore_stack));
     E_INFO("Allocated %d KiB for right context scores\n",
            bptbl->bscore_stack_size * sizeof(*bptbl->bscore_stack) / 1024);
+
+    bptbl->n_frame_alloc = n_frame_alloc;
     bptbl->ef_idx = ckd_calloc(bptbl->n_frame_alloc,
                                sizeof(*bptbl->ef_idx));
     bptbl->valid_fr = bitvec_alloc(bptbl->n_frame_alloc);
@@ -109,8 +107,8 @@ bptbl_free(bptbl_t *bptbl)
         return bptbl->refcount;
 
     dict2pid_free(bptbl->d2p);
-    ckd_free(bptbl->ent);
-    ckd_free(bptbl->retired);
+    garray_free(bptbl->ent);
+    garray_free(bptbl->retired);
     ckd_free(bptbl->permute);
     ckd_free(bptbl->bscore_stack);
     ckd_free(bptbl->ef_idx);
@@ -128,11 +126,11 @@ bptbl_reset(bptbl_t *bptbl)
         bptbl->ef_idx[i] = -1;
     }
     bitvec_clear_all(bptbl->valid_fr, bptbl->n_frame_alloc);
+    garray_reset(bptbl->ent);
+    garray_reset(bptbl->retired);
     bptbl->first_invert_bp = 0;
     bptbl->dest_s_idx = 0;
     bptbl->n_frame = 0;
-    bptbl->n_ent = 0;
-    bptbl->n_retired = 0;
     bptbl->bss_head = 0;
     bptbl->active_fr = 0;
     bptbl->oldest_bp = NO_BP;
@@ -144,8 +142,8 @@ bptbl_dump(bptbl_t *bptbl)
     int i;
 
     E_INFO("Retired backpointers (%d entries, oldest active %d):\n",
-           bptbl->first_invert_bp, bptbl->oldest_bp);
-    for (i = 0; i < bptbl->first_invert_bp; ++i) {
+           bptbl_retired_idx(bptbl), bptbl->oldest_bp);
+    for (i = 0; i < bptbl_retired_idx(bptbl); ++i) {
         bp_t *ent = bptbl_ent(bptbl, i);
         assert(ent->valid);
         E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
@@ -156,8 +154,8 @@ bptbl_dump(bptbl_t *bptbl)
                     ent->bp);
     }
     E_INFO("Active backpointers (%d entries starting at %d):\n",
-           bptbl->n_ent - bptbl->ef_idx[0], bptbl->ef_idx[0]);
-    for (i = bptbl->ef_idx[0]; i < bptbl->n_ent; ++i) {
+           bptbl_end_idx(bptbl) - bptbl->ef_idx[0], bptbl->ef_idx[0]);
+    for (i = bptbl->ef_idx[0]; i < bptbl_end_idx(bptbl); ++i) {
         bp_t *ent = bptbl_ent(bptbl, i);
         if (!ent->valid)
             E_INFO_NOFN("%-5d INVALID\n", i);
@@ -194,7 +192,7 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
     for (i = bptbl_ef_idx(bptbl, bptbl->active_fr);
          i < bptbl_ef_idx(bptbl, ef); ++i) {
         E_DEBUG(5,("Invalidate bp %d\n", i));
-        bptbl->ent[i - bptbl->ef_idx[0]].valid = FALSE;
+        garray_ent(bptbl->ent, bp_t, i).valid = FALSE;
     }
 
     /* Now re-activate all ones backwards reachable from the search graph. */
@@ -292,64 +290,60 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
     /* First available backpointer index in retired. */
     dest = bptbl->first_invert_bp;
     /* Expand retired if necessary. */
-    if (dest + n_retired > bptbl->n_retired_alloc) {
-        while (dest + n_retired > bptbl->n_retired_alloc)
-            bptbl->n_retired_alloc *= 2;
-        assert(dest + n_retired <= bptbl->n_retired_alloc);
-        bptbl->retired = ckd_realloc(bptbl->retired,
-                                     bptbl->n_retired_alloc
-                                     * sizeof(*bptbl->retired));
-        E_INFO("Resized retired backpointer table to %d entries (%d KiB)\n",
-               bptbl->n_retired_alloc,
-               bptbl->n_retired_alloc * sizeof(*bptbl->retired) / 1024);
-    }
-
-    /* Note we use the "raw" backpointer indices here. */
-    for (src = 0; src < eidx - bptbl->ef_idx[0]; ++src) {
-        if (bptbl->ent[src].valid) {
-            int rcsize = bptbl_rcsize(bptbl, bptbl->ent + src);
-            E_DEBUG(4,("permute %d => %d\n", src + bptbl->ef_idx[0], dest));
-            if (bptbl->ent[src].s_idx != bptbl->dest_s_idx) {
+    garray_expand(bptbl->retired, dest + n_retired);
+    /* Note we use the "cooked" backpointer indices here. */
+    for (src = bptbl->ef_idx[0]; src < eidx; ++src) {
+        bp_t *src_ent = garray_ptr(bptbl->ent, bp_t, src);
+        bp_t *dest_ent = garray_ptr(bptbl->retired, bp_t, dest);
+        if (src_ent->valid) {
+            int rcsize = bptbl_rcsize(bptbl, src_ent);
+            E_DEBUG(4,("permute %d => %d\n", src, dest));
+            if (src_ent->s_idx != bptbl->dest_s_idx) {
                 E_DEBUG(4,("Moving %d rc scores from %d to %d for bptr %d\n",
-                           rcsize, bptbl->ent[src].s_idx, bptbl->dest_s_idx, dest));
-                assert(bptbl->ent[src].s_idx > bptbl->dest_s_idx);
-                if (src < bptbl->n_ent - bptbl->ef_idx[0] - 1)
-                    assert(bptbl->dest_s_idx + rcsize <= bptbl->ent[src + 1].s_idx);
+                           rcsize, src_ent->s_idx, bptbl->dest_s_idx, dest));
+                assert(src_ent->s_idx > bptbl->dest_s_idx);
+                if (src < bptbl_end_idx(bptbl) - 1) {
+                    bp_t *src1_ent = garray_ptr(bptbl->ent, bp_t, src + 1);
+                    assert(bptbl->dest_s_idx + rcsize <= src1_ent->s_idx);
+                }
                 memmove(bptbl->bscore_stack + bptbl->dest_s_idx,
-                        bptbl->bscore_stack + bptbl->ent[src].s_idx,
+                        bptbl->bscore_stack + src_ent->s_idx,
                         rcsize * sizeof(*bptbl->bscore_stack));
             }
-            bptbl->retired[dest] = bptbl->ent[src];
-            bptbl->retired[dest].s_idx = bptbl->dest_s_idx;
+            *dest_ent = *src_ent;
+            dest_ent->s_idx = bptbl->dest_s_idx;
 
-            assert(src < bptbl->n_permute_alloc);
-            bptbl->permute[src] = dest;
+            /* FIXME: Going to move permute over to garray + base_idx too... */
+            assert(src - bptbl->ef_idx[0] < bptbl->n_permute_alloc);
+            bptbl->permute[src - bptbl->ef_idx[0]] = dest;
             bptbl->dest_s_idx += rcsize;
             ++dest;
         }
         else {
             E_DEBUG(4,("permute %d => -1 src %d ef_idx %d\n",
-                       src + bptbl->ef_idx[0], src, bptbl->ef_idx[0]));
-            assert(src < bptbl->n_permute_alloc);
-            bptbl->permute[src] = -1;
+                       src, src - bptbl->ef_idx[0], bptbl->ef_idx[0]));
+            assert(src - bptbl->ef_idx[0] < bptbl->n_permute_alloc);
+            bptbl->permute[src - bptbl->ef_idx[0]] = -1;
         }
     }
     /* We can keep compacting the bscore_stack since it is indirected. */
-    if (src < bptbl->n_ent - bptbl->ef_idx[0]
-        && bptbl->ent[src].s_idx != bptbl->dest_s_idx) {
+    if (src < bptbl_end_idx(bptbl)
+        && garray_ent(bptbl->ent, bp_t, src).s_idx != bptbl->dest_s_idx) {
         /* Leave dest_s_idx where it is for future compaction. */
         active_dest_s_idx = bptbl->dest_s_idx;
-        while (src < bptbl->n_ent - bptbl->ef_idx[0]) {
-            int rcsize = bptbl_rcsize(bptbl, bptbl->ent + src);
+        while (src < bptbl_end_idx(bptbl)) {
+            bp_t *src_ent = garray_ptr(bptbl->ent, bp_t, src);
+            int rcsize = bptbl_rcsize(bptbl, src_ent);
             E_DEBUG(4,("Moving %d rc scores from %d to %d for bptr %d\n",
-                       rcsize, bptbl->ent[src].s_idx, active_dest_s_idx,
-                       src + bptbl->ef_idx[0]));
-            if (src < bptbl->n_ent - bptbl->ef_idx[0] - 1)
-                assert(active_dest_s_idx + rcsize <= bptbl->ent[src + 1].s_idx);
+                       rcsize, src_ent->s_idx, active_dest_s_idx, src));
+            if (src < bptbl_end_idx(bptbl) - 1) {
+                bp_t *src1_ent = garray_ptr(bptbl->ent, bp_t, src + 1);
+                assert(bptbl->dest_s_idx + rcsize <= src1_ent->s_idx);
+            }
             memmove(bptbl->bscore_stack + active_dest_s_idx,
-                    bptbl->bscore_stack + bptbl->ent[src].s_idx,
+                    bptbl->bscore_stack + src_ent->s_idx,
                     rcsize * sizeof(*bptbl->bscore_stack));
-            bptbl->ent[src].s_idx = active_dest_s_idx;
+            src_ent->s_idx = active_dest_s_idx;
             active_dest_s_idx += rcsize;
             ++src;
         }
@@ -382,45 +376,38 @@ bptbl_remap(bptbl_t *bptbl, int last_retired_bp,
     E_DEBUG(2,("inverting %d:%d from %d to %d and %d to %d\n",
                bptbl->first_invert_bp, last_remapped_bp,
                bptbl->first_invert_bp, last_retired_bp,
-               first_active_bp, bptbl->n_ent));
+               first_active_bp, bptbl_end_idx(bptbl)));
     /* First remap backpointers in newly retired bps. */
     for (i = bptbl->first_invert_bp; i < last_retired_bp; ++i) {
+        bp_t *bpe = garray_ptr(bptbl->retired, bp_t, i);
         /* Remember, these are the *source* backpointer indices, so
          * they fall in the range between prev_active_fr (which is the
          * first index of ef_idx) and active_fr. */
-        if (bptbl->retired[i].bp >= bptbl->ef_idx[0]
-            && bptbl->retired[i].bp < last_remapped_bp) {
-            assert(bptbl->retired[i].bp - bptbl->ef_idx[0] < bptbl->n_permute_alloc);
-            if (bptbl->retired[i].bp
-                != bptbl->permute[bptbl->retired[i].bp - bptbl->ef_idx[0]])
+        if (bpe->bp >= bptbl->ef_idx[0]
+            && bpe->bp < last_remapped_bp) {
+            assert(bpe->bp - bptbl->ef_idx[0] < bptbl->n_permute_alloc);
+            if (bpe->bp != bptbl->permute[bpe->bp - bptbl->ef_idx[0]])
                 E_DEBUG(4,("remap retired %d => %d in %d\n",
-                           bptbl->retired[i].bp,
-                           bptbl->permute[bptbl->retired[i].bp - bptbl->ef_idx[0]], i));
-            bptbl->retired[i].bp
-                = bptbl->permute[bptbl->retired[i].bp - bptbl->ef_idx[0]];
-            assert(bptbl_sf(bptbl, i) <= bptbl->retired[i].frame);
+                           bpe->bp, bptbl->permute[bpe->bp - bptbl->ef_idx[0]], i));
+            bpe->bp = bptbl->permute[bpe->bp - bptbl->ef_idx[0]];
+            assert(bptbl_sf(bptbl, i) <= bpe->frame);
         }
     }
     /* Now remap backpointers in still-active bps (which point to the
      * newly retired ones) */
     bptbl->oldest_bp = last_retired_bp - 1;
-     for (i = first_active_bp - bptbl->ef_idx[0];
-         i < bptbl->n_ent - bptbl->ef_idx[0]; ++i) {
-        if (bptbl->ent[i].bp >= bptbl->ef_idx[0]
-            && bptbl->ent[i].bp < last_remapped_bp) {
-            assert(bptbl->ent[i].bp - bptbl->ef_idx[0] < bptbl->n_permute_alloc);
-            if (bptbl->ent[i].bp
-                != bptbl->permute[bptbl->ent[i].bp - bptbl->ef_idx[0]])
+    for (i = first_active_bp; i < bptbl_end_idx(bptbl); ++i) {
+        bp_t *bpe = garray_ptr(bptbl->ent, bp_t, i);
+        if (bpe->bp >= bptbl->ef_idx[0] && bpe->bp < last_remapped_bp) {
+            assert(bpe->bp - bptbl->ef_idx[0] < bptbl->n_permute_alloc);
+            if (bpe->bp != bptbl->permute[bpe->bp - bptbl->ef_idx[0]])
                 E_DEBUG(4,("remap active %d => %d in %d\n",
-                           bptbl->ent[i].bp,
-                           bptbl->permute[bptbl->ent[i].bp - bptbl->ef_idx[0]],
-                           i + bptbl->ef_idx[0]));
-            bptbl->ent[i].bp
-                = bptbl->permute[bptbl->ent[i].bp - bptbl->ef_idx[0]];
-            assert(bptbl_sf(bptbl, i + bptbl->ef_idx[0]) <= bptbl->ent[i].frame);
+                           bpe->bp, bptbl->permute[bpe->bp - bptbl->ef_idx[0]], i));
+            bpe->bp = bptbl->permute[bpe->bp - bptbl->ef_idx[0]];
+            assert(bptbl_sf(bptbl, i) <= bpe->frame);
         }
-        if (bptbl->ent[i].bp < bptbl->oldest_bp)
-            bptbl->oldest_bp = bptbl->ent[i].bp;
+        if (bpe->bp < bptbl->oldest_bp)
+            bptbl->oldest_bp = bpe->bp;
     }
 }
 
@@ -440,10 +427,9 @@ bptbl_update_active(bptbl_t *bptbl, int active_fr, int last_retired_bp)
 
     /* Push back active backpointers (eventually this will be circular) */
     E_DEBUG(3,("moving %d ent from %d (%d - %d)\n",
-               bptbl->n_ent - bptbl->ef_idx[frame_delta],
+               bptbl_end_idx(bptbl) - bptbl->ef_idx[frame_delta],
                bp_delta, bptbl->ef_idx[frame_delta], bptbl->ef_idx[0]));
-    memmove(bptbl->ent, bptbl->ent + bp_delta,
-            (bptbl->n_ent - bptbl->ef_idx[frame_delta]) * sizeof(*bptbl->ent));
+    garray_shift(bptbl->ent, bp_delta);
     
     /* Update ef_idx (implicitly updating ef_idx[0] */
     E_DEBUG(3,("moving %d ef_idx from %d (%d - %d)\n",
@@ -454,6 +440,7 @@ bptbl_update_active(bptbl_t *bptbl, int active_fr, int last_retired_bp)
             (bptbl->n_frame - active_fr) * sizeof(*bptbl->ef_idx));
 
     /* And now update stuff. */
+    garray_set_base(bptbl->ent, bptbl->ef_idx[0]);
     bptbl->active_fr = active_fr;
     bptbl->first_invert_bp = last_retired_bp;
 }
@@ -509,14 +496,15 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
                 bptbl_ef_idx(bptbl, active_fr));
     bptbl_update_active(bptbl, active_fr, last_retired_bp);
     E_INFO("Retired %d bps: now %d retired, %d active\n", n_retired,
-           bptbl->first_invert_bp, bptbl->n_ent - bptbl->ef_idx[0]);
+           bptbl_retired_idx(bptbl),
+           bptbl_end_idx(bptbl) - bptbl->ef_idx[0]);
     E_INFO("First active sf %d output frame %d window %d\n",
            bptbl->oldest_bp == NO_BP
-           ? 0 : bptbl->retired[bptbl->oldest_bp].frame + 1,
+           ? 0 : garray_ent(bptbl->retired, bp_t, bptbl->oldest_bp).frame + 1,
            frame_idx,
            frame_idx -
            (bptbl->oldest_bp == NO_BP
-            ? 0 : bptbl->retired[bptbl->oldest_bp].frame + 1));
+            ? 0 : garray_ent(bptbl->retired, bp_t, bptbl->oldest_bp).frame + 1));
 }
 
 int
@@ -535,7 +523,7 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp)
                                     bptbl->n_frame_alloc * sizeof(*bptbl->ef_idx));
         bptbl->valid_fr = bitvec_realloc(bptbl->valid_fr, bptbl->n_frame_alloc);
     }
-    bptbl->ef_idx[frame_idx - bptbl->active_fr] = bptbl->n_ent;
+    bptbl->ef_idx[frame_idx - bptbl->active_fr] = bptbl_end_idx(bptbl);
     bptbl->n_frame = frame_idx + 1;
     bptbl_gc(bptbl, oldest_bp, frame_idx);
     return frame_idx;
@@ -549,12 +537,12 @@ bptbl_finalize(bptbl_t *bptbl)
     E_DEBUG(2,("Final GC from frame %d to %d\n",
                bptbl->active_fr, bptbl->n_frame));
     /* If there is nothing to GC then finish up. */
-    if (bptbl->n_ent == bptbl->ef_idx[0])
+    if (bptbl_end_idx(bptbl) == bptbl->ef_idx[0])
         return 0;
     /* Expand the permutation table if necessary (probably). */
-    if (bptbl->n_ent - bptbl->ef_idx[0]
+    if (bptbl_end_idx(bptbl) - bptbl->ef_idx[0]
         > bptbl->n_permute_alloc) {
-        while (bptbl->n_ent - bptbl->ef_idx[0]
+        while (bptbl_end_idx(bptbl) - bptbl->ef_idx[0]
                > bptbl->n_permute_alloc)
             bptbl->n_permute_alloc *= 2;
         bptbl->permute = ckd_realloc(bptbl->permute,
@@ -569,15 +557,21 @@ bptbl_finalize(bptbl_t *bptbl)
     /* Include the last frame in the retired count. */
     n_retired += bptbl_ef_count(bptbl, bptbl->n_frame - 1);
     E_DEBUG(2,("About to retire %d bps\n", n_retired));
-    last_retired_bp = bptbl_retire(bptbl, n_retired, bptbl->n_ent);
-    bptbl_remap(bptbl, last_retired_bp, bptbl->n_ent, bptbl->n_ent);
+    last_retired_bp = bptbl_retire(bptbl, n_retired, bptbl_end_idx(bptbl));
+    bptbl_remap(bptbl, last_retired_bp, bptbl_end_idx(bptbl), bptbl_end_idx(bptbl));
     /* Just invalidate active entries, no need to move anything. */
     bptbl->first_invert_bp = last_retired_bp;
     bptbl->active_fr = bptbl->n_frame;
-    bptbl->ef_idx[0] = bptbl->n_ent;
+    /* FIXME: Will have to change this eventually when we use garray_t for ef_idx */
+    bptbl->ef_idx[0] = bptbl_end_idx(bptbl);
     E_INFO("Retired %d bps: now %d retired, %d active, first_active_sf %d\n", n_retired,
-           bptbl->first_invert_bp, bptbl->n_ent - bptbl->ef_idx[0],
-           bptbl->oldest_bp == NO_BP ? 0 : bptbl->retired[bptbl->oldest_bp].frame + 1);
+           bptbl_retired_idx(bptbl),
+           bptbl_end_idx(bptbl) - bptbl->ef_idx[0],
+           bptbl->oldest_bp == NO_BP
+           ? 0 : garray_ent(bptbl->retired, bp_t, bptbl->oldest_bp).frame + 1);
+    E_INFO("Allocated %d active and %d retired entries\n",
+           garray_alloc_size(bptbl->ent),
+           garray_alloc_size(bptbl->retired));
     return n_retired;
 }
 
@@ -588,26 +582,29 @@ bptbl_find_exit(bptbl_t *bptbl, int32 wid)
     int32 best_score;
     int ef;
 
-    if (bptbl->n_ent == 0)
+    if (bptbl_end_idx(bptbl) == 0)
         return NULL;
 
     /* We always take the last available frame, no matter what it
      * happens to be.  So take the last entry and scan backwards to
      * find the extents of its frame. */
-    if (bptbl->ef_idx[0] == bptbl->n_ent) {
+    if (bptbl->ef_idx[0] == bptbl_end_idx(bptbl)) {
+        bp_t *first_retired = garray_ptr(bptbl->retired, bp_t, 0);
         /* Final, so it's in retired. */
-        start = bptbl->retired + bptbl->first_invert_bp - 1;
-        end = bptbl->retired + bptbl->first_invert_bp;
+        start = garray_ptr(bptbl->retired, bp_t, bptbl->first_invert_bp - 1);
+        end = garray_ptr(bptbl->retired, bp_t, bptbl->first_invert_bp);
         ef = start->frame;
-        while (start >= bptbl->retired && start->frame == ef)
+        while (start >= first_retired && start->frame == ef)
             --start;
     }
     else {
+        bp_t *first_ent = garray_ptr(bptbl->ent, bp_t, garray_base(bptbl->ent));
         /* Not final, so it's in ent. */
-        start = bptbl->ent + bptbl->n_ent - bptbl->ef_idx[0] - 1;
-        end = bptbl->ent + bptbl->n_ent - bptbl->ef_idx[0];
+        start = garray_ptr(bptbl->ent, bp_t, garray_next_idx(bptbl->ent) - 1);
+        end = garray_ptr(bptbl->ent, bp_t, garray_next_idx(bptbl->ent));
         ef = start->frame;
-        while (start >= bptbl->ent && start->frame == ef)
+        /* FIXME: When bptbl->ent is circular this will no longer work. */
+        while (start >= first_ent && start->frame == ef)
             --start;
     }
     ++start;
@@ -635,7 +632,7 @@ bptbl_ef_idx(bptbl_t *bptbl, int frame_idx)
     if (frame_idx < bptbl->active_fr)
         return 0;
     else if (frame_idx >= bptbl->n_frame)
-        return bptbl->n_ent;
+        return bptbl_end_idx(bptbl);
     else {
         return bptbl->ef_idx[frame_idx - bptbl->active_fr];
     }
@@ -647,21 +644,28 @@ bptbl_ent(bptbl_t *bptbl, bpidx_t bpidx)
     if (bpidx == NO_BP)
         return NULL;
     if (bpidx < bptbl->ef_idx[0])
-        return bptbl->retired + bpidx;
+        return garray_ptr(bptbl->retired, bp_t, bpidx);
     else
-        return bptbl->ent + (bpidx - bptbl->ef_idx[0]);
+        return garray_ptr(bptbl->ent, bp_t, bpidx);
 }
 
 bpidx_t
 bptbl_active_idx(bptbl_t *bptbl)
 {
-    return bptbl->ef_idx[0];
+    return garray_base(bptbl->ent);
 }
+
+bpidx_t
+bptbl_retired_idx(bptbl_t *bptbl)
+{
+    return bptbl->first_invert_bp;
+}
+
 
 bpidx_t
 bptbl_end_idx(bptbl_t *bptbl)
 {
-    return bptbl->n_ent;
+    return garray_next_idx(bptbl->ent);
 }
 
 int
@@ -674,9 +678,10 @@ bpidx_t
 bptbl_idx(bptbl_t *bptbl, bp_t *bpe)
 {
     if (bpe->frame < bptbl->active_fr)
-        return bpe - bptbl->retired;
+        return bpe - garray_ptr(bptbl->retired, bp_t, 0);
     else
-        return (bpe - bptbl->ent) + bptbl->ef_idx[0];
+        return bpe - garray_ptr(bptbl->ent, bp_t, garray_base(bptbl->ent))
+            + garray_base(bptbl->ent);
 }
 
 bp_t *
@@ -728,24 +733,15 @@ bp_t *
 bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
 {
     int32 i, rcsize, *bss;
-    bp_t *be;
+    bp_t be, *bpe;
 
     /* This might happen if recognition fails. */
-    if (bptbl->n_ent == NO_BP) {
+    if (bptbl_end_idx(bptbl) == NO_BP) {
         E_ERROR("No entries in backpointer table!");
         return NULL;
     }
 
-    /* Expand the backpointer tables if necessary. */
-    if (bptbl->n_ent - bptbl->ef_idx[0] >= bptbl->n_ent_alloc) {
-        bptbl->n_ent_alloc *= 2;
-        assert(bptbl->n_ent - bptbl->ef_idx[0] < bptbl->n_ent_alloc);
-        bptbl->ent = ckd_realloc(bptbl->ent,
-                                 bptbl->n_ent_alloc
-                                 * sizeof(*bptbl->ent));
-        E_INFO("Resized backpointer table to %d entries (%d KiB)\n",
-               bptbl->n_ent_alloc, bptbl->n_ent_alloc * sizeof(*bptbl->ent) / 1024);
-    }
+    /* Expand the bss table if necessary. */
     if (bptbl->bss_head >= bptbl->bscore_stack_size
         - bin_mdef_n_ciphone(bptbl->d2p->mdef)) {
         bptbl->bscore_stack_size *= 2;
@@ -757,31 +753,33 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
                bptbl->bscore_stack_size * sizeof(*bptbl->bscore_stack) / 1024);
     }
 
-    be = bptbl_ent(bptbl, bptbl->n_ent);
-    be->wid = w;
-    be->frame = bptbl->n_frame - 1;
-    be->bp = path;
-    be->score = score;
-    be->s_idx = bptbl->bss_head;
-    be->valid = TRUE;
-    be->last_phone = dict_last_phone(bptbl->d2p->dict,w);
-    bptbl_fake_lmstate(bptbl, bptbl->n_ent);
+    /* Append a new backpointer. */
+    memset(&be, 0, sizeof(be));
+    be.wid = w;
+    be.frame = bptbl->n_frame - 1;
+    be.bp = path;
+    be.score = score;
+    be.s_idx = bptbl->bss_head;
+    be.valid = TRUE;
+    be.last_phone = dict_last_phone(bptbl->d2p->dict, w);
+    bpe = garray_append(bptbl->ent, &be);
+    /* Set up its LM state (NOTE: should use the pointer returned by garray_append?). */
+    bptbl_fake_lmstate(bptbl, bptbl_end_idx(bptbl) - 1);
 
     /* DICT2PID */
     /* Get diphone ID for final phone and number of ssids corresponding to it. */
-    rcsize = bptbl_rcsize(bptbl, be);
+    rcsize = bptbl_rcsize(bptbl, bpe);
     /* Allocate some space on the bptbl->bscore_stack for all of these triphones. */
     for (i = rcsize, bss = bptbl->bscore_stack + bptbl->bss_head; i > 0; --i, bss++)
         *bss = WORST_SCORE;
     bptbl->bscore_stack[bptbl->bss_head + rc] = score;
-    E_DEBUG(3,("Entered bp %d sf %d ef %d active_fr %d\n", bptbl->n_ent,
-               bptbl_sf(bptbl, bptbl->n_ent), bptbl->n_frame - 1, bptbl->active_fr));
-    assert(bptbl_sf(bptbl, bptbl->n_ent) >= bptbl->active_fr);
-
-    bptbl->n_ent++;
     bptbl->bss_head += rcsize;
 
-    return be;
+    E_DEBUG(3,("Entered bp %d sf %d ef %d active_fr %d\n", bptbl_end_idx(bptbl) - 1,
+               bptbl_sf(bptbl, bptbl_end_idx(bptbl) - 1),
+               bptbl->n_frame - 1, bptbl->active_fr));
+    assert(bptbl_sf(bptbl, bptbl_end_idx(bptbl) - 1) >= bptbl->active_fr);
+    return bpe;
 }
 
 void
