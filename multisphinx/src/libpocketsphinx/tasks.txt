@@ -14,6 +14,8 @@
   - Backtraces and lattice gen then refer to the retired portion - DONE
   - Test this on standalone fwdtree first - DONE
 
+* Work these algorithms out on paper, ugh
+
 * Add ability to pull from previous bptbl to fwdflat search
 
   - fwdflat step algorithm version 1:

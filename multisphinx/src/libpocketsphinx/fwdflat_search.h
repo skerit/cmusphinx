@@ -96,6 +96,11 @@ typedef struct fwdflat_arc_s {
 } fwdflat_arc_t;
 
 /**
+ * Arc buffer, used to store word arcs for use in fast-matching
+ */typedef struct fwdflat_arc_buffer_s {
+ } fwdflat_arc_buffer_t;
+
+/**
  * Various statistics for profiling.
  */
 typedef struct fwdflat_stats_s {
@@ -126,30 +131,10 @@ typedef struct fwdflat_search_s {
                             cleared before each frame */
 
     /**
-     * Input backpointer table (determines successor words).
+     * Arc buffer, used for input words.
      */
-    bptbl_t *input_bptbl;
-    int16 min_ef_width;   /**< Minimum number of active endpoints. */
-    int16 max_sf_win;     /**< Lookahead window for active words */
-
-    /**
-     * Next bp to be scanned for input arcs.
-     */
-    bpidx_t input_next_bp;
-    /**
-     * Currently active input arcs sorted by start frame.
-     */
-    fwdflat_arc_t *input_arcs;
-    int32 n_input_arcs;          /**< Number of active arcs. */
-    int32 n_input_arcs_alloc;    /**< Number of allocated input arcs. */
-    /**
-     * Start frame indices in input_arcs, used for radix sort.
-     */
-    int32 *input_sf_idx;
-    int32 n_input_sf_alloc;   /**< Number of allocated start frames. */
-    int16 input_first_sf;     /**< Index of first frame in input_sf_idx. */
-    int16 input_n_sf;         /**< Number of frames in input_sf_idx. */
-    uint8 *input_words;       /**< Set of active words (end frame counts) */
+    fwdflat_arc_buffer_t *input_arcs;
+    uint8 *input_words;       /**< Count of exits for arcs in window. */
 
     /**
      * First HMMs for multiple-phone words.

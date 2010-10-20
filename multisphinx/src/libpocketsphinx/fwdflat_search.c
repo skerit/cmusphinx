@@ -931,68 +931,7 @@ fwdflat_search_step(ps_search_t *base, int frame_idx)
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
 
     if (ffs->input_bptbl) {
-        int first_input_sf, next_input_sf;
-        bpidx_t next_input_next_bp, i;
 
-        /* Calculate the first start frame that is still generating
-         * arcs.  We will extend the arc table to here minus one. */
-        if (ffs->input_bptbl->oldest_bp == NO_BP)
-            next_input_sf = 0;
-        else
-            next_input_sf = bptbl_ent(ffs->input_bptbl,
-                                      ffs->input_bptbl->oldest_bp)->frame + 1;
-        if (next_input_sf == ffs->input_first_sf + ffs->input_n_sf)
-            return 0;
-
-        /* Determine how many new arcs there are. */
-        first_input_sf = next_input_sf;
-        for (next_input_next_bp = ffs->input_next_bp;
-             next_input_next_bp < ffs->input_bptbl->first_invert_bp;
-             ++next_input_next_bp) {
-            int sf = bptbl_sf(ffs->input_bptbl, next_input_next_bp);
-            if (sf < first_input_sf)
-                first_input_sf = sf;
-            if (sf >= next_input_sf)
-                break;
-        }
-        E_INFO("input_first_sf %d next_input_sf %d input_next_bp %d -> %d\n",
-               ffs->input_first_sf, next_input_sf,
-               ffs->input_next_bp, next_input_next_bp);
-
-        /* Resize arrays if necessary (FIXME: abstract this) */
-        if (next_input_sf - ffs->input_first_sf > ffs->n_input_sf_alloc) {
-            while (ffs->n_input_sf_alloc < next_input_sf - ffs->input_first_sf)
-                ffs->n_input_sf_alloc *= 2;
-            ffs->input_sf_idx = ckd_realloc(ffs->input_sf_idx,
-                                            ffs->n_input_sf_alloc);
-            E_INFO("Resized start frame index to %d entries\n",
-                   ffs->n_input_sf_alloc);
-        }
-        if (ffs->n_input_arcs + next_input_next_bp - ffs->input_next_bp
-            > ffs->n_input_arcs_alloc) {
-            while (ffs->n_input_arcs_alloc
-                   < ffs->n_input_arcs + next_input_next_bp - ffs->input_next_bp)
-                ffs->n_input_arcs_alloc *= 2;
-            ffs->input_arcs = ckd_realloc(ffs->input_arcs,
-                                          ffs->n_input_arcs_alloc);
-            E_INFO("Resized input arc table to %d entries\n",
-                   ffs->n_input_arcs_alloc);
-        }
-
-        /* Radix-sort the new arcs. */
-        for (i = ffs->input_next_bp; i < next_input_next_bp; ++i) {
-            int sf = bptbl_sf(ffs->input_bptbl, next_input_next_bp);
-            ++ffs->input_sf_idx[sf - ffs->input_first_sf];
-        }
-
-        /* Update the input word list. */
-
-        /* Determine whether we have any frames to search. */
-
-        /* If so, search as many as we can and return the number that
-           were searched. */
-
-        ffs->input_next_bp = next_input_next_bp;
         return 0;
     }
     else {
