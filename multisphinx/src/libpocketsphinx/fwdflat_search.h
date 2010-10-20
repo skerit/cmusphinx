@@ -140,15 +140,16 @@ typedef struct fwdflat_search_s {
      * Currently active input arcs sorted by start frame.
      */
     fwdflat_arc_t *input_arcs;
-    int32 n_input_arcs_alloc;
+    int32 n_input_arcs;          /**< Number of active arcs. */
+    int32 n_input_arcs_alloc;    /**< Number of allocated input arcs. */
     /**
      * Start frame indices in input_arcs, used for radix sort.
      */
     int32 *input_sf_idx;
-    int32 n_input_sf_alloc;
-    int16 input_first_sf;
-    int16 input_n_sf;
-    uint8 *input_words;     /**< Active words (end frame counts) */
+    int32 n_input_sf_alloc;   /**< Number of allocated start frames. */
+    int16 input_first_sf;     /**< Index of first frame in input_sf_idx. */
+    int16 input_n_sf;         /**< Number of frames in input_sf_idx. */
+    uint8 *input_words;       /**< Set of active words (end frame counts) */
 
     /**
      * First HMMs for multiple-phone words.
