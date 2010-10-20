@@ -234,25 +234,37 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
 }
 
 /**
- * Compact the backpointer table.
+ * Retire accessible backpointers
  *
  * @param bptbl Backpointer table.
- * @param eidx First index which cannot be compacted.
- * @return End of compacted backpointers.
+ * @param n_bp Number of backpointers to be retired.
+ * @param eidx Index of first backpointer which cannot be retired.
+ * @return Index of last retired backpointer plus one.
  */
 static int
-bptbl_compact(bptbl_t *bptbl, int eidx)
+bptbl_retire(bptbl_t *bptbl, int n_bp, int eidx)
 {
     int src, dest, ef;
-    /* bss index for active frames (we don't want to track this in bptbl) */
+    /* bss index for active frames (we don't want to track this in bptbl). */
     int active_dest_s_idx;
 
-    /* First available backpointer index in retired */
+    /* First available backpointer index in retired. */
     dest = bptbl->first_invert_bp;
     ef = bptbl->active_fr;
+    /* Expand retired if necessary. */
+    if (dest + n_bp > bptbl->n_retired_alloc) {
+        while (dest + n_bp > bptbl->n_retired_alloc)
+            bptbl->n_retired_alloc *= 2;
+        assert(dest + n_bp <= bptbl->n_retired_alloc);
+        bptbl->retired = ckd_realloc(bptbl->retired,
+                                     bptbl->n_retired_alloc
+                                     * sizeof(*bptbl->retired));
+        E_INFO("Resized retired backpointer table to %d entries\n", bptbl->n_retired_alloc);
+    }
+
     /* Note we use the "raw" backpointer indices here. */
     for (src = 0; src < eidx - bptbl->ef_idx[0]; ++src) {
-        /* Update all ef_idx including missing frames (there are many) */
+        /* Update all ef_idx including missing frames (there are many). */
         while (ef <= bptbl->ent[src].frame) {
             assert(ef - bptbl->active_fr < bptbl->n_frame_alloc);
             bptbl->ef_idx[ef - bptbl->active_fr] = dest;
@@ -319,30 +331,50 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
  * Remap backpointers in backpointer table.
  *
  * @param bptbl Backpointer table.
- * @param eidx Index of last backpointer to be updated plus one.
- * @param last_invert_bp Index of last backpointer which can be remapped plus one.
+ * @param last_retired_bp Index of last retired backpointer plus one
+ * @param last_remapped_bp Last backpointer index to be remapped
  */
 static void
-bptbl_invert(bptbl_t *bptbl, int eidx, int last_invert_bp)
+bptbl_remap(bptbl_t *bptbl, int last_retired_bp, int last_remapped_bp)
 {
-    int first_invert_bp = bptbl->first_invert_bp;
     int i;
 
-    E_DEBUG(2,("inverting %d:%d from %d to %d\n", first_invert_bp, last_invert_bp,
-               first_invert_bp, eidx));
+    E_DEBUG(2,("inverting %d:%d from %d to %d and %d to %d\n",
+               bptbl->first_invert_bp, last_remapped_bp,
+               bptbl->first_invert_bp, last_retired_bp,
+               last_invert_bp, bptbl->n_ent));
     assert(last_invert_bp <= eidx);
-    /* FIXME: Actually, have to do this in two parts, from
-     * first_invert_bp to last_invert_bp (retired) and from ef_idx[0]
-     * to eidx (active). */
-    for (i = first_invert_bp; i < eidx; ++i) {
-        if (bptbl->reired[i].bp >= first_invert_bp && bptbl->ent[i].bp < last_invert_bp) {
-            assert(bptbl->ent[i].bp - bptbl->first_invert_bp < bptbl->n_permute_alloc);
-            assert(bptbl->ent[i].bp - bptbl->first_invert_bp >= 0);
-            if (bptbl->ent[i].bp != bptbl->permute[bptbl->ent[i].bp - first_invert_bp])
-                E_DEBUG(4,("invert %d => %d in %d\n",
-                           bptbl->ent[i].bp, bptbl->permute[bptbl->ent[i].bp
-                                                            - first_invert_bp], i));
-            bptbl->ent[i].bp = bptbl->permute[bptbl->ent[i].bp - first_invert_bp];
+    /* First remap backpointers in newly retired bps. */
+    for (i = bptbl->first_invert_bp; i < last_retired_bp; ++i) {
+        /* Remember, these are the *source* backpointer indices, so
+         * they fall in the range between prev_active_fr (which is the
+         * first index of ef_idx) and active_fr. */
+        if (bptbl->retired[i].bp >= bptbl->ef_idx[0]
+            && bptbl->retired[i].bp < last_remapped_bp) {
+            assert(bptbl->retired[i].bp - bptbl->ef_idx[0] < bptbl->n_permute_alloc);
+            if (bptbl->retired[i].bp
+                != bptbl->permute[bptbl->retired[i].bp - bptbl->ef_idx[0]])
+                E_DEBUG(4,("remap retired %d => %d in %d\n",
+                           bptbl->retired[i].bp,
+                           bptbl->permute[bptbl->retired[i].bp - bptbl->ef_idx[0]], i));
+            bptbl->retired[i].bp
+                = bptbl->permute[bptbl->retired[i].bp - bptbl->ef_idx[0]];
+            assert(bptbl_sf(bptbl, i) < bptbl->retired[i].frame);
+        }
+    }
+    /* Now remap backpointers in still-active bps (which point to the
+     * newly retired ones) */
+    for (i = bptbl->ef_idx[0]; i < bptbl->n_ent; ++i) {
+        if (bptbl->ent[i].bp >= bptbl->ef_idx[0]
+            && bptbl->ent[i].bp < last_remapped_bp) {
+            assert(bptbl->ent[i].bp - bptbl->ef_idx[0] < bptbl->n_permute_alloc);
+            if (bptbl->ent[i].bp
+                != bptbl->permute[bptbl->ent[i].bp - bptbl->ef_idx[0]])
+                E_DEBUG(4,("remap active %d => %d in %d\n",
+                           bptbl->ent[i].bp,
+                           bptbl->permute[bptbl->ent[i].bp - bptbl->ef_idx[0]], i));
+            bptbl->ent[i].bp
+                = bptbl->permute[bptbl->ent[i].bp - bptbl->ef_idx[0]];
             assert(bptbl_sf(bptbl, i) < bptbl->ent[i].frame);
         }
     }
@@ -352,7 +384,7 @@ bptbl_invert(bptbl_t *bptbl, int eidx, int last_invert_bp)
  * Update the active frame pointer and backpointer array.
  */
 static void
-bptbl_update_active(bptbl_t *bptbl, int active_fr)
+bptbl_update_active(bptbl_t *bptbl, int active_fr, int last_compacted_bp)
 {
     int frame_delta = active_fr - bptbl->active_fr;
     int bp_delta;
@@ -360,19 +392,27 @@ bptbl_update_active(bptbl_t *bptbl, int active_fr)
     if (frame_delta == 0)
         return;
     assert(frame_delta > 0);
-    bp_delta = bptbl->ef_idx[frame_delta] - bptbl->ef_idx[0];
+
+    /* Push back active backpointers (eventually this will be circular) */
     E_DEBUG(3,("moving %d ent from %d (%d - %d)\n",
                bptbl->n_ent - bptbl->ef_idx[frame_delta],
                bp_delta, bptbl->ef_idx[frame_delta], bptbl->ef_idx[0]));
+    bp_delta = bptbl->ef_idx[frame_delta] - bptbl->ef_idx[0];
     memmove(bptbl->ent, bptbl->ent + bp_delta,
             (bptbl->n_ent - bptbl->ef_idx[frame_delta]) * sizeof(*bptbl->ent));
+    
+    /* Update ef_idx (implicitly updating ef_idx[0] */
     E_DEBUG(3,("moving %d ef_idx from %d (%d - %d)\n",
                bptbl->n_frame - active_fr,
                frame_delta, active_fr, bptbl->active_fr));
     assert(frame_delta + bptbl->n_frame - active_fr < bptbl->n_frame_alloc);
     memmove(bptbl->ef_idx, bptbl->ef_idx + frame_delta,
             (bptbl->n_frame - active_fr) * sizeof(*bptbl->ef_idx));
+
+    /* And now update stuff. */
     bptbl->active_fr = active_fr;
+    bptbl->n_ent -= bp_delta;
+    bptbl->first_invert_bp = last_compacted_bp;
 }
 
 static void
@@ -417,10 +457,8 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     /* Mark, compact, snap pointers. */
     bptbl_mark(bptbl, active_fr, frame_idx);
     last_compacted_bp = bptbl_compact(bptbl, bptbl_ef_idx(bptbl, active_fr));
-    bptbl_invert(bptbl, bptbl->n_ent, bptbl_ef_idx(bptbl, active_fr));
-
-    bptbl->first_invert_bp = last_compacted_bp;
-    bptbl_update_active(bptbl, active_fr);
+    bptbl_invert(bptbl, last_compacted_bp, bptbl_ef_idx(bptbl, active_fr));
+    bptbl_update_active(bptbl, active_fr, last_compacted_bp);
 }
 
 int
@@ -548,6 +586,7 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
     /* Expand the backpointer tables if necessary. */
     if (bptbl->n_ent >= bptbl->n_ent_alloc) {
         bptbl->n_ent_alloc *= 2;
+        assert(bptbl->n_ent < bptbl->n_ent_alloc);
         bptbl->ent = ckd_realloc(bptbl->ent,
                                  bptbl->n_ent_alloc
                                  * sizeof(*bptbl->ent));
