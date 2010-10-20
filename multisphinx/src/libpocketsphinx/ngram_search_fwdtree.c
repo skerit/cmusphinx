@@ -989,7 +989,6 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
         /* For the i-th unique end frame... */
         bp = bptbl_ef_idx(ngs->bptbl, ngs->cand_sf[i].bp_ef);
         bpend = bptbl_ef_idx(ngs->bptbl, ngs->cand_sf[i].bp_ef + 1);
-
         for (bpe = bptbl_ent(ngs->bptbl, bp); bp < bpend; bp++, bpe++) {
             if (!bpe->valid)
                 continue;
