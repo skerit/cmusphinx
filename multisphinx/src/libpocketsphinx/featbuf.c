@@ -60,6 +60,7 @@
 #endif
 
 struct featbuf_s {
+    int refcount;
     sync_array_t *sa;
     cmd_ln_t *config;
     fe_t *fe;
@@ -69,11 +70,16 @@ struct featbuf_s {
     int beginutt, endutt;
     FILE *mfcfh;
     FILE *rawfh;
+    /* FIXME: These need to be semaphores... */
     /**
-     * Event signaled by consumer threads when elements are released
-     * from @a sa.  Manually reset by producer thread.
+     * Event signaled by consumer threads when featbuf_release_all()
+     * is called.
      */
     sbevent_t *release;
+    /**
+     * Number of consumer threads which have completed the utterance.
+     */
+    int released;
     /**
      * Event signaled by producer thread when a new utterance is
      * started.  Manually reset at end of utterance.  Also signaled to
@@ -155,6 +161,7 @@ featbuf_init(cmd_ln_t *config)
     featbuf_t *fb;
 
     fb = ckd_calloc(1, sizeof(*fb));
+    fb->refcount = 1;
     fb->config = cmd_ln_retain(config);
     fb->fe = fe_init_auto_r(config);
     if (featbuf_init_feat(fb) < 0)
@@ -181,7 +188,7 @@ error_out:
 featbuf_t *
 featbuf_retain(featbuf_t *fb)
 {
-    /* Piggyback on the refcount of the sync array. */
+    ++fb->refcount;
     sync_array_retain(fb->sa);
     return fb;
 }
@@ -189,14 +196,11 @@ featbuf_retain(featbuf_t *fb)
 int
 featbuf_free(featbuf_t *fb)
 {
-    int rc;
-
     if (fb == NULL)
         return 0;
-    /* Piggyback on the refcount of the sync array. */
-    rc = sync_array_free(fb->sa);
-    if (rc > 0)
-        return rc;
+    sync_array_free(fb->sa);
+    if (--fb->refcount > 0)
+        return fb->refcount;
 
     /* Not refcounting these things internally. */
     fe_free(fb->fe);
@@ -273,6 +277,19 @@ featbuf_release(featbuf_t *fb, int sidx, int eidx)
         eidx = sync_array_next_idx(fb->sa);
     if ((rv = sync_array_release(fb->sa, sidx, eidx)) < 0)
         return rv;
+    return rv;
+}
+
+int
+featbuf_release_all(featbuf_t *fb, int sidx)
+{
+    int rv;
+
+    if ((rv = featbuf_release(fb, sidx, -1)) < 0)
+        return rv;
+    /* FIXME: Still possible race conditions here, need to use semaphores. */
+    if (++fb->released == fb->refcount - 1)
+        sbevent_reset(fb->start);
     sbevent_signal(fb->release);
     return rv;
 }
@@ -286,6 +303,7 @@ featbuf_start_utt(featbuf_t *fb)
     /* Set utterance processing state. */
     fb->beginutt = TRUE;
     fb->endutt = FALSE;
+    fb->released = 0;
 
     fe_start_utt(fb->fe);
 
@@ -335,13 +353,12 @@ featbuf_end_utt(featbuf_t *fb, int timeout)
     /* Finalize. */
     last_idx = sync_array_finalize(fb->sa);
 
-    /* Wait for everybody to be done. */
-    while (sync_array_available(fb->sa) < last_idx) {
+    /* Wait for everybody to be done.  (FIXME: Race condition, need semaphore) */
+    while (fb->released < fb->refcount - 1) {
         if (sbevent_wait(fb->release, s, timeout) < 0)
             return -1;
         sbevent_reset(fb->release);
     }
-    sbevent_reset(fb->start);
     
     return 0;
 }
@@ -354,15 +371,12 @@ featbuf_abort_utt(featbuf_t *fb)
     sync_array_force_quit(fb->sa);
     last_idx = sync_array_next_idx(fb->sa);
 
-    /* Wait for everybody to be done. */
-    while (sync_array_available(fb->sa) < last_idx) {
+    /* Wait for everybody to be done.  (FIXME: Race condition, need semaphore) */
+    while (fb->released < fb->refcount - 1) {
         if (sbevent_wait(fb->release, -1, -1) < 0)
             return -1;
         sbevent_reset(fb->release);
     }
-
-    /* Utterance no longer in progress. */
-    sbevent_reset(fb->start);
 
     return 0;
 }
@@ -462,7 +476,6 @@ featbuf_process_raw(featbuf_t *fb,
         if (fe_process_frames(fb->fe, &rptr, &n_samps,
                               &fb->cepbuf, &nframes) < 0)
             return -1;
-        /* printf("Processing %d frames from audio\n", nframes); */
         if (nframes)
             featbuf_process_cep(fb, &fb->cepbuf, 1, FALSE);
     }
@@ -525,7 +538,6 @@ featbuf_process_cep(featbuf_t *fb,
                                      fb->featbuf);
         if (fb->beginutt)
             fb->beginutt = FALSE;
-        /* printf("Processing %d frames from cepstra\n", nfeat); */
         for (i = 0; i < nfeat; ++i) {
             if (featbuf_process_feat(fb, fb->featbuf[i]) < 0)
                 return -1;

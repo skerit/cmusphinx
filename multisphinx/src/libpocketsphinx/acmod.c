@@ -274,8 +274,9 @@ acmod_start_utt(acmod_t *acmod, int timeout)
 {
     int rc;
 
-    if ((rc = featbuf_wait_utt(acmod->fb, timeout)) < 0)
+    if ((rc = featbuf_wait_utt(acmod->fb, timeout)) < 0) {
         return rc;
+    }
     acmod->output_frame = 0;
     acmod->eou = FALSE;
 
@@ -285,7 +286,7 @@ acmod_start_utt(acmod_t *acmod, int timeout)
 int
 acmod_end_utt(acmod_t *acmod)
 {
-    featbuf_release(acmod->fb, acmod->output_frame, -1);
+    featbuf_release_all(acmod->fb, acmod->output_frame);
     acmod->eou = TRUE;
 
     return 0;

@@ -93,7 +93,6 @@ ps_search_main(sbthread_t *thr)
     ps_search_t *search = sbthread_arg(thr);
 
     while (acmod_start_utt(search->acmod, -1) == 0) {
-        printf("Started utt\n");
         (*search->vt->decode)(search);
         acmod_end_utt(search->acmod);
     }

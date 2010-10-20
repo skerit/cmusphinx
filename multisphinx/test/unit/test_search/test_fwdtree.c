@@ -74,6 +74,9 @@ main(int argc, char *argv[])
 	featbuf_free(fb);
 
 	/* Clean everything else up. */
+	dict_free(dict);
+	bin_mdef_free(mdef);
+	dict2pid_free(d2p);
 	feat_array_free(feat);
 	logmath_free(lmath);
 	cmd_ln_free_r(config);

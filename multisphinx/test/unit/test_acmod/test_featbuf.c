@@ -34,7 +34,7 @@ consumer(sbthread_t *th)
 		featbuf_release(fr->src, fr->fr, fr->fr + 1);
 		++fr->fr;
 	}
-	featbuf_release(fr->src, fr->fr, -1);
+	featbuf_release_all(fr->src, fr->fr);
 	printf("Consumer %p done\n", fr);
 	sleep(2);
 	printf("Consumer %p exiting\n", fr);

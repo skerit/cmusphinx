@@ -168,6 +168,18 @@ int featbuf_wait(featbuf_t *fb, int fidx, int timeout, mfcc_t *out_frame);
  */
 int featbuf_release(featbuf_t *fb, int sidx, int eidx);
 
+/**
+ * Relinquish interest in a series of frames.
+ *
+ * This must called by a consumer thread in order to signal it is
+ * finished with all utterance processing.  If the first frame to be
+ * released is also not known, @a sidx of 0 can also be passed.
+ *
+ * @param fb Feature buffer.
+ * @param sidx Index of first frame to be released.
+ * @return 0, or <0 on error (but that is unlikely)
+ */
+int featbuf_release_all(featbuf_t *fb, int sidx);
 
 /**
  * Start processing for an utterance.
