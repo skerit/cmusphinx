@@ -145,7 +145,7 @@ void bptbl_free(bptbl_t *bpt);
 /**
  * Dump contents of a bptbl for debugging.
  */
-void dump_bptable(bptbl_t *bptbl, int start, int end);
+void dump_bptable(bptbl_t *bptbl);
 
 /**
  * Clear the backpointer table.
@@ -155,6 +155,8 @@ void bptbl_reset(bptbl_t *bptbl);
 /**
  * Record the current frame's index in the backpointer table.
  *
+ * @param oldest_bp Index of the oldest backpointer still active in
+ *                  the search graph.
  * @return the new frame index
  */
 int bptbl_push_frame(bptbl_t *bptbl, bpidx_t oldest_bp);
@@ -179,6 +181,11 @@ bpidx_t bptbl_ef_idx(bptbl_t *bptbl, int frame_idx);
  * Obtain a pointer to the backpointer with a given index.
  */
 bp_t *bptbl_ent(bptbl_t *bptbl, bpidx_t bpidx);
+
+/**
+ * Obtain the best predecessor to a given backpointer entry.
+ */
+bp_t *bptbl_prev(bptbl_t *bptbl, bp_t *ent);
 
 /**
  * Get the start frame for a given backpointer index.
