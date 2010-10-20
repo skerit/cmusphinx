@@ -466,10 +466,12 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     last_compacted_bp = bptbl_compact(bptbl, bptbl_ef_idx(bptbl, active_fr));
     bptbl_invert(bptbl, bptbl->first_invert_bp, bptbl->n_ent,
                  bptbl->first_invert_bp, bptbl_ef_idx(bptbl, active_fr));
+#if 0
     bptbl_forward_sort(bptbl, bptbl->first_invert_bp, last_compacted_bp);
     bptbl_invert(bptbl, bptbl->first_invert_bp, bptbl->n_ent,
                  /* FIXME: don't actually have to start at 0. */
                  0, bptbl_ef_idx(bptbl, active_fr));
+#endif
 #if 0
     int i;
     for (i = bptbl->first_invert_bp; i < last_compacted_bp; ++i) {

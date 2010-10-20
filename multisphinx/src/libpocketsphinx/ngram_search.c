@@ -390,6 +390,7 @@ ngram_search_bp_hyp(ngram_search_t *ngs, int bpidx)
     len = 0;
     while (bp != NO_BP) {
         bp_t *be = bptbl_ent(ngs->bptbl, bp);
+        E_INFO("bp %d -> %d\n", bp, be->bp);
         assert(be->valid);
         bp = be->bp;
         if (dict_real_word(ps_search_dict(ngs), be->wid))
@@ -606,7 +607,7 @@ ngram_search_finish(ps_search_t *search)
 
     if (ngs->fwdtree) {
         ngram_fwdtree_finish(ngs);
-        /* dump_bptable(ngs->bptbl, 0, -1); */
+        dump_bptable(ngs->bptbl, 0, -1);
 
         /* Now do fwdflat search in its entirety, if requested. */
         if (ngs->fwdflat) {
