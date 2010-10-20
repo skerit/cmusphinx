@@ -81,8 +81,6 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
                                      sizeof(*bptbl->bscore_stack));
     bptbl->ef_idx = ckd_calloc(bptbl->n_frame_alloc,
                                sizeof(*bptbl->ef_idx));
-    bptbl->frm_wordlist = ckd_calloc(bptbl->n_frame_alloc,
-                                     sizeof(*bptbl->frm_wordlist));
     bptbl->valid_fr = bitvec_alloc(bptbl->n_frame_alloc);
 
     return bptbl;
@@ -99,7 +97,6 @@ bptbl_free(bptbl_t *bptbl)
     ckd_free(bptbl->permute);
     ckd_free(bptbl->bscore_stack);
     ckd_free(bptbl->ef_idx);
-    ckd_free(bptbl->frm_wordlist);
     bitvec_free(bptbl->valid_fr);
     ckd_free(bptbl);
 }
@@ -435,9 +432,6 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
         E_INFO("Reallocating frame-based bptr arrays to %d\n", bptbl->n_frame_alloc);
         bptbl->ef_idx = ckd_realloc(bptbl->ef_idx,
                                     bptbl->n_frame_alloc * sizeof(*bptbl->ef_idx));
-        bptbl->frm_wordlist = ckd_realloc(bptbl->frm_wordlist,
-                                          bptbl->n_frame_alloc
-                                          * sizeof(*bptbl->frm_wordlist));
         bptbl->valid_fr = bitvec_realloc(bptbl->valid_fr, bptbl->n_frame_alloc);
     }
     bptbl->ef_idx[frame_idx - bptbl->active_fr] = bptbl->n_ent;

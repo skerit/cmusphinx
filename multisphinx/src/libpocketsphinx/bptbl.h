@@ -55,6 +55,11 @@
 #define NO_BP		-1
 
 /**
+ * Numeric backpointer ID
+ */
+typedef int32 bpidx_t;
+
+/**
  * Back pointer table entry (32 bytes)
  */
 typedef struct bp_s {
@@ -70,9 +75,6 @@ typedef struct bp_s {
     int16    last_phone;        /**< last phone of this word */
     int16    last2_phone;       /**< next-to-last phone of this word */
 } bp_t;
-
-#define bp_sf(bpt,i) ((i == NO_BP || (bpt)->ent[i].bp == NO_BP) ? 0 \
-                      : (bpt)->ent[(bpt)->ent[i].bp].frame + 1)
 
 /**
  * Back pointer table
@@ -104,18 +106,17 @@ typedef struct bptbl_s {
      * insertion sort.  Also marks the end of the region of retired
      * bptbl entries.
      */
-    int32 first_invert_bp;
+    bpidx_t first_invert_bp;
     int32 dest_s_idx;        /**< bscorestack index corresponding to
                               * first_invert_bp (which is invalid by
                               * definition) */
-    int32 *permute;      /**< Current permutation of entries (indexed
-                          * by ent - first_invert_bp). */
+    bpidx_t *permute;      /**< Current permutation of entries (indexed
+                            * by ent - first_invert_bp). */
     int32 n_permute_alloc;
 
-    /* All these are indexed by frame - active_sf */
+    /* All these are indexed by frame - active_fr */
     int32 n_frame_alloc; /**< Number of frames allocated for frame-based arrays. */
-    int32 *ef_idx;       /**< First BPTable entry exiting in each frame */
-    ps_latnode_t **frm_wordlist;   /**< List of active words in each frame. */
+    bpidx_t *ef_idx;       /**< First BPTable entry exiting in each frame */
     bitvec_t *valid_fr;  /**< Set of accessible frames (used in gc) */
 } bptbl_t;
 
@@ -156,13 +157,18 @@ void bptbl_reset(bptbl_t *bptbl);
  *
  * @return the current backpointer index.
  */
-int bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx);
+int bptbl_push_frame(bptbl_t *bptbl, bpidx_t oldest_bp);
 
 /**
  * Add a backpointer to the table.
  */
-bp_t *bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx,
-                  int32 path, int32 score, int rc);
+bp_t *bptbl_enter(bptbl_t *bptbl, int32 w, int32 path,
+                  int32 score, int rc);
+
+/**
+ * Get the index of the current frame from the backpointer table.
+ */
+int bptbl_frame_idx(bptbl_t *bptbl);
 
 /**
  * Obtain the index of the first word exit for a given frame.
@@ -172,21 +178,24 @@ int32 bptbl_ef_idx(bptbl_t *bptbl, int frame_idx);
 /**
  * Obtain a pointer to the backpointer with a given index.
  */
-#define bptbl_ent(bpt, bp) (((bp) == NO_BP) ? NULL : (bpt)->ent + bp)
+bp_t *bptbl_ent(bptbl_t *bptbl, bpidx_t bpidx);
 
 /**
  * Get the index for a given backpointer.
  */
-#define bptbl_idx(bpt, bpe) (((bpe) == NULL) ? NO_BP : ((bpe) - (bpt)->ent))
+bpidx_t bptbl_idx(bptbl_t *bptbl, bp_t *bpe);
 
 /**
  * Get the number of word exits in a given frame.
  */
-#define bptbl_ef_count(bpt, ef) (bptbl_ef_idx((bpt), (ef) + 1)  \
-                                 - bptbl_ef_idx((bpt), (ef)))
+int bptbl_ef_count(bptbl_t *bptbl, int frame_idx);
 
 /**
- * Cache trigram predecessors for a backpointer table entry.
+ * Update language model state for a backpointer table entry.
+ *
+ * This is called "fake" language model state since backpointers don't
+ * actually have unique LM states.  In other words this is "poor man's
+ * trigram" search.
  */
 void bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp);
 
