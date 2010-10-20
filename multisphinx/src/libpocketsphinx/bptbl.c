@@ -53,7 +53,7 @@
 
 static int bptbl_rcsize(bptbl_t *bptbl, bp_t *be);
 
-#if 0
+#if 1
 #undef E_DEBUG
 #define E_DEBUG(level,x) E_INFO x
 #undef E_DEBUGCONT
@@ -119,7 +119,7 @@ bptbl_reset(bptbl_t *bptbl)
 }
 
 void
-dump_bptable(bptbl_t *bptbl)
+bptbl_dump(bptbl_t *bptbl)
 {
     int i;
 
@@ -258,8 +258,8 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
  *
  * @param bptbl Backpointer table.
  * @param n_bp Number of backpointers to be retired.
- * @param eidx Index of first backpointer which cannot be retired.
- * @return Index of last retired backpointer plus one.
+ * @param eidx Absolute index of first backpointer which cannot be retired.
+ * @return Index of last retired backpointer (relative to bptbl->retired) plus one.
  */
 static int
 bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
@@ -332,30 +332,32 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
         }
         bptbl->bss_head = active_dest_s_idx;
     }
-    /* FIXME: This should work but I think it does not (i.e. we'd like
-     * to be able to call this to sweep all active backpointers) */
-    if (eidx == bptbl->n_ent)
-        bptbl->n_ent = dest;
     return dest;
 }
 
 
 /**
- * Remap backpointers in backpointer table.
+ * Remap backpointer indices in backpointer table.
+ *
+ * This needs to be done both in newly retired backpointers (which
+ * range from first_invert_bp to last_retired_bp) as well as in still
+ * active backpointers, which range from first_active_bp to bptbl->n_ent.
  *
  * @param bptbl Backpointer table.
  * @param last_retired_bp Index of last retired backpointer plus one
  * @param last_remapped_bp Last backpointer index to be remapped
+ * @param first_active_bp Index of first remaining active backpointer
  */
 static void
-bptbl_remap(bptbl_t *bptbl, int last_retired_bp, int last_remapped_bp)
+bptbl_remap(bptbl_t *bptbl, int last_retired_bp,
+            int last_remapped_bp, int first_active_bp)
 {
     int i;
 
     E_DEBUG(2,("inverting %d:%d from %d to %d and %d to %d\n",
                bptbl->first_invert_bp, last_remapped_bp,
                bptbl->first_invert_bp, last_retired_bp,
-               bptbl->ef_idx[0], bptbl->n_ent));
+               first_active_bp, bptbl->n_ent));
     /* First remap backpointers in newly retired bps. */
     for (i = bptbl->first_invert_bp; i < last_retired_bp; ++i) {
         /* Remember, these are the *source* backpointer indices, so
@@ -371,15 +373,13 @@ bptbl_remap(bptbl_t *bptbl, int last_retired_bp, int last_remapped_bp)
                            bptbl->permute[bptbl->retired[i].bp - bptbl->ef_idx[0]], i));
             bptbl->retired[i].bp
                 = bptbl->permute[bptbl->retired[i].bp - bptbl->ef_idx[0]];
-            E_INFO("sf %d frame %d\n", bptbl_sf(bptbl, i), bptbl->retired[i].frame);
             assert(bptbl_sf(bptbl, i) <= bptbl->retired[i].frame);
         }
     }
     /* Now remap backpointers in still-active bps (which point to the
      * newly retired ones) */
-    if (last_retired_bp == bptbl->n_ent)
-        return;
-    for (i = 0; i < bptbl->n_ent - bptbl->ef_idx[0]; ++i) {
+    for (i = first_active_bp - bptbl->ef_idx[0];
+         i < bptbl->n_ent - bptbl->ef_idx[0]; ++i) {
         if (bptbl->ent[i].bp >= bptbl->ef_idx[0]
             && bptbl->ent[i].bp < last_remapped_bp) {
             assert(bptbl->ent[i].bp - bptbl->ef_idx[0] < bptbl->n_permute_alloc);
@@ -475,7 +475,9 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     E_DEBUG(2,("About to retire %d bps\n", n_retired));
     last_retired_bp = bptbl_retire(bptbl, n_retired, bptbl_ef_idx(bptbl, active_fr));
     assert(n_retired == last_retired_bp - bptbl->first_invert_bp);
-    bptbl_remap(bptbl, last_retired_bp, bptbl_ef_idx(bptbl, active_fr));
+    bptbl_remap(bptbl, last_retired_bp,
+                bptbl_ef_idx(bptbl, active_fr),
+                bptbl_ef_idx(bptbl, active_fr));
     bptbl_update_active(bptbl, active_fr, last_retired_bp);
     E_INFO("Retired %d bps: now %d retired, %d active\n", n_retired,
            bptbl->first_invert_bp, bptbl->n_ent - bptbl->ef_idx[0]);
@@ -519,8 +521,7 @@ bptbl_finalize(bptbl_t *bptbl)
     n_retired += bptbl_ef_count(bptbl, bptbl->n_frame - 1);
     E_DEBUG(2,("About to retire %d bps\n", n_retired));
     last_retired_bp = bptbl_retire(bptbl, n_retired, bptbl->n_ent);
-    /* Last retired bp should be the same as bptbl->n_ent */
-    bptbl_remap(bptbl, last_retired_bp, bptbl->n_ent);
+    bptbl_remap(bptbl, last_retired_bp, bptbl->n_ent, bptbl->n_ent);
     /* Just invalidate active entries, no need to move anything. */
     bptbl->first_invert_bp = last_retired_bp;
     bptbl->active_fr = bptbl->n_frame;
@@ -530,6 +531,52 @@ bptbl_finalize(bptbl_t *bptbl)
     return n_retired;
 }
 
+bp_t *
+bptbl_find_exit(bptbl_t *bptbl, int32 wid)
+{
+    bp_t *start, *end, *best;
+    int32 best_score;
+    int ef;
+
+    if (bptbl->n_ent == 0)
+        return NULL;
+
+    bptbl_dump(bptbl);
+
+    /* We always take the last available frame, no matter what it
+     * happens to be.  So take the last entry and scan backwards to
+     * find the extents of its frame. */
+    if (bptbl->ef_idx[0] == bptbl->n_ent) {
+        /* Final, so it's in retired. */
+        start = bptbl->retired + bptbl->first_invert_bp - 1;
+        end = bptbl->retired + bptbl->first_invert_bp;
+    }
+    else {
+        /* Not final, so it's in ent. */
+        start = bptbl->ent + bptbl->n_ent - bptbl->ef_idx[0] - 1;
+        end = bptbl->ent + bptbl->n_ent - bptbl->ef_idx[0];
+    }
+    if (start->frame != bptbl->n_frame - 1) {
+        E_WARN("No exits in final frame %d, using frame %d instead\n",
+               bptbl->n_frame - 1, start->frame);
+    }
+    ef = start->frame;
+    while (start >= bptbl->retired && start->frame == ef)
+        --start;
+    ++start;
+    E_INFO("Last frame %d has %d entries\n", ef, end - start);
+    best_score = start->score;
+    best = NULL;
+    while (start < end) {
+        if (start->score BETTER_THAN best_score
+            && (wid == BAD_S3WID || start->wid == wid)) {
+            best = start;
+            best_score = best->score;
+        }
+        ++start;
+    }
+    return best;
+}
 
 int32
 bptbl_ef_idx(bptbl_t *bptbl, int frame_idx)

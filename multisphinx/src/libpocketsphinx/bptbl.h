@@ -145,7 +145,7 @@ void bptbl_free(bptbl_t *bpt);
 /**
  * Dump contents of a bptbl for debugging.
  */
-void dump_bptable(bptbl_t *bptbl);
+void bptbl_dump(bptbl_t *bptbl);
 
 /**
  * Clear the backpointer table.
@@ -158,6 +158,11 @@ void bptbl_reset(bptbl_t *bptbl);
  * Garbage collects and retires all active backpointers.
  */
 int bptbl_finalize(bptbl_t *bptbl);
+
+/**
+ * Find the best scoring exit in the final frame.
+ */
+bp_t *bptbl_find_exit(bptbl_t *bptbl, int32 wid);
 
 /**
  * Record the current frame's index in the backpointer table.

@@ -54,14 +54,14 @@ main(int argc, char *argv[])
 	TEST_ASSERT(bptbl_idx(bptbl, bp) == 4);
 	TEST_ASSERT(bptbl_sf(bptbl, 4) == 2);
 
-	dump_bptable(bptbl);
+	bptbl_dump(bptbl);
 	/* This should cause frames 0 and 1 to get garbage collected,
 	 * invalidating bp #0 and renumbering bp #1 to 0.  Ensure that
 	 * everything else is still the same.
 	 */
 	fi = bptbl_push_frame(bptbl, 2);
 	TEST_ASSERT(fi == 4);
-	dump_bptable(bptbl);
+	bptbl_dump(bptbl);
 
 	/* This one is retired. */
 	bp = bptbl_ent(bptbl, 0);
@@ -99,27 +99,42 @@ main(int argc, char *argv[])
 	TEST_ASSERT(bptbl_idx(bptbl, bp) == 5);
 	TEST_ASSERT(bptbl_sf(bptbl, 5) == 4);
 
-	dump_bptable(bptbl);
+	bptbl_dump(bptbl);
 	/* This should cause frames 2 through 4 to get garbage
 	 * collected.
 	 */
 	fi = bptbl_push_frame(bptbl, 5);
 	TEST_ASSERT(fi == 6);
-	dump_bptable(bptbl);
+	bptbl_dump(bptbl);
 
 	/* Now add a bunch of stuff to see what happens. */
 	for (i = 0; i < 6; ++i) {
 		bp = bptbl_enter(bptbl, 42, 5, 6 + i, 0);
 	}
 	fi = bptbl_push_frame(bptbl, 6);
+	TEST_ASSERT(fi == 7);
 	for (i = 0; i < 3; ++i) {
 		bp = bptbl_enter(bptbl, 69, 6, 12 + i, 0);
 	}
 
 	/* Finalize the backpointer table (i.e. retire all active) */
-	dump_bptable(bptbl);
+	bptbl_dump(bptbl);
 	bptbl_finalize(bptbl);
-	dump_bptable(bptbl);
+	bptbl_dump(bptbl);
+
+	/* Find the best exit. */
+	bp = bptbl_find_exit(bptbl, BAD_S3WID);
+	printf("%p %d start %d end %d score %d\n", bp,
+	       bp->wid, bptbl_sf(bptbl, bptbl_idx(bptbl, bp)),
+	       bp->frame, bp->score);
+	TEST_ASSERT(bp != NULL);
+	TEST_ASSERT(bp->wid == 69);
+	TEST_ASSERT(bp->score = 14);
+	TEST_ASSERT(bp->frame = fi);
+
+	/* Find the best exit with wid 42 (which does not exist) */
+	bp = bptbl_find_exit(bptbl, 42);
+	TEST_ASSERT(bp == NULL);
 
 	bptbl_free(bptbl);
 	ps_free(ps);
