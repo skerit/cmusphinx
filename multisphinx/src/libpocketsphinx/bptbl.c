@@ -227,8 +227,9 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
  *
  * @param bptbl Backpointer table.
  * @param eidx First index which cannot be compacted.
+ * @return End of compacted backpointers.
  */
-static void
+static int
 bptbl_compact(bptbl_t *bptbl, int eidx)
 {
     int src, dest, ef;
@@ -263,6 +264,7 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
     }
     if (eidx == bptbl->n_ent)
         bptbl->n_ent = dest;
+    return dest;
 }
 
 /**
@@ -270,14 +272,19 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
  *
  * @param bptbl Backpointer table.
  * @param sidx Index of first unordered entry.
- * @param eidx Index of last unordered entry.
+ * @param eidx Index of last unordered entry plus one.
  */
 static int
 bptbl_forward_sort(bptbl_t *bptbl, int sidx, int eidx)
 {
+    int16 *orig_sf;
+    int i;
+
     /* Straightforward for now, we just insertion sort these dudes and
      * update the permutation table and first_invert_bp as necessary.
-     * This could be done in conjunction with */
+     * This could be done in conjunction with compaction but it
+     * becomes very complicated and possibly slower. */
+
     return 0;
 }
 
