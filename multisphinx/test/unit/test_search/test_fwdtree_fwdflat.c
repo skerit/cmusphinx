@@ -30,7 +30,6 @@ main(int argc, char *argv[])
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
 			     "-lm", TESTDATADIR "/hub4.5000.DMP",
 			     "-dict", TESTDATADIR "/hub4.5000.dic",
-			     "-fwdflatefwid", "3",
 			     "-maxwpf", "50",
 			     "-latsize", "512",
 			     NULL);
@@ -47,7 +46,8 @@ main(int argc, char *argv[])
 	d2p = dict2pid_build(mdef, dict);
 	fwdtree = fwdtree_search_init(config, acmod, dict, d2p);
 	fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-				      ((fwdtree_search_t *)fwdtree)->bptbl);
+				      fwdtree_search_bptbl(fwdtree),
+				      fwdtree_search_lmset(fwdtree));
 
 	/* Launch search threads. */
 	ps_search_run(fwdtree);

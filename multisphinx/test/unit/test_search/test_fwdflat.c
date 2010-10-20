@@ -40,7 +40,7 @@ main(int argc, char *argv[])
 	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));
 	dict = dict_init(config, mdef);
 	d2p = dict2pid_build(mdef, dict);
-	fwdflat = fwdflat_search_init(config, acmod, dict, d2p, NULL);
+	fwdflat = fwdflat_search_init(config, acmod, dict, d2p, NULL, NULL);
 
 	/* Launch a search thread. */
 	ps_search_run(fwdflat);

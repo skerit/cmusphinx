@@ -2,9 +2,7 @@ check_PROGRAMS = \
 	test_bptbl \
 	test_arc_buffer \
 	test_fwdtree \
-	test_fwdflat \
-	test_fwdtree_fwdflat \
-	test_fwdtree_maxwpf
+	test_fwdtree_fwdflat
 
 TESTS = $(check_PROGRAMS)
 

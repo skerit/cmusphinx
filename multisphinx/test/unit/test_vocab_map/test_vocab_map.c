@@ -16,9 +16,12 @@
 int
 main(int argc, char *argv[])
 {
+#if 0
 	vocab_map_t *vm;
 
 	vm = vocab_map_init();
 
 	vocab_map_expand_active();
+#endif
+	return 0;
 }

@@ -504,6 +504,7 @@ ngram_model_dmp_build(ngram_model_t *base)
     newbase->writable = TRUE;
     /* Initialize unigram table and string table. */
     model->lm3g.unigrams = new_unigram_table(newbase->n_counts[0] + 1);
+    model->lm3g.tginfo_mtx = sbmtx_init();
     for (itor = ngram_model_mgrams(base, 0); itor;
          itor = ngram_iter_next(itor)) {
         int32 prob1, bo_wt1;
@@ -583,7 +584,7 @@ ngram_model_dmp_build(ngram_model_t *base)
                 E_DEBUG(2, ("bigram %d %s %s => trigram %d:%d\n",
                             bgcount,
                             newbase->word_str[wids[0]],
-                            newbase->word_str[wids[1]],
+v                            newbase->word_str[wids[1]],
                             seg, bgptr->trigrams));
 
                 /* And fill in successors' trigram info. */

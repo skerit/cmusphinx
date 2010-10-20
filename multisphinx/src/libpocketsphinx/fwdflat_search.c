@@ -135,6 +135,10 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     fwdflat_search_t *ffs;
     const char *path;
 
+    if (input_bptbl == NULL) {
+        E_ERROR("fwdflat search requires an input bptbl\n");
+        return NULL;
+    }
     ffs = ckd_calloc(1, sizeof(*ffs));
     ps_search_init(&ffs->base, &fwdflat_funcs, config, acmod, dict, d2p);
     ffs->hmmctx = hmm_context_init(bin_mdef_n_emit_state(acmod->mdef),
@@ -168,8 +172,7 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     ffs->input_arcs = fwdflat_arc_buffer_init();
 
     ffs->bptbl = bptbl_init(d2p, cmd_ln_int32_r(config, "-latsize"), 256);
-    if (input_bptbl)
-        ffs->input_bptbl = bptbl_retain(input_bptbl);
+    ffs->input_bptbl = bptbl_retain(input_bptbl);
 
     /* Allocate active word list array */
     ffs->active_word_list = ckd_calloc_2d(2, ps_search_n_words(ffs),
@@ -713,10 +716,7 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
         for (i = 0; i < ffs->n_expand_word; ++i) {
             int32 n_used;
 
-            if (ffs->input_bptbl == NULL)
-                w = i;
-            else
-                w = ffs->expand_word_list[i];
+            w = ffs->expand_word_list[i];
 
             /* Get the exit score we recorded in save_bwd_ptr(), or
              * something approximating it. */
@@ -832,10 +832,6 @@ fwdflat_create_expand_word_list(fwdflat_search_t *ffs)
 {
     int32 i, j;
 
-    if (ffs->input_bptbl == NULL) {
-        ffs->n_expand_word = ps_search_n_words(ffs);
-        return 0;
-    }
     for (i = 0, j = 0; i < garray_next_idx(ffs->word_list); ++i) {
         int32 wid = garray_ent(ffs->word_list, int32, i);
         if (bitvec_is_set(ffs->expand_words, wid))
@@ -950,8 +946,10 @@ fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
 }
 
 static int
-fwdflat_search_decode_2ndpass(fwdflat_search_t *ffs, acmod_t *acmod)
+fwdflat_search_decode(ps_search_t *base)
 {
+    fwdflat_search_t *ffs = (fwdflat_search_t *)base;
+    acmod_t *acmod = ps_search_acmod(base);
     int next_sf; /**< First frame pointed to by active bps. */
     int frame_idx, final;
 
@@ -1021,32 +1019,6 @@ fwdflat_search_decode_2ndpass(fwdflat_search_t *ffs, acmod_t *acmod)
     }
     fwdflat_search_finish(ps_search_base(ffs));
     return frame_idx;
-}
-
-static int
-fwdflat_search_decode(ps_search_t *base)
-{
-    fwdflat_search_t *ffs = (fwdflat_search_t *)base;
-    acmod_t *acmod = ps_search_acmod(base);
-    int frame_idx, nfr, k;
-
-    if (ffs->input_bptbl)
-        return fwdflat_search_decode_2ndpass(ffs, ps_search_acmod(base));
-
-    nfr = k = 0;
-    fwdflat_search_start(base);
-    while ((frame_idx = acmod_wait(acmod, -1)) >= 0) {
-        if ((k = fwdflat_search_one_frame(ffs, frame_idx)) <= 0)
-            break;
-        nfr += k;
-    }
-    fwdflat_search_finish(base);
-
-    /* This means we were canceled.  FIXME: Not clear whether calling
-     * fwdflat_search_finish() was necessary in this case. */
-    if (k < 0)
-        return k;
-    return nfr;
 }
 
 static int
