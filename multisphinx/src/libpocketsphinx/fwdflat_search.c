@@ -941,7 +941,6 @@ fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
         if (!(dict_filler_word(dict, arc->wid) || arc->wid == dict->startwid))
             ++ffs->input_words[arc->wid];
     }
-    fwdflat_dump_active_words(ffs, sf, ef);
     return 0;
 }
 
