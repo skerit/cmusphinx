@@ -1,0 +1,229 @@
+/* -*- c-basic-offset: 4; indent-tabs-mode: nil -*- */
+/* ====================================================================
+ * Copyright (c) 2010 Carnegie Mellon University.  All rights
+ * reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer. 
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *
+ * This work was supported in part by funding from the Defense Advanced 
+ * Research Projects Agency and the National Science Foundation of the 
+ * United States of America, and the CMU Sphinx Speech Consortium.
+ *
+ * THIS SOFTWARE IS PROVIDED BY CARNEGIE MELLON UNIVERSITY ``AS IS'' AND 
+ * ANY EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL CARNEGIE MELLON UNIVERSITY
+ * NOR ITS EMPLOYEES BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * ====================================================================
+ *
+ */
+
+/**
+ * @file featbuf.h Feature extraction and buffering for PocketSphinx.
+ * @author David Huggins-Daines <dhuggins@cs.cmu.edu>
+ */
+
+#ifndef __FEATBUF_H__
+#define __FEATBUF_H__
+
+/* System headers. */
+#include <stdio.h>
+
+/* SphinxBase headers. */
+#include <sphinxbase/cmd_ln.h>
+#include <sphinxbase/logmath.h>
+#include <sphinxbase/fe.h>
+#include <sphinxbase/feat.h>
+#include <sphinxbase/err.h>
+
+/* Local headers. */
+
+typedef struct featbuf_s featbuf_t;
+
+/**
+ * Create and initialize a new feature buffer.
+ */
+featbuf_t *featbuf_init(cmd_ln_t *config);
+
+/**
+ * Retain a pointer to a feature buffer.
+ */
+featbuf_t *featbuf_retain(featbuf_t *fb);
+
+/**
+ * Release a pointer to a feature buffer.
+ */
+int featbuf_free(featbuf_t *fb);
+
+/**
+ * Get a pointer to the feature extraction component.
+ *
+ * @return Feature extractor, retained by @a fb, DO NOT FREE.
+ */
+fe_t *featbuf_get_fe(featbuf_t *fb);
+
+/**
+ * Get a pointer to the feature computation component.
+ *
+ * @return Feature computer, retained by @a fb, DO NOT FREE.
+ */
+feat_t *featbuf_get_fcb(featbuf_t *fb);
+
+/**
+ * Get the index of the next frame to become available.
+ *
+ * This is also the same as the number of frames processed so far.
+ *
+ * @param fb Feature buffer.
+ * @return Index of the next frame to become available.
+ */
+int featbuf_next(featbuf_t *fb);
+
+/**
+ * Wait for a frame and its successors to become available.
+ *
+ * This function blocks for the requested timeout, or until the
+ * requested frame becomes available.  If the timeout is reached it
+ * will return NULL.  It will also return NULL in the case where the
+ * end of the utterance has been established by featbuf_end_utt() and
+ * the frame requested is beyond the end of the utterance, or if
+ * utterance processing has been aborted by featbuf_abort_utt().
+ *
+ * In effect there is a semaphore attached to each frame index, and
+ * this can be thought of as the "down" operation for a frame index.
+ *
+ * Calling this with a non-zero timeout on the same thread which calls
+ * the data processing functions below is a Bad Idea, but that should
+ * be obvious.
+ *
+ * @param fb Feature buffer.
+ * @param fidx Index of frame requested.
+ * @param timeout Maximum time to wait, in nanoseconds, or -1 to wait forever.
+ * @return NULL, or a pointer to the frame in question.
+ */
+mfcc_t **featbuf_wait(featbuf_t *fb, int fidx, int timeout);
+
+/**
+ * Relinquish interest in a frame and its predecessors.
+ *
+ * Once all consumers (defined as all objects retaining a reference to
+ * @a fb) release a frame, it will no longer be available to any of
+ * them.  This also releases all preceding frames.
+ *
+ * This can be thought of as the "up" operation for a frame index,
+ * where the featbuf has an implicit "down" pending which removes
+ * frames from circulation once they are upped enough times.
+ *
+ * Calling this with a non-zero timeout on the same thread which calls
+ * the data processing functions below is a Bad Idea, but that should
+ * be obvious.
+ *
+ * @param fb Feature buffer.
+ * @param fidx Index of frame to be released.
+ * @return 0, or <0 on error (but that is unlikely)
+ */
+int featbuf_release(featbuf_t *fb, int fidx);
+
+/**
+ * Start processing for an utterance.
+ *
+ * @param fb Feature buffer.
+ * @return 0, or <0 on error (but that is unlikely)
+ */
+int featbuf_start_utt(featbuf_t *fb);
+
+/**
+ * End processing for an utterance.
+ *
+ * This function blocks until all consumers release the final frame of
+ * the utterance, or until the timeout is reached.
+ *
+ * @param fb Feature buffer.
+ * @param timeout Maximum time to wait, in nanoseconds, or -1 to wait forever.
+ * @return 0, or <0 on error (but that is unlikely)
+ */
+int featbuf_end_utt(featbuf_t *fb, int timeout);
+
+/**
+ * Abort processing for an utterance.
+ *
+ * This function immediately ends utterance processing, canceling any
+ * pending wait operations, as noted in the documentation for
+ * featbuf_wait().
+ *
+ * @param fb Feature buffer.
+ * @return 0, or <0 on error (but that is unlikely)
+ */
+int featbuf_abort_utt(featbuf_t *fb);
+
+/**
+ * Process audio data, adding to the buffer.
+ *
+ * This function will always either accept all the audio passed to it,
+ * or it will return an error code.
+ *
+ * This is not safe to call from multiple threads.
+ *
+ * @param fb Feature buffer.
+ * @param raw Input audio data (signed 16-bit native-endian)
+ * @param n_samps Number of samples in @a raw.
+ * @param full_utt Does this represent an entire utterance?
+ * @return 0, or <0 on error.
+ */
+int featbuf_process_raw(featbuf_t *fb,
+			int16 const *raw,
+			size_t n_samps,
+			int full_utt);
+
+/**
+ * Process acoustic feature data, adding to the buffer.
+ *
+ * This function will always either accept all the features passed to it,
+ * or it will return an error code.
+ *
+ * This is not safe to call from multiple threads.
+ *
+ * @param fb Feature buffer.
+ * @param cep Input feature data.
+ * @param n_samps Number of frames in @a cep.
+ * @param full_utt Does this represent an entire utterance?
+ * @return 0, or <0 on error.
+ */
+int featbuf_process_cep(featbuf_t *fb,
+			mfcc_t **cep,
+			size_t n_frames,
+			int full_utt);
+
+/**
+ * Process one frame of dynamic feature data, adding to the buffer.
+ *
+ * This function will always either accept the features passed to it,
+ * or it will return an error code.
+ *
+ * This is not safe to call from multiple threads.
+ *
+ * @param fb Feature buffer.
+ * @param feat Input feature data.
+ * @return 0, or <0 on error.
+ */
+int featbuf_process_feat(featbuf_t *fb,
+			 mfcc_t **feat);
+
+#endif /* __FEATBUF_H__ */

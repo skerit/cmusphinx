@@ -1,4 +1,5 @@
 check_PROGRAMS = \
+	test_sync_array \
 	test_featbuf
 
 TESTS = $(check_PROGRAMS)

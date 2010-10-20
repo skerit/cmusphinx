@@ -113,3 +113,4 @@ test/unit/test_search/test_acmod_copy
 test/unit/test_search/test_fwdtree_maxwpf
 src/programs/pocketsphinx_map_vocab
 test/unit/test_util/test_garray
+test/unit/test_acmod/test_sync_array
