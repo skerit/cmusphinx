@@ -59,10 +59,8 @@
 #define chan_v_eval(chan) hmm_vit_eval(&(chan)->hmm)
 #endif
 
-static int fwdtree_search_start(ps_search_t *base);
-static int fwdtree_search_step(ps_search_t *base);
-static int fwdtree_search_finish(ps_search_t *base);
-static void fwdtree_search_free(ps_search_t *base);
+static int fwdtree_search_decode(ps_search_t *base);
+static int fwdtree_search_free(ps_search_t *base);
 static char const *fwdtree_search_hyp(ps_search_t *base, int32 *out_score);
 static int32 fwdtree_search_prob(ps_search_t *base);
 static ps_seg_t *fwdtree_search_seg_iter(ps_search_t *base, int32 *out_score);
@@ -70,6 +68,7 @@ static ps_seg_t *fwdtree_search_seg_iter(ps_search_t *base, int32 *out_score);
 static ps_searchfuncs_t fwdtree_funcs = {
     /* name: */   "fwdtree",
     /* free: */   fwdtree_search_free,
+    /* decode: */ fwdtree_search_decode,
     /* hyp: */      fwdtree_search_hyp,
     /* prob: */     fwdtree_search_prob,
     /* seg_iter: */ fwdtree_search_seg_iter,
@@ -598,7 +597,7 @@ deinit_search_tree(fwdtree_search_t *fts)
     fts->homophone_set = NULL;
 }
 
-void
+int
 fwdtree_search_free(ps_search_t *base)
 {
     fwdtree_search_t *fts = (fwdtree_search_t *)base;
@@ -629,9 +628,11 @@ fwdtree_search_free(ps_search_t *base)
     bptbl_free(fts->bptbl);
     ckd_free_2d(fts->active_word_list);
     ckd_free(fts->last_ltrans);
+
+    return 0;
 }
 
-int
+static int
 fwdtree_search_start(ps_search_t *base)
 {
     fwdtree_search_t *fts = (fwdtree_search_t *)base;
@@ -1668,10 +1669,8 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     int16 const *senscr;
     int fi, frame_idx;
 
-    if ((frame_idx = acmod_wait(acmod, -1)) == -1) {
-        /* FIXME: Need to release frames or whatever. */
-        return -1;
-    }
+    if ((frame_idx = acmod_wait(acmod, -1)) == -1)
+        return 0;
 
     /* Activate our HMMs for the current frame if need be. */
     if (!acmod->compallsen)
@@ -1709,27 +1708,14 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     /* Deactivate pruned HMMs. */
     deactivate_channels(fts, frame_idx);
 
+    /* Release the frame just searched. */
     acmod_release(acmod, frame_idx);
+
     /* Return the number of frames processed. */
     return 1;
 }
 
-int
-fwdtree_search_step(ps_search_t *base)
-{
-    fwdtree_search_t *fts = (fwdtree_search_t *)base;
-    int nfr, k;
-
-    nfr = 0;
-    while ((k = fwdtree_search_one_frame(fts)) > 0) {
-        nfr += k;
-    }
-    if (k < 0)
-        return k;
-    return nfr;
-}
-
-int
+static int
 fwdtree_search_finish(ps_search_t *base)
 {
     fwdtree_search_t *fts = (fwdtree_search_t *)base;
@@ -1796,6 +1782,25 @@ fwdtree_search_finish(ps_search_t *base)
     /* Mark the current utterance as done. */
     fts->done = TRUE;
     return 0;
+}
+
+int
+fwdtree_search_decode(ps_search_t *base)
+{
+    fwdtree_search_t *fts = (fwdtree_search_t *)base;
+    int nfr, k;
+
+    nfr = 0;
+    fwdtree_search_start(base);
+    while ((k = fwdtree_search_one_frame(fts)) > 0) {
+        nfr += k;
+    }
+    fwdtree_search_finish(base);
+    /* This means we were canceled.  FIXME: Not clear whether calling
+     * fwdtree_search_finish() is necessary in this case. */
+    if (k < 0)
+        return k;
+    return nfr;
 }
 
 static void

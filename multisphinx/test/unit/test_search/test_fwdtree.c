@@ -18,6 +18,7 @@ main(int argc, char *argv[])
 	logmath_t *lmath;
 	cmd_ln_t *config;
 	acmod_t *acmod;
+	featbuf_t *fb;
 	ps_search_t *fwdtree;
 	mfcc_t ***feat;
 	int nfr, i;
@@ -35,7 +36,7 @@ main(int argc, char *argv[])
 	/* Create acoustic model and search. */
 	lmath = logmath_init(cmd_ln_float32_r(config, "-logbase"),
 			     0, FALSE);
-	acmod = acmod_init(config, lmath);
+	acmod = acmod_init(config, lmath, fb);
 	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));
 	dict = dict_init(config, mdef);
 	d2p = dict2pid_build(mdef, dict);
@@ -54,16 +55,23 @@ main(int argc, char *argv[])
 	featbuf_start_utt(fb);
 	for (i = 0; i < nfr; ++i)
 		featbuf_process_feat(fb, feat[i]);
-	featbuf_end_utt(fb);
+
+	/* This will wait for search to complete. */
+	printf("Waiting for end of utt\n");
+	featbuf_end_utt(fb, -1);
+	printf("Done waiting\n");
 
 	/* Retrieve the hypothesis from the search thread. */
 	hyp = ps_search_hyp(fwdtree, &score);
 	printf("hyp: %s (%d)\n", hyp, score);
 
 	/* Reap the search thread. */
+	printf("Reaping the search thread\n");
 	ps_search_stop(fwdtree);
+	printf("Done reaping\n");
 	ps_search_free(fwdtree);
 	acmod_free(acmod);
+	featbuf_free(fb);
 
 	/* Clean everything else up. */
 	feat_array_free(feat);

@@ -67,6 +67,24 @@ ps_search_init(ps_search_t *search, ps_searchfuncs_t *vt,
         search->start_wid = search->finish_wid = search->silence_wid = -1;
         search->n_words = 0;
     }
+    search->mtx = sbmtx_init();
+}
+
+int
+ps_search_free(ps_search_t *search)
+{
+    /* Call the search free function. */
+    (*search->vt->free)(search);
+    /* Clean up common stuff. */
+    cmd_ln_free_r(search->config);
+    acmod_free(search->acmod);
+    dict_free(search->dict);
+    dict2pid_free(search->d2p);
+    ckd_free(search->hyp_str);
+    sbthread_free(search->thr);
+    sbmtx_free(search->mtx);
+    ckd_free(search);
+    return 0;
 }
 
 static int
@@ -74,15 +92,10 @@ ps_search_main(sbthread_t *thr)
 {
     ps_search_t *search = sbthread_arg(thr);
 
-    /* Until we are told to stop, ... */
-
-    /* Wait indefinitely for the start of an utterance. */
-
-    /* Call the search start function. */
-
-    /* Call the search step function repeatedly until done. */
-
-    /* Call the search end function. */
+    while (acmod_start_utt(search->acmod, -1) == 0) {
+        (*search->vt->decode)(search);
+        acmod_end_utt(search->acmod);
+    }
     return 0;
 }
 
@@ -96,25 +109,8 @@ ps_search_run(ps_search_t *search)
 int
 ps_search_stop(ps_search_t *search)
 {
-    return 0;
-}
-
-int
-ps_search_free(ps_search_t *search)
-{
-    /* Call the search free function. */
-    (*search->vt->free)(search);
-
-    /* Clean up common stuff. */
-    cmd_ln_free_r(search->config);
-    acmod_free(search->acmod);
-    dict_free(search->dict);
-    dict2pid_free(search->d2p);
-    ckd_free(search->hyp_str);
-    sbthread_free(search->thr);
-    sbmtx_free(search->mtx);
-    ckd_free(search);
-    return 0;
+    acmod_cancel(search->acmod);
+    return sbthread_wait(search->thr);
 }
 
 char const *

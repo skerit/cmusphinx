@@ -65,7 +65,9 @@ typedef struct ps_search_s ps_search_t;
 typedef struct ps_searchfuncs_s {
     char const *name;
 
-    int (*free)(ps_search_t *search);
+    int (*free)(ps_search_t *search);   /**< Free search-specific stuff. */
+    int (*decode)(ps_search_t *search); /**< Decode an utterance. */
+
     char const *(*hyp)(ps_search_t *search, int32 *out_score);
     int32 (*prob)(ps_search_t *search);
     ps_seg_t *(*seg_iter)(ps_search_t *search, int32 *out_score);

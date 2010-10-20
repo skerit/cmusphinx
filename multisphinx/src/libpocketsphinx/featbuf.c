@@ -76,9 +76,15 @@ struct featbuf_s {
     sbevent_t *release;
     /**
      * Event signaled by producer thread when a new utterance is
-     * started.  Manually reset at end of utterance.
+     * started.  Manually reset at end of utterance.  Also signaled to
+     * cancel waiting on an utterance in which case @a canceled will
+     * be true.
      */
     sbevent_t *start;
+    /**
+     * Flag signifying that featbuf_cancel() was called.  Reset by
+     * featbuf_start_utt().  */
+    int canceled;
 };
 
 static int
@@ -237,6 +243,8 @@ featbuf_wait_utt(featbuf_t *fb, int timeout)
 
     if ((rc = sbevent_wait(fb->start, s, timeout)) < 0)
         return rc;
+    if (fb->canceled)
+        return -1;
     return 0;
 }
 
@@ -282,6 +290,7 @@ featbuf_start_utt(featbuf_t *fb)
     fe_start_utt(fb->fe);
 
     /* Signal any consumers. */
+    fb->canceled = FALSE;
     sbevent_signal(fb->start);
     return 0;
 }
@@ -289,7 +298,7 @@ featbuf_start_utt(featbuf_t *fb)
 int
 featbuf_end_utt(featbuf_t *fb, int timeout)
 {
-    int nfr, tsec, tnsec, nwait = 0;
+    int nfr;
     size_t last_idx;
 
     /* Set utterance processing state. */
@@ -325,12 +334,11 @@ featbuf_end_utt(featbuf_t *fb, int timeout)
     last_idx = sync_array_finalize(fb->sa);
 
     /* Wait for everybody to be done. */
-    if (sync_array_available(fb->sa) < last_idx)
+    while (sync_array_available(fb->sa) < last_idx) {
         if (sbevent_wait(fb->release, 0, timeout) < 0)
             return -1;
-
-    /* Reset both events. */
-    sbevent_reset(fb->release);
+        sbevent_reset(fb->release);
+    }
     sbevent_reset(fb->start);
     
     return 0;
@@ -344,14 +352,32 @@ featbuf_abort_utt(featbuf_t *fb)
     sync_array_force_quit(fb->sa);
     last_idx = sync_array_next_idx(fb->sa);
 
-    /* Reset both events. */
-    if (sync_array_available(fb->sa) < last_idx)
+    /* Wait for everybody to be done. */
+    while (sync_array_available(fb->sa) < last_idx) {
         if (sbevent_wait(fb->release, -1, -1) < 0)
             return -1;
-    sbevent_reset(fb->release);
+        sbevent_reset(fb->release);
+    }
+
+    /* Utterance no longer in progress. */
     sbevent_reset(fb->start);
 
     return 0;
+}
+
+int
+featbuf_cancel(featbuf_t *fb)
+{
+    int rc;
+
+    /* Cancel any utterance in progress. */
+    if ((rc = featbuf_abort_utt(fb)) < 0)
+        return rc;
+
+    /* Now wake up anybody waiting for an utterance, but first set a
+     * flag that makes featbuf_wait_utt() fail. */
+    fb->canceled = TRUE;
+    return sbevent_signal(fb->start);
 }
 
 static int

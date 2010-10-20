@@ -112,7 +112,7 @@ sync_array_free(sync_array_t *sa)
         return refcount;
     }		
     sbmtx_unlock(sa->mtx);
-    printf("Freeing sync array\n");
+    /* printf("Freeing sync array\n"); */
     E_INFO("Maximum allocation %d items (%d KiB)\n",
            garray_alloc_size(sa->data),
            garray_alloc_size(sa->data) * (garray_ent_size(sa->data) + 1) / 1024);
@@ -275,7 +275,7 @@ sync_array_release(sync_array_t *sa, size_t start_idx, size_t end_idx)
 
     /* Release unreachable elements. */
     if (i > garray_base(sa->count)) {
-        printf("Releasing up to %d\n", (int)i);
+        /* printf("Releasing up to %d\n", (int)i); */
         garray_shift_from(sa->count, i);
         garray_shift_from(sa->data, i);
         garray_set_base(sa->count, i);
