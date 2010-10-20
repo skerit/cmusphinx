@@ -690,7 +690,7 @@ eval_word_chan(ngram_search_t *ngs, int frame_idx)
         if (hmm_frame(&rhmm->hmm) < frame_idx)
             continue;
 
-#if 1
+#if 0
         E_INFOCONT("1ph word chan %d: %s\n", w,
                    dict_wordstr(ps_search_dict(ngs), w));
         score = hmm_dump_vit_eval(&(rhmm)->hmm, stderr);
@@ -1052,8 +1052,8 @@ static int
 too_old_too_cold(ngram_search_t *ngs, int bp,int frame_idx)
 {
     if (frame_idx - bp_sf(ngs->bptbl, bp) > 20) {
-        E_INFO("Pruning too-old HMM (bp %d sf %d frame_idx %d)\n",
-               bp, bp_sf(ngs->bptbl, bp), frame_idx);
+        E_DEBUG(4,("Pruning too-old HMM (bp %d sf %d frame_idx %d)\n",
+                   bp, bp_sf(ngs->bptbl, bp), frame_idx));
         return TRUE;
     }
     return FALSE;

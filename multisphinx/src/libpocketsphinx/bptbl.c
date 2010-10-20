@@ -109,8 +109,8 @@ dump_bptable(bptbl_t *bptbl)
 int
 bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
 {
-    E_INFO("pushing frame %d, oldest bp %d in frame %d\n",
-           frame_idx, oldest_bp, oldest_bp == NO_BP ? -1 : bptbl->ent[oldest_bp].frame);
+    E_DEBUG(1,("pushing frame %d, oldest bp %d in frame %d\n",
+               frame_idx, oldest_bp, oldest_bp == NO_BP ? -1 : bptbl->ent[oldest_bp].frame));
     if (oldest_bp >= 0)
         bptbl->window_sf = bptbl->ent[oldest_bp].frame + 1;
     if (frame_idx >= bptbl->n_frame_alloc) {

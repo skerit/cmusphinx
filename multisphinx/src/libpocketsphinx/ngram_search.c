@@ -407,8 +407,8 @@ ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
             *bss = WORST_SCORE;
         ngs->bptbl->bscore_stack[ngs->bptbl->bss_head + rc] = score;
         cache_bptable_paths(ngs, ngs->bptbl->n_ent);
-        E_INFO("Entered bp %d sf %d ef %d\n", ngs->bptbl->n_ent,
-               bp_sf(ngs->bptbl, ngs->bptbl->n_ent), frame_idx);
+        E_DEBUG(2,("Entered bp %d sf %d ef %d window_sf %d\n", ngs->bptbl->n_ent,
+                   bp_sf(ngs->bptbl, ngs->bptbl->n_ent), frame_idx, ngs->bptbl->window_sf));
         assert(bp_sf(ngs->bptbl, ngs->bptbl->n_ent) >= ngs->bptbl->window_sf);
 
         ngs->bptbl->n_ent++;
@@ -617,7 +617,14 @@ ngram_compute_seg_score(ngram_search_t *ngs, bp_t *be, float32 lwf,
        is still pretty much broken but at least it doesn't
        segfault. */
     if (be->wid == ps_search_silence_wid(ngs)) {
-        *out_lscr = ngs->silpen;
+        /* FIXME: Nasty action at a distance here to deal with the
+         * silence length limiting stuff in ngram_search_fwdtree.c */
+        if (be->bp != NO_BP
+            && (dict_first_phone(ps_search_dict(ngs), ngs->bptbl->ent[be->bp].wid)
+                == ps_search_acmod(ngs)->mdef->sil))
+            *out_lscr = 0;
+        else
+            *out_lscr = ngs->silpen;
     }
     else if (dict_filler_word(ps_search_dict(ngs), be->wid)) {
         *out_lscr = ngs->fillpen;
@@ -669,7 +676,7 @@ ngram_search_finish(ps_search_t *search)
 
     if (ngs->fwdtree) {
         ngram_fwdtree_finish(ngs);
-        dump_bptable(ngs->bptbl);
+        /*dump_bptable(ngs->bptbl);*/
 
         /* Now do fwdflat search in its entirety, if requested. */
         if (ngs->fwdflat) {
@@ -777,7 +784,15 @@ ngram_search_bp2itor(ps_seg_t *seg, int bp)
                                      dict_first_phone(ps_search_dict(ngs), be->wid));
         assert(start_score BETTER_THAN WORST_SCORE);
         if (be->wid == ps_search_silence_wid(ngs)) {
-            seg->lscr = ngs->silpen;
+            /* FIXME: Nasty action at a distance here to deal with the
+             * silence length limiting stuff in ngram_search_fwdtree.c */
+            if (be->bp != NO_BP
+                && (dict_first_phone(ps_search_dict(ngs),
+                                     ngs->bptbl->ent[be->bp].wid)
+                    == ps_search_acmod(ngs)->mdef->sil))
+                seg->lscr = 0;
+            else
+                seg->lscr = ngs->silpen;
         }
         else if (dict_filler_word(ps_search_dict(ngs), be->wid)) {
             seg->lscr = ngs->fillpen;
