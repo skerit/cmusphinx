@@ -67,6 +67,7 @@ hmm_context_init(int32 n_emit_state,
     }
 
     ctx = ckd_calloc(1, sizeof(*ctx));
+    ctx->refcount = 1;
     ctx->n_emit_state = n_emit_state;
     ctx->tp = tp;
     ctx->senscore = senscore;
@@ -76,13 +77,22 @@ hmm_context_init(int32 n_emit_state,
     return ctx;
 }
 
-void
+hmm_context_t *
+hmm_context_retain(hmm_context_t *ctx)
+{
+    ++ctx->refcount;
+}
+
+int
 hmm_context_free(hmm_context_t *ctx)
 {
     if (ctx == NULL)
-        return;
+        return 0;
+    if (--ctx->refcount > 0)
+        return ctx->refcount;
     ckd_free(ctx->st_sen_scr);
     ckd_free(ctx);
+    return 0;
 }
 
 void

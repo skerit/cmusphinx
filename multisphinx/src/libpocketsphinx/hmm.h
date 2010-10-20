@@ -134,6 +134,7 @@ extern "C" {
  * exit state.
  */
 typedef struct hmm_context_s {
+    int refcount;
     int32 n_emit_state;     /**< Number of emitting states in this set of HMMs. */
     uint8 ** const *tp;	    /**< State transition scores tp[id][from][to] (logs3 values). */
     int16 const *senscore;  /**< State emission scores senscore[senid]
@@ -217,13 +218,18 @@ hmm_context_t *hmm_context_init(int32 n_emit_state,
 #define hmm_context_set_senscore(ctx, senscr) ((ctx)->senscore = (senscr))
 
 /**
+ * Retain a pointer to an HMM context.
+ */
+hmm_context_t *hmm_context_retain(hmm_context_t *ctx);
+
+/**
  * Free an HMM context.
  *
  * @note The transition matrices, senone scores, and senone sequence
  * mapping are all assumed to be allocated externally, and will NOT be
  * freed by this function.
  **/
-void hmm_context_free(hmm_context_t *ctx);
+int hmm_context_free(hmm_context_t *ctx);
 
 /**
  * Populate a previously-allocated HMM structure, allocating internal data.
