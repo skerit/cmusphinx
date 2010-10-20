@@ -199,7 +199,8 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
         bp_t *ent, *prev;
         ent = bptbl_ent(bptbl, i);
         prev = bptbl_prev(bptbl, ent);
-        assert(ent->valid);
+        if (!ent->valid) /* May be invalidated by maxwpf */
+            continue;
         if (prev != NULL) {
             int frame = prev->frame;
             if (frame >= bptbl->active_fr

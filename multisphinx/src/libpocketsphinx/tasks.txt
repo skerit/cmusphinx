@@ -25,6 +25,10 @@
 
 * Make fwdflat work properly with arc buffer input - DONE
 
+* Make maxwpf work again with bptbl
+
+* Implement fixed size bptbls
+
 * Remove ngram_search_* and replace with new fwdflat and fwdtree
   - Hook these up to the pocketsphinx API
 

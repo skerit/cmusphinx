@@ -1452,7 +1452,8 @@ bptable_maxwpf(fwdtree_search_t *fts, int frame_idx)
     bestbpe = NULL;
     n = 0;
     /* BPTBL: Replace this with explicit iteration over the current
-     * frame (which frame_idx always is). */
+     * frame (which frame_idx always is).  Also note that when bptbl
+     * becomes circular this will have to change. */
     for (bp = bptbl_ef_idx(fts->bptbl, frame_idx);
          bp < bptbl_ef_idx(fts->bptbl, frame_idx + 1); bp++) {
         bpe = bptbl_ent(fts->bptbl, bp);
@@ -1909,7 +1910,7 @@ fwdtree_search_exit_score(fwdtree_search_t *fts, bp_t *pbe, int rcphone)
      * it should be inlined or we should find a better way to do
      * this. */
     E_DEBUG(99,("fwdtree_search_exit_score(%d,%d)\n", bptbl_idx(fts->bptbl, pbe), rcphone));
-    assert(pbe->valid);
+    //assert(pbe->valid);
     if (pbe->last2_phone == -1) {
         int32 *bss = bptbl_rcscores(fts->bptbl, pbe);
         /* No right context for single phone predecessor words. */

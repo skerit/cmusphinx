@@ -4,7 +4,8 @@ check_PROGRAMS = \
 	test_arc_buffer \
 	test_fwdtree \
 	test_fwdflat \
-	test_fwdtree_fwdflat
+	test_fwdtree_fwdflat \
+	test_fwdtree_maxwpf
 
 TESTS = $(check_PROGRAMS)
 
