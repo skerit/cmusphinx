@@ -544,25 +544,21 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx, int32 path,
 void
 bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp)
 {
-    int32 w, prev_bp;
-    bp_t *be;
+    bp_t *ent, *prev;
 
     assert(bp != NO_BP);
-
-    be = bptbl_ent(bptbl, bp);
-    prev_bp = bp;
-    w = be->wid;
-
-    while (dict_filler_word(bptbl->d2p->dict, w)) {
-        prev_bp = bptbl_ent(bptbl, prev_bp)->bp;
-        if (prev_bp == NO_BP)
-            return;
-        w = bptbl_ent(bptbl, prev_bp)->wid;
+    ent = bptbl_ent(bptbl, bp);
+    prev = bptbl_ent(bptbl, ent->bp);
+    /* Propagate lm state for fillers, rotate it for words. */
+    if (dict_filler_word(bptbl->d2p->dict, ent->wid)) {
+        if (prev != NULL) {
+            ent->real_wid = prev->real_wid;
+            ent->prev_real_wid = prev->prev_real_wid;
+        }
     }
-
-    be->real_wid = dict_basewid(bptbl->d2p->dict, w);
-
-    prev_bp = bptbl_ent(bptbl, prev_bp)->bp;
-    be->prev_real_wid =
-        (prev_bp != NO_BP) ? bptbl_ent(bptbl, prev_bp)->real_wid : -1;
+    else {
+        ent->real_wid = dict_basewid(bptbl->d2p->dict, ent->wid);
+        if (prev != NULL)
+            ent->prev_real_wid = prev->real_wid;
+    }
 }
