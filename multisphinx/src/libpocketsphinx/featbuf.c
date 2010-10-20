@@ -245,10 +245,16 @@ featbuf_wait_utt(featbuf_t *fb, int timeout)
     int s = (timeout == -1) ? -1 : 0;
     int rc;
 
-    if ((rc = sbevent_wait(fb->start, s, timeout)) < 0)
+    E_INFO("Waiting for utt refcount = %d\n", fb->refcount);
+    if ((rc = sbevent_wait(fb->start, s, timeout)) < 0) {
+        E_INFO("Wait finished with %d\n", rc);
         return rc;
-    if (fb->canceled)
+    }
+    E_INFO("Wait finished with %d\n", rc);
+    if (fb->canceled) {
+        E_INFO("Wait canceled\n");
         return -1;
+    }
     return 0;
 }
 
@@ -312,7 +318,6 @@ featbuf_start_utt(featbuf_t *fb)
 
     /* Signal any consumers. */
     fb->canceled = FALSE;
-    E_INFO("Signaling utt start\n");
     sbevent_signal(fb->start);
     return 0;
 }

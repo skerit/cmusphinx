@@ -1,0 +1,549 @@
+INFO: cmd_ln.c(512): Parsing command line:
+\
+	-hmm ../../../test/data/hub4wsj_sc_8k \
+	-lm ../../../test/data/hub4.5000.DMP \
+	-dict ../../../test/data/hub4.5000.dic 
+
+Current configuration:
+[NAME]		[DEFLT]		[VALUE]
+-agc		none		none
+-agcthresh	2.0		2.000000e+00
+-alpha		0.97		9.700000e-01
+-ascale		20.0		2.000000e+01
+-aw		1		1
+-backtrace	no		no
+-beam		1e-48		1.000000e-48
+-bestpath	yes		yes
+-bestpathlw	9.5		9.500000e+00
+-bghist		no		no
+-ceplen		13		13
+-cmn		current		current
+-cmninit	8.0		8.0
+-compallsen	no		no
+-debug				0
+-dict				../../../test/data/hub4.5000.dic
+-dictcase	no		no
+-dither		no		no
+-doublebw	no		no
+-ds		1		1
+-fdict				
+-feat		1s_c_d_dd	1s_c_d_dd
+-featparams			
+-fillprob	1e-8		1.000000e-08
+-frate		100		100
+-fsg				
+-fsgusealtpron	yes		yes
+-fsgusefiller	yes		yes
+-fwdflat	yes		yes
+-fwdflatbeam	1e-64		1.000000e-64
+-fwdflatefwid	4		4
+-fwdflatlw	8.5		8.500000e+00
+-fwdflatsfwin	25		25
+-fwdflatwbeam	7e-29		7.000000e-29
+-fwdtree	yes		yes
+-hmm				../../../test/data/hub4wsj_sc_8k
+-input_endian	little		little
+-jsgf				
+-kdmaxbbi	-1		-1
+-kdmaxdepth	0		0
+-kdtree				
+-latsize	512		512
+-lda				
+-ldadim		0		0
+-lextreedump	0		0
+-lifter		0		0
+-lm				../../../test/data/hub4.5000.DMP
+-lmctl				
+-lmname		default		default
+-logbase	1.0001		1.000100e+00
+-logfn				
+-logspec	no		no
+-lowerf		133.33334	1.333333e+02
+-lpbeam		1e-40		1.000000e-40
+-lponlybeam	7e-29		7.000000e-29
+-lw		6.5		6.500000e+00
+-maxhmmpf	-1		-1
+-maxnewoov	20		20
+-maxsilfr	-1		-1
+-maxwpf		50		50
+-mdef				
+-mean				
+-mfclogdir			
+-min_endfr	0		0
+-mixw				
+-mixwfloor	0.0000001	1.000000e-07
+-mllr				
+-mmap		yes		yes
+-ncep		13		13
+-nfft		512		512
+-nfilt		40		40
+-nwpen		1.0		1.000000e+00
+-pbeam		1e-48		1.000000e-48
+-pip		1.0		1.000000e+00
+-pl_beam	1e-10		1.000000e-10
+-pl_pbeam	1e-5		1.000000e-05
+-pl_window	0		0
+-rawlogdir			
+-remove_dc	no		no
+-round_filters	yes		yes
+-samprate	16000		1.600000e+04
+-seed		-1		-1
+-sendump			
+-senlogdir			
+-senmgau			
+-silprob	0.005		5.000000e-03
+-smoothspec	no		no
+-svspec				
+-tmat				
+-tmatfloor	0.0001		1.000000e-04
+-topn		4		4
+-topn_beam	0		0
+-toprule			
+-transform	legacy		legacy
+-unit_area	yes		yes
+-upperf		6855.4976	6.855498e+03
+-usewdphones	no		no
+-uw		1.0		1.000000e+00
+-var				
+-varfloor	0.0001		1.000000e-04
+-varnorm	no		no
+-verbose	no		no
+-warp_params			
+-warp_type	inverse_linear	inverse_linear
+-wbeam		7e-29		7.000000e-29
+-wip		0.65		6.500000e-01
+-wlen		0.025625	2.562500e-02
+
+INFO: cmd_ln.c(512): Parsing command line:
+\
+	-nfilt 20 \
+	-lowerf 1 \
+	-upperf 4000 \
+	-wlen 0.025 \
+	-transform dct \
+	-round_filters no \
+	-remove_dc yes \
+	-svspec 0-12/13-25/26-38 \
+	-feat 1s_c_d_dd \
+	-agc none \
+	-cmn current \
+	-cmninit 56,-3,1 \
+	-varnorm no 
+
+Current configuration:
+[NAME]		[DEFLT]		[VALUE]
+-agc		none		none
+-agcthresh	2.0		2.000000e+00
+-alpha		0.97		9.700000e-01
+-ceplen		13		13
+-cmn		current		current
+-cmninit	8.0		56,-3,1
+-dither		no		no
+-doublebw	no		no
+-feat		1s_c_d_dd	1s_c_d_dd
+-frate		100		100
+-input_endian	little		little
+-lda				
+-ldadim		0		0
+-lifter		0		0
+-logspec	no		no
+-lowerf		133.33334	1.000000e+00
+-ncep		13		13
+-nfft		512		512
+-nfilt		40		20
+-remove_dc	no		yes
+-round_filters	yes		no
+-samprate	16000		1.600000e+04
+-seed		-1		-1
+-smoothspec	no		no
+-svspec				0-12/13-25/26-38
+-transform	legacy		dct
+-unit_area	yes		yes
+-upperf		6855.4976	4.000000e+03
+-varnorm	no		no
+-verbose	no		no
+-warp_params			
+-warp_type	inverse_linear	inverse_linear
+-wlen		0.025625	2.500000e-02
+
+INFO: acmod.c(239): Parsed model-specific feature parameters from ../../../test/data/hub4wsj_sc_8k/feat.params
+INFO: feat.c(848): Initializing feature stream to type: '1s_c_d_dd', ceplen=13, CMN='current', VARNORM='no', AGC='none'
+INFO: cmn.c(142): mean[0]= 12.00, mean[1..12]= 0.0
+INFO: acmod.c(163): Using subvector specification 0-12/13-25/26-38
+INFO: mdef.c(520): Reading model definition: ../../../test/data/hub4wsj_sc_8k/mdef
+INFO: mdef.c(531): Found byte-order mark BMDF, assuming this is a binary mdef file
+INFO: bin_mdef.c(330): Reading binary model definition: ../../../test/data/hub4wsj_sc_8k/mdef
+INFO: bin_mdef.c(507): 50 CI-phone, 143047 CD-phone, 3 emitstate/phone, 150 CI-sen, 5150 Sen, 27135 Sen-Seq
+INFO: tmat.c(206): Reading HMM transition probability matrices: ../../../test/data/hub4wsj_sc_8k/transition_matrices
+INFO: acmod.c(117): Attempting to use SCHMM computation module
+INFO: ms_gauden.c(198): Reading mixture gaussian parameter: ../../../test/data/hub4wsj_sc_8k/means
+INFO: ms_gauden.c(292): 1 codebook, 3 feature, size
+ 256x13 256x13 256x13
+INFO: ms_gauden.c(198): Reading mixture gaussian parameter: ../../../test/data/hub4wsj_sc_8k/variances
+INFO: ms_gauden.c(292): 1 codebook, 3 feature, size
+ 256x13 256x13 256x13
+INFO: ms_gauden.c(356): 0 variance values floored
+INFO: sendump.c(79): Loading senones from dump file ../../../test/data/hub4wsj_sc_8k/sendump
+INFO: sendump.c(104): BEGIN FILE FORMAT DESCRIPTION
+INFO: sendump.c(204): Using memory-mapped I/O for senones
+INFO: s2_semi_mgau.c(991): Maximum top-N: 4 Top-N beams: 0 0 0
+INFO: mdef.c(520): Reading model definition: ../../../test/data/hub4wsj_sc_8k/mdef
+INFO: mdef.c(531): Found byte-order mark BMDF, assuming this is a binary mdef file
+INFO: bin_mdef.c(330): Reading binary model definition: ../../../test/data/hub4wsj_sc_8k/mdef
+INFO: bin_mdef.c(507): 50 CI-phone, 143047 CD-phone, 3 emitstate/phone, 150 CI-sen, 5150 Sen, 27135 Sen-Seq
+INFO: dict.c(306): Allocating 10319 * 32 bytes (322 KiB) for word entries
+INFO: dict.c(321): Reading main dictionary: ../../../test/data/hub4.5000.dic
+INFO: dict.c(212): Allocated 44 KiB for strings, 69 KiB for phones
+INFO: dict.c(324): 6212 words read
+INFO: dict.c(330): Reading filler dictionary: ../../../test/data/hub4wsj_sc_8k/noisedict
+INFO: dict.c(212): Allocated 0 KiB for strings, 0 KiB for phones
+INFO: dict.c(333): 11 words read
+INFO: dict2pid.c(396): Building PID tables for dictionary
+INFO: dict2pid.c(404): Allocating 50^3 * 2 bytes (244 KiB) for word-initial triphones
+INFO: dict2pid.c(131): Allocated 60400 bytes (58 KiB) for word-final triphones
+INFO: dict2pid.c(195): Allocated 60400 bytes (58 KiB) for single-phone word triphones
+INFO: ngram_model_arpa.c(77): No \data\ mark in LM file
+INFO: ngram_model_dmp.c(142): Will use memory-mapped I/O for LM file
+INFO: ngram_model_dmp.c(196): ngrams 1=5001, 2=436879, 3=418286
+INFO: ngram_model_dmp.c(242):     5001 = LM.unigrams(+trailer) read
+INFO: ngram_model_dmp.c(290):   436879 = LM.bigrams(+trailer) read
+INFO: ngram_model_dmp.c(315):   418286 = LM.trigrams read
+INFO: ngram_model_dmp.c(339):    37293 = LM.prob2 entries read
+INFO: ngram_model_dmp.c(358):    14370 = LM.bo_wt2 entries read
+INFO: ngram_model_dmp.c(378):    36094 = LM.prob3 entries read
+INFO: ngram_model_dmp.c(406):      854 = LM.tseg_base entries read
+INFO: ngram_model_dmp.c(462):     5001 = ascii word strings read
+INFO: fwdtree_search.c(296): 457 unique initial diphones
+INFO: fwdtree_search.c(344): 0 root, 0 non-root channels, 27 single-phone words
+INFO: fwdtree_search.c(384): Creating search tree
+INFO: fwdtree_search.c(389): before: 0 root, 0 non-root channels, 27 single-phone words
+INFO: fwdtree_search.c(524): after: max nonroot chan increased to 13439
+INFO: fwdtree_search.c(533): after: 457 root, 13311 non-root channels, 26 single-phone words
+INFO: feat.c(1148): At directory ../../../test/data
+INFO: feat.c(378): Reading mfc file: '../../../test/data/chan3.mfc'[0..-1]
+INFO: feat.c(1148): At directory ../../../test/data
+INFO: feat.c(378): Reading mfc file: '../../../test/data/chan3.mfc'[0..-1]
+INFO: cmn.c(175): CMN: 39.13  0.18 -0.42 -0.52 -1.61 -0.69  0.23  0.19 -0.23 -0.30 -0.17 -0.39 -0.07 
+INFO: bptbl.c(471): Retired 2 bps: now 2 retired, 559 active
+INFO: bptbl.c(474): First active sf 0 output frame 36 window 36
+INFO: bptbl.c(471): Retired 7 bps: now 9 retired, 643 active
+INFO: bptbl.c(474): First active sf 0 output frame 38 window 38
+INFO: bptbl.c(471): Retired 79 bps: now 88 retired, 1027 active
+INFO: bptbl.c(474): First active sf 0 output frame 53 window 53
+INFO: bptbl.c(471): Retired 10 bps: now 98 retired, 1126 active
+INFO: bptbl.c(474): First active sf 0 output frame 58 window 58
+INFO: bptbl.c(471): Retired 68 bps: now 166 retired, 1244 active
+INFO: bptbl.c(474): First active sf 11 output frame 78 window 67
+INFO: bptbl.c(471): Retired 155 bps: now 321 retired, 1410 active
+INFO: bptbl.c(474): First active sf 11 output frame 91 window 80
+INFO: bptbl.c(471): Retired 321 bps: now 642 retired, 1586 active
+INFO: bptbl.c(474): First active sf 21 output frame 106 window 85
+INFO: bptbl.c(471): Retired 82 bps: now 724 retired, 1315 active
+INFO: bptbl.c(474): First active sf 36 output frame 108 window 72
+INFO: bptbl.c(471): Retired 49 bps: now 773 retired, 1178 active
+INFO: bptbl.c(474): First active sf 36 output frame 110 window 74
+INFO: bptbl.c(471): Retired 92 bps: now 865 retired, 1270 active
+INFO: bptbl.c(474): First active sf 37 output frame 117 window 80
+INFO: bptbl.c(471): Retired 205 bps: now 1070 retired, 1262 active
+INFO: bptbl.c(474): First active sf 37 output frame 143 window 106
+INFO: bptbl.c(471): Retired 183 bps: now 1253 retired, 961 active
+INFO: bptbl.c(474): First active sf 37 output frame 145 window 108
+INFO: bptbl.c(471): Retired 160 bps: now 1413 retired, 214 active
+INFO: bptbl.c(474): First active sf 82 output frame 146 window 64
+INFO: bptbl.c(471): Retired 0 bps: now 1413 retired, 170 active
+INFO: bptbl.c(474): First active sf 82 output frame 147 window 65
+INFO: bptbl.c(471): Retired 11 bps: now 1424 retired, 201 active
+INFO: bptbl.c(474): First active sf 82 output frame 166 window 84
+INFO: bptbl.c(471): Retired 46 bps: now 1470 retired, 480 active
+INFO: bptbl.c(474): First active sf 129 output frame 220 window 91
+INFO: bptbl.c(471): Retired 36 bps: now 1506 retired, 612 active
+INFO: bptbl.c(474): First active sf 129 output frame 235 window 106
+INFO: bptbl.c(471): Retired 230 bps: now 1736 retired, 598 active
+INFO: bptbl.c(474): First active sf 129 output frame 244 window 115
+INFO: bptbl.c(471): Retired 40 bps: now 1776 retired, 585 active
+INFO: bptbl.c(474): First active sf 129 output frame 245 window 116
+INFO: bptbl.c(471): Retired 134 bps: now 1910 retired, 733 active
+INFO: bptbl.c(474): First active sf 129 output frame 260 window 131
+INFO: bptbl.c(471): Retired 7 bps: now 1917 retired, 834 active
+INFO: bptbl.c(474): First active sf 209 output frame 275 window 66
+INFO: bptbl.c(471): Retired 12 bps: now 1929 retired, 834 active
+INFO: bptbl.c(474): First active sf 209 output frame 279 window 70
+INFO: bptbl.c(471): Retired 426 bps: now 2355 retired, 417 active
+INFO: bptbl.c(474): First active sf 209 output frame 294 window 85
+INFO: bptbl.c(471): Retired 69 bps: now 2424 retired, 371 active
+INFO: bptbl.c(474): First active sf 209 output frame 298 window 89
+INFO: bptbl.c(471): Retired 24 bps: now 2448 retired, 147 active
+INFO: bptbl.c(474): First active sf 226 output frame 299 window 73
+INFO: bptbl.c(471): Retired 5 bps: now 2453 retired, 360 active
+INFO: bptbl.c(474): First active sf 251 output frame 310 window 59
+INFO: bptbl.c(471): Retired 10 bps: now 2463 retired, 358 active
+INFO: bptbl.c(474): First active sf 251 output frame 316 window 65
+INFO: bptbl.c(471): Retired 3 bps: now 2466 retired, 340 active
+INFO: bptbl.c(474): First active sf 251 output frame 318 window 67
+INFO: bptbl.c(471): Retired 44 bps: now 2510 retired, 279 active
+INFO: bptbl.c(474): First active sf 280 output frame 325 window 45
+INFO: bptbl.c(471): Retired 12 bps: now 2522 retired, 351 active
+INFO: bptbl.c(474): First active sf 280 output frame 329 window 49
+INFO: bptbl.c(471): Retired 9 bps: now 2531 retired, 389 active
+INFO: bptbl.c(474): First active sf 299 output frame 342 window 43
+INFO: bptbl.c(471): Retired 0 bps: now 2531 retired, 428 active
+INFO: bptbl.c(474): First active sf 299 output frame 346 window 47
+INFO: bptbl.c(471): Retired 0 bps: now 2531 retired, 750 active
+INFO: bptbl.c(474): First active sf 299 output frame 363 window 64
+INFO: bptbl.c(471): Retired 20 bps: now 2551 retired, 880 active
+INFO: bptbl.c(474): First active sf 299 output frame 381 window 82
+INFO: bptbl.c(471): Retired 202 bps: now 2753 retired, 741 active
+INFO: bptbl.c(474): First active sf 325 output frame 402 window 77
+INFO: bptbl.c(471): Retired 39 bps: now 2792 retired, 1127 active
+INFO: bptbl.c(474): First active sf 325 output frame 415 window 90
+INFO: bptbl.c(471): Retired 151 bps: now 2943 retired, 1227 active
+INFO: bptbl.c(474): First active sf 349 output frame 428 window 79
+INFO: bptbl.c(471): Retired 110 bps: now 3053 retired, 1456 active
+INFO: bptbl.c(474): First active sf 349 output frame 448 window 99
+INFO: bptbl.c(471): Retired 48 bps: now 3101 retired, 1470 active
+INFO: bptbl.c(474): First active sf 349 output frame 451 window 102
+INFO: bptbl.c(471): Retired 681 bps: now 3782 retired, 885 active
+INFO: bptbl.c(474): First active sf 386 output frame 474 window 88
+INFO: bptbl.c(471): Retired 68 bps: now 3850 retired, 1121 active
+INFO: bptbl.c(474): First active sf 386 output frame 484 window 98
+INFO: bptbl.c(471): Retired 69 bps: now 3919 retired, 975 active
+INFO: bptbl.c(474): First active sf 412 output frame 488 window 76
+INFO: bptbl.c(471): Retired 401 bps: now 4320 retired, 878 active
+INFO: bptbl.c(474): First active sf 449 output frame 513 window 64
+INFO: bptbl.c(471): Retired 29 bps: now 4349 retired, 684 active
+INFO: bptbl.c(474): First active sf 449 output frame 515 window 66
+INFO: bptbl.c(471): Retired 3 bps: now 4352 retired, 607 active
+INFO: bptbl.c(474): First active sf 450 output frame 516 window 66
+INFO: bptbl.c(471): Retired 174 bps: now 4526 retired, 1222 active
+INFO: bptbl.c(474): First active sf 489 output frame 554 window 65
+INFO: bptbl.c(471): Retired 18 bps: now 4544 retired, 1268 active
+INFO: bptbl.c(474): First active sf 489 output frame 562 window 73
+INFO: bptbl.c(471): Retired 122 bps: now 4666 retired, 1307 active
+INFO: bptbl.c(474): First active sf 489 output frame 578 window 89
+INFO: bptbl.c(471): Retired 128 bps: now 4794 retired, 1310 active
+INFO: bptbl.c(474): First active sf 489 output frame 587 window 98
+INFO: bptbl.c(471): Retired 371 bps: now 5165 retired, 688 active
+INFO: bptbl.c(474): First active sf 489 output frame 589 window 100
+INFO: bptbl.c(471): Retired 134 bps: now 5299 retired, 577 active
+INFO: bptbl.c(474): First active sf 489 output frame 593 window 104
+INFO: bptbl.c(471): Retired 50 bps: now 5349 retired, 555 active
+INFO: bptbl.c(474): First active sf 519 output frame 603 window 84
+INFO: bptbl.c(471): Retired 24 bps: now 5373 retired, 585 active
+INFO: bptbl.c(474): First active sf 519 output frame 608 window 89
+INFO: bptbl.c(471): Retired 54 bps: now 5427 retired, 716 active
+INFO: bptbl.c(474): First active sf 549 output frame 642 window 93
+INFO: bptbl.c(471): Retired 48 bps: now 5475 retired, 621 active
+INFO: bptbl.c(474): First active sf 553 output frame 647 window 94
+INFO: bptbl.c(471): Retired 23 bps: now 5498 retired, 1182 active
+INFO: bptbl.c(474): First active sf 553 output frame 687 window 134
+INFO: bptbl.c(471): Retired 86 bps: now 5584 retired, 1336 active
+INFO: bptbl.c(474): First active sf 626 output frame 709 window 83
+INFO: bptbl.c(471): Retired 150 bps: now 5734 retired, 1459 active
+INFO: bptbl.c(474): First active sf 626 output frame 728 window 102
+INFO: bptbl.c(471): Retired 71 bps: now 5805 retired, 1394 active
+INFO: bptbl.c(474): First active sf 626 output frame 730 window 104
+INFO: bptbl.c(471): Retired 17 bps: now 5822 retired, 1424 active
+INFO: bptbl.c(474): First active sf 626 output frame 741 window 115
+INFO: bptbl.c(471): Retired 126 bps: now 5948 retired, 1302 active
+INFO: bptbl.c(474): First active sf 654 output frame 748 window 94
+INFO: bptbl.c(471): Retired 552 bps: now 6500 retired, 786 active
+INFO: bptbl.c(474): First active sf 654 output frame 775 window 121
+INFO: bptbl.c(471): Retired 285 bps: now 6785 retired, 477 active
+INFO: bptbl.c(474): First active sf 704 output frame 781 window 77
+INFO: bptbl.c(471): Retired 104 bps: now 6889 retired, 770 active
+INFO: bptbl.c(474): First active sf 705 output frame 792 window 87
+INFO: bptbl.c(471): Retired 6 bps: now 6895 retired, 1465 active
+INFO: bptbl.c(474): First active sf 705 output frame 815 window 110
+INFO: bptbl.c(471): Retired 9 bps: now 6904 retired, 1991 active
+INFO: bptbl.c(474): First active sf 705 output frame 828 window 123
+INFO: bptbl.c(471): Retired 12 bps: now 6916 retired, 2188 active
+INFO: bptbl.c(474): First active sf 705 output frame 835 window 130
+INFO: bptbl.c(471): Retired 41 bps: now 6957 retired, 2179 active
+INFO: bptbl.c(474): First active sf 705 output frame 837 window 132
+INFO: bptbl.c(471): Retired 629 bps: now 7586 retired, 1637 active
+INFO: bptbl.c(474): First active sf 766 output frame 849 window 83
+INFO: bptbl.c(471): Retired 294 bps: now 7880 retired, 1696 active
+INFO: bptbl.c(474): First active sf 766 output frame 859 window 93
+INFO: bptbl.c(471): Retired 421 bps: now 8301 retired, 2088 active
+INFO: bptbl.c(474): First active sf 766 output frame 881 window 115
+INFO: bptbl.c(471): Retired 385 bps: now 8686 retired, 1808 active
+INFO: bptbl.c(474): First active sf 768 output frame 892 window 124
+INFO: bptbl.c(471): Retired 346 bps: now 9032 retired, 1360 active
+INFO: bptbl.c(474): First active sf 807 output frame 897 window 90
+INFO: bptbl.c(471): Retired 151 bps: now 9183 retired, 1242 active
+INFO: bptbl.c(474): First active sf 807 output frame 900 window 93
+INFO: bptbl.c(471): Retired 237 bps: now 9420 retired, 1076 active
+INFO: bptbl.c(474): First active sf 807 output frame 902 window 95
+INFO: bptbl.c(471): Retired 464 bps: now 9884 retired, 855 active
+INFO: bptbl.c(474): First active sf 857 output frame 928 window 71
+INFO: bptbl.c(471): Retired 102 bps: now 9986 retired, 727 active
+INFO: bptbl.c(474): First active sf 857 output frame 932 window 75
+INFO: bptbl.c(471): Retired 187 bps: now 10173 retired, 1125 active
+INFO: bptbl.c(474): First active sf 863 output frame 970 window 107
+INFO: bptbl.c(471): Retired 79 bps: now 10252 retired, 971 active
+INFO: bptbl.c(474): First active sf 863 output frame 972 window 109
+INFO: bptbl.c(471): Retired 147 bps: now 10399 retired, 1130 active
+INFO: bptbl.c(474): First active sf 863 output frame 1012 window 149
+INFO: bptbl.c(471): Retired 231 bps: now 10630 retired, 544 active
+INFO: bptbl.c(474): First active sf 913 output frame 1045 window 132
+INFO: bptbl.c(471): Retired 53 bps: now 10683 retired, 428 active
+INFO: bptbl.c(474): First active sf 913 output frame 1048 window 135
+INFO: bptbl.c(471): Retired 179 bps: now 10862 retired, 1130 active
+INFO: bptbl.c(474): First active sf 975 output frame 1109 window 134
+INFO: bptbl.c(471): Retired 34 bps: now 10896 retired, 1367 active
+INFO: bptbl.c(474): First active sf 975 output frame 1122 window 147
+INFO: bptbl.c(471): Retired 6 bps: now 10902 retired, 1912 active
+INFO: bptbl.c(474): First active sf 975 output frame 1150 window 175
+INFO: bptbl.c(471): Retired 474 bps: now 11376 retired, 1360 active
+INFO: bptbl.c(474): First active sf 975 output frame 1152 window 177
+INFO: bptbl.c(471): Retired 47 bps: now 11423 retired, 1245 active
+INFO: bptbl.c(474): First active sf 975 output frame 1156 window 181
+INFO: bptbl.c(471): Retired 15 bps: now 11438 retired, 1233 active
+INFO: bptbl.c(474): First active sf 975 output frame 1167 window 192
+INFO: bptbl.c(471): Retired 701 bps: now 12139 retired, 373 active
+INFO: bptbl.c(474): First active sf 1094 output frame 1228 window 134
+INFO: bptbl.c(471): Retired 70 bps: now 12209 retired, 264 active
+INFO: bptbl.c(474): First active sf 1094 output frame 1235 window 141
+INFO: bptbl.c(471): Retired 66 bps: now 12275 retired, 159 active
+INFO: bptbl.c(474): First active sf 1094 output frame 1240 window 146
+INFO: bptbl.c(471): Retired 9 bps: now 12284 retired, 465 active
+INFO: bptbl.c(474): First active sf 1201 output frame 1278 window 77
+INFO: bptbl.c(471): Retired 6 bps: now 12290 retired, 810 active
+INFO: bptbl.c(474): First active sf 1201 output frame 1304 window 103
+INFO: bptbl.c(471): Retired 84 bps: now 12374 retired, 793 active
+INFO: bptbl.c(474): First active sf 1201 output frame 1315 window 114
+INFO: bptbl.c(471): Retired 19 bps: now 12393 retired, 823 active
+INFO: bptbl.c(474): First active sf 1201 output frame 1332 window 131
+INFO: bptbl.c(471): Retired 60 bps: now 12453 retired, 546 active
+INFO: bptbl.c(474): First active sf 1201 output frame 1336 window 135
+INFO: bptbl.c(471): Retired 65 bps: now 12518 retired, 547 active
+INFO: bptbl.c(474): First active sf 1251 output frame 1345 window 94
+INFO: bptbl.c(471): Retired 43 bps: now 12561 retired, 501 active
+INFO: bptbl.c(474): First active sf 1251 output frame 1347 window 96
+INFO: bptbl.c(471): Retired 77 bps: now 12638 retired, 327 active
+INFO: bptbl.c(474): First active sf 1257 output frame 1350 window 93
+INFO: bptbl.c(471): Retired 6 bps: now 12644 retired, 399 active
+INFO: bptbl.c(474): First active sf 1306 output frame 1357 window 51
+INFO: bptbl.c(471): Retired 0 bps: now 12644 retired, 435 active
+INFO: bptbl.c(474): First active sf 1306 output frame 1359 window 53
+INFO: bptbl.c(471): Retired 4 bps: now 12648 retired, 590 active
+INFO: bptbl.c(474): First active sf 1306 output frame 1369 window 63
+INFO: bptbl.c(471): Retired 302 bps: now 12950 retired, 291 active
+INFO: bptbl.c(474): First active sf 1336 output frame 1402 window 66
+INFO: bptbl.c(471): Retired 21 bps: now 12971 retired, 153 active
+INFO: bptbl.c(474): First active sf 1362 output frame 1404 window 42
+INFO: bptbl.c(471): Retired 0 bps: now 12971 retired, 153 active
+INFO: bptbl.c(474): First active sf 1362 output frame 1405 window 43
+INFO: bptbl.c(471): Retired 2 bps: now 12973 retired, 156 active
+INFO: bptbl.c(474): First active sf 1362 output frame 1408 window 46
+INFO: bptbl.c(471): Retired 4 bps: now 12977 retired, 531 active
+INFO: bptbl.c(474): First active sf 1362 output frame 1426 window 64
+INFO: bptbl.c(471): Retired 9 bps: now 12986 retired, 1096 active
+INFO: bptbl.c(474): First active sf 1362 output frame 1448 window 86
+INFO: bptbl.c(471): Retired 35 bps: now 13021 retired, 1088 active
+INFO: bptbl.c(474): First active sf 1390 output frame 1461 window 71
+INFO: bptbl.c(471): Retired 7 bps: now 13028 retired, 1199 active
+INFO: bptbl.c(474): First active sf 1393 output frame 1476 window 83
+INFO: bptbl.c(471): Retired 12 bps: now 13040 retired, 1302 active
+INFO: bptbl.c(474): First active sf 1393 output frame 1481 window 88
+INFO: bptbl.c(471): Retired 790 bps: now 13830 retired, 875 active
+INFO: bptbl.c(474): First active sf 1397 output frame 1497 window 100
+INFO: bptbl.c(471): Retired 80 bps: now 13910 retired, 1173 active
+INFO: bptbl.c(474): First active sf 1456 output frame 1522 window 66
+INFO: bptbl.c(471): Retired 4 bps: now 13914 retired, 1224 active
+INFO: bptbl.c(474): First active sf 1456 output frame 1525 window 69
+INFO: bptbl.c(471): Retired 52 bps: now 13966 retired, 1872 active
+INFO: bptbl.c(474): First active sf 1456 output frame 1573 window 117
+INFO: bptbl.c(471): Retired 461 bps: now 14427 retired, 1255 active
+INFO: bptbl.c(474): First active sf 1467 output frame 1578 window 111
+INFO: bptbl.c(471): Retired 534 bps: now 14961 retired, 433 active
+INFO: bptbl.c(474): First active sf 1468 output frame 1589 window 121
+INFO: bptbl.c(471): Retired 42 bps: now 15003 retired, 409 active
+INFO: bptbl.c(474): First active sf 1468 output frame 1598 window 130
+INFO: bptbl.c(471): Retired 229 bps: now 15232 retired, 118 active
+INFO: bptbl.c(474): First active sf 1468 output frame 1599 window 131
+INFO: bptbl.c(471): Retired 19 bps: now 15251 retired, 203 active
+INFO: bptbl.c(474): First active sf 1568 output frame 1658 window 90
+INFO: bptbl.c(471): Retired 2 bps: now 15253 retired, 446 active
+INFO: bptbl.c(474): First active sf 1568 output frame 1666 window 98
+INFO: bptbl.c(471): Retired 5 bps: now 15258 retired, 1687 active
+INFO: bptbl.c(474): First active sf 1568 output frame 1696 window 128
+INFO: bptbl.c(471): Retired 15 bps: now 15273 retired, 2494 active
+INFO: bptbl.c(474): First active sf 1568 output frame 1723 window 155
+INFO: bptbl.c(471): Retired 399 bps: now 15672 retired, 2019 active
+INFO: bptbl.c(474): First active sf 1641 output frame 1726 window 85
+INFO: bptbl.c(471): Retired 720 bps: now 16392 retired, 1334 active
+INFO: bptbl.c(474): First active sf 1641 output frame 1731 window 90
+INFO: bptbl.c(471): Retired 545 bps: now 16937 retired, 698 active
+INFO: bptbl.c(474): First active sf 1670 output frame 1744 window 74
+INFO: bptbl.c(471): Retired 31 bps: now 16968 retired, 1131 active
+INFO: bptbl.c(474): First active sf 1670 output frame 1763 window 93
+INFO: bptbl.c(471): Retired 24 bps: now 16992 retired, 1158 active
+INFO: bptbl.c(474): First active sf 1670 output frame 1766 window 96
+INFO: bptbl.c(471): Retired 140 bps: now 17132 retired, 1087 active
+INFO: bptbl.c(474): First active sf 1714 output frame 1775 window 61
+INFO: bptbl.c(471): Retired 110 bps: now 17242 retired, 987 active
+INFO: bptbl.c(474): First active sf 1714 output frame 1776 window 62
+INFO: bptbl.c(471): Retired 88 bps: now 17330 retired, 924 active
+INFO: bptbl.c(474): First active sf 1714 output frame 1778 window 64
+INFO: bptbl.c(471): Retired 195 bps: now 17525 retired, 580 active
+INFO: bptbl.c(474): First active sf 1718 output frame 1783 window 65
+INFO: bptbl.c(471): Retired 19 bps: now 17544 retired, 961 active
+INFO: bptbl.c(474): First active sf 1718 output frame 1810 window 92
+INFO: bptbl.c(471): Retired 173 bps: now 17717 retired, 779 active
+INFO: bptbl.c(474): First active sf 1731 output frame 1813 window 82
+INFO: bptbl.c(471): Retired 100 bps: now 17817 retired, 489 active
+INFO: bptbl.c(474): First active sf 1752 output frame 1815 window 63
+INFO: bptbl.c(471): Retired 27 bps: now 17844 retired, 500 active
+INFO: bptbl.c(474): First active sf 1752 output frame 1817 window 65
+INFO: bptbl.c(471): Retired 93 bps: now 17937 retired, 496 active
+INFO: bptbl.c(474): First active sf 1752 output frame 1826 window 74
+INFO: bptbl.c(471): Retired 13 bps: now 17950 retired, 41 active
+INFO: bptbl.c(474): First active sf 1794 output frame 1840 window 46
+INFO: bptbl.c(471): Retired 1 bps: now 17951 retired, 288 active
+INFO: bptbl.c(474): First active sf 1794 output frame 1858 window 64
+INFO: bptbl.c(471): Retired 4 bps: now 17955 retired, 335 active
+INFO: bptbl.c(474): First active sf 1794 output frame 1865 window 71
+INFO: bptbl.c(471): Retired 25 bps: now 17980 retired, 558 active
+INFO: bptbl.c(474): First active sf 1833 output frame 1882 window 49
+INFO: bptbl.c(471): Retired 50 bps: now 18030 retired, 557 active
+INFO: bptbl.c(474): First active sf 1834 output frame 1883 window 49
+INFO: bptbl.c(471): Retired 32 bps: now 18062 retired, 697 active
+INFO: bptbl.c(474): First active sf 1834 output frame 1889 window 55
+INFO: bptbl.c(471): Retired 22 bps: now 18084 retired, 1120 active
+INFO: bptbl.c(474): First active sf 1834 output frame 1903 window 69
+INFO: bptbl.c(471): Retired 95 bps: now 18179 retired, 1335 active
+INFO: bptbl.c(474): First active sf 1859 output frame 1926 window 67
+INFO: bptbl.c(471): Retired 43 bps: now 18222 retired, 1424 active
+INFO: bptbl.c(474): First active sf 1861 output frame 1930 window 69
+INFO: bptbl.c(471): Retired 439 bps: now 18661 retired, 1046 active
+INFO: bptbl.c(474): First active sf 1861 output frame 1942 window 81
+INFO: bptbl.c(471): Retired 2 bps: now 18663 retired, 873 active
+INFO: bptbl.c(474): First active sf 1877 output frame 1946 window 69
+INFO: bptbl.c(471): Retired 7 bps: now 18670 retired, 1412 active
+INFO: bptbl.c(474): First active sf 1877 output frame 1980 window 103
+INFO: bptbl.c(471): Retired 888 bps: now 19558 retired, 1571 active
+INFO: bptbl.c(474): First active sf 1912 output frame 2036 window 124
+INFO: bptbl.c(471): Retired 614 bps: now 20172 retired, 851 active
+INFO: bptbl.c(474): First active sf 1912 output frame 2038 window 126
+INFO: bptbl.c(471): Retired 72 bps: now 20244 retired, 812 active
+INFO: bptbl.c(474): First active sf 1912 output frame 2040 window 128
+INFO: bptbl.c(471): Retired 30 bps: now 20274 retired, 841 active
+INFO: bptbl.c(474): First active sf 1912 output frame 2044 window 132
+INFO: bptbl.c(471): Retired 36 bps: now 20310 retired, 974 active
+INFO: bptbl.c(474): First active sf 1912 output frame 2054 window 142
+INFO: bptbl.c(471): Retired 305 bps: now 20615 retired, 1081 active
+INFO: bptbl.c(474): First active sf 1912 output frame 2074 window 162
+INFO: bptbl.c(471): Retired 186 bps: now 20801 retired, 1087 active
+INFO: bptbl.c(474): First active sf 1998 output frame 2088 window 90
+INFO: bptbl.c(578): Retired 724 bps: now 21525 retired, 0 active, first_active_sf 2091
+INFO: bptbl.c(584): Allocated 4096 active and 32768 retired entries (128 + 1024 KiB)
+INFO: bptbl.c(589): Allocated 524288 right context scores (2048 KiB)
+INFO: bptbl.c(592): Allocated 2048 permutation entries and 256 end frame entries
+INFO: fwdtree_search.c(1834):    35549 words recognized (17/fr)
+INFO: fwdtree_search.c(1836):  7325357 senones evaluated (3502/fr)
+INFO: fwdtree_search.c(1838): 12632106 channels searched (6038/fr), 930227 1st, 1354952 last
+INFO: fwdtree_search.c(1842):    99618 words for which last channels evaluated (47/fr)
+INFO: fwdtree_search.c(1845):  1581050 candidate words for entering last phone (755/fr)
+INFO: bptbl.c(663): Last frame 2090 has 32 entries
+hyp: daily along discussion about how much of how you you on a make it to people complete things out to in part of two make it hard to be did i mean in check yesterday weather was moving south (-251322)

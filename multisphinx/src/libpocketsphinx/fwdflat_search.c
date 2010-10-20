@@ -813,7 +813,7 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
     int32 *nawl;
     int fi;
 
-    printf("Searching frame %d\n", frame_idx);
+    E_INFO("Searching frame %d\n", frame_idx);
     /* Activate our HMMs for the current frame if need be. */
     if (!acmod->compallsen)
         compute_fwdflat_sen_active(ffs, frame_idx);
@@ -898,8 +898,6 @@ fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
         if (!(dict_filler_word(dict, arc->wid) || arc->wid == dict->startwid))
             ++ffs->input_words[arc->wid];
     }
-    if (0)
-        fwdflat_dump_active_words(ffs, sf, ef);
     return 0;
 }
 
@@ -939,17 +937,11 @@ fwdflat_search_decode_2ndpass(fwdflat_search_t *ffs, acmod_t *acmod)
          * bptbl has been finalized or not.  If it has, we run out the
          * clock and finish, otherwise we only search forward as far
          * as the arc buffer goes. */
-        end_win = frame_idx + ffs->max_sf_win;
         final = (bptbl_active_frame(ffs->input_bptbl)
                  == bptbl_frame_idx(ffs->input_bptbl));
-        /* If we don't have enough of a window then keep waiting. */
-        if (!final /* Don't care how big it is if we're final. */
-            && fwdflat_arc_buffer_iter(ffs->input_arcs, end_win - 1) == NULL)
-            continue;
-        /* We are going to use the window so truncate it. */
-        if (end_win > bptbl_frame_idx(ffs->input_bptbl))
-            end_win = bptbl_frame_idx(ffs->input_bptbl);
-
+        E_INFO("active %d idx %d final %d\n",
+               bptbl_active_frame(ffs->input_bptbl),
+               bptbl_frame_idx(ffs->input_bptbl), final);
         /* Whether we are final or not determines whether we wait for
          * the acmod or not. */
         if (final)
@@ -957,7 +949,17 @@ fwdflat_search_decode_2ndpass(fwdflat_search_t *ffs, acmod_t *acmod)
         else
             timeout = 0;  /* Don't wait for results, we will block on
                            * input_bptbl instead. */
-        while ((frame_idx = acmod_wait(acmod, timeout)) >= 0) {
+        /* Decode while we have a big enough window. */
+        end_win = frame_idx + ffs->max_sf_win;
+        while (final
+               || fwdflat_arc_buffer_iter(ffs->input_arcs,
+                                          end_win - 1) != NULL) {
+            if ((frame_idx = acmod_wait(acmod, timeout)) < 0)
+                break;
+            end_win = frame_idx + ffs->max_sf_win;
+            /* We are going to use the window so truncate it. */
+            if (end_win > bptbl_frame_idx(ffs->input_bptbl))
+                end_win = bptbl_frame_idx(ffs->input_bptbl);
             E_INFO("Searching frame %d window end %d\n",
                    frame_idx, end_win);
             fwdflat_search_expand_arcs(ffs, frame_idx, end_win);

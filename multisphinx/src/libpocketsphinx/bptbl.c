@@ -505,6 +505,7 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp)
                ? -1 : bptbl_ent(bptbl, oldest_bp)->frame));
     garray_expand_to(bptbl->ef_idx, frame_idx + 1);
     if (frame_idx - bptbl_active_frame(bptbl) >= bptbl->n_frame_alloc) {
+        assert(bptbl->n_frame_alloc != 0);
         bptbl->n_frame_alloc *= 2;
         bptbl->valid_fr = bitvec_realloc(bptbl->valid_fr, bptbl->n_frame_alloc);
     }
