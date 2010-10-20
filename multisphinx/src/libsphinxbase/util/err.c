@@ -82,7 +82,7 @@ err_get_debug_level(void)
 static pthread_key_t logfp_index;
 static pthread_once_t logfp_index_once = PTHREAD_ONCE_INIT;
 
-void
+static void
 logfp_index_alloc(void)
 {
     pthread_key_create(&logfp_index, NULL);
@@ -113,7 +113,7 @@ internal_set_logfp(FILE *fh)
 static DWORD logfp_index; /** TLS index for log file */
 static LONG logfp_index_once = 0; /** True if we have initialized TLS */
 
-void
+static void
 logfp_index_alloc(void)
 {
     logfp_index = TlsAlloc();
