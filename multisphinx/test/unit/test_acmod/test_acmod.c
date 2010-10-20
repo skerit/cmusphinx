@@ -5,24 +5,28 @@
 #include <pocketsphinx.h>
 
 #include "pocketsphinx_internal.h"
-#include "acmod2.h"
+#include "acmod.h"
 #include "test_macros.h"
 
 static int
 consumer(sbthread_t *th)
 {
-	acmod2_t *acmod2 = sbthread_arg(th);
+	acmod_t *acmod = sbthread_arg(th);
 	int frame_idx;
 
-	printf("Consumer %p started\n", acmod2);
-	while ((frame_idx = acmod2_wait(acmod2, -1)) >= 0) {
+	printf("Consumer %p started\n", acmod);
+	while ((frame_idx = acmod_wait(acmod, -1)) >= 0) {
+		int senid, score;
 		/* Score a frame. */
-		acmod2_score(acmod2, frame_idx);
+		acmod_score(acmod, frame_idx);
+		score = acmod_best_score(acmod, &senid);
+		printf("Consumer %p scored frame %d best %d score %d\n",
+		       acmod, frame_idx, senid, score);
 		/* Release it. */
-		acmod2_release(acmod2, frame_idx);
+		acmod_release(acmod, frame_idx);
 	}
-	TEST_ASSERT(acmod2_eou(acmod2));
-	printf("Consumer %p exiting\n", acmod2);
+	TEST_ASSERT(acmod_eou(acmod));
+	printf("Consumer %p exiting\n", acmod);
 	return 0;
 }
 
@@ -32,7 +36,7 @@ main(int argc, char *argv[])
 {
 	cmd_ln_t *config;
 	logmath_t *lmath;
-	acmod2_t *acmod2[5];
+	acmod_t *acmod[5];
 	sbthread_t *thr[5];
 	featbuf_t *fb;
 	FILE *raw;
@@ -50,13 +54,15 @@ main(int argc, char *argv[])
 	fb = featbuf_init(config);
 	TEST_ASSERT(fb);
 
-	acmod2[0] = acmod2_init(config, lmath, fb);
-	TEST_ASSERT(acmod2[0]);
+	lmath = logmath_init(cmd_ln_float64_r(config, "-logbase"),
+			     0, FALSE);
+	acmod[0] = acmod_init(config, lmath, fb);
+	TEST_ASSERT(acmod[0]);
 	/* Create a couple threads to pull features out of it. */
 	for (i = 0; i < 5; ++i) {
 		if (i != 0)
-			acmod2[i] = acmod2_copy(acmod2[0]);
-		thr[i] = sbthread_start(NULL, consumer, acmod2[i]);
+			acmod[i] = acmod_copy(acmod[0]);
+		thr[i] = sbthread_start(NULL, consumer, acmod[i]);
 	}
 
 	/* Feed them some data. */
@@ -69,13 +75,18 @@ main(int argc, char *argv[])
 		TEST_ASSERT(rv == 0);
 	}
 	fclose(raw);
+	printf("Waiting for consumers\n");
 	featbuf_end_utt(fb, -1);
+	printf("Finished waiting\n");
 
 	/* Reap those threads. */
 	for (i = 0; i < 5; ++i) {
 		sbthread_wait(thr[i]);
 		sbthread_free(thr[i]);
+		acmod_free(acmod[i]);
+		printf("Reaped consumer %p\n", acmod[i]);
 	}
+	featbuf_free(fb);
 	cmd_ln_free_r(config);
 	return 0;
 }

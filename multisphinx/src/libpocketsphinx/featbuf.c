@@ -418,7 +418,7 @@ featbuf_process_raw(featbuf_t *fb,
         if (fe_process_frames(fb->fe, &rptr, &n_samps,
                               &fb->cepbuf, &nframes) < 0)
             return -1;
-        printf("Processing %d frames from audio\n", nframes);
+        /* printf("Processing %d frames from audio\n", nframes); */
         if (nframes)
             featbuf_process_cep(fb, &fb->cepbuf, 1, FALSE);
     }
@@ -481,7 +481,7 @@ featbuf_process_cep(featbuf_t *fb,
                                      fb->featbuf);
         if (fb->beginutt)
             fb->beginutt = FALSE;
-        printf("Processing %d frames from cepstra\n", nfeat);
+        /* printf("Processing %d frames from cepstra\n", nfeat); */
         for (i = 0; i < nfeat; ++i) {
             if (featbuf_process_feat(fb, fb->featbuf[i]) < 0)
                 return -1;

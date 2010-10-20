@@ -255,6 +255,7 @@ sync_array_release(sync_array_t *sa, size_t start_idx, size_t end_idx)
         ++garray_ent(sa->count, uint8, i);
 
     /* Print stuff for debugging. */
+#if 0
     printf("rc %d counts[%d:%d]:", (int)sa->refcount,
            (int)garray_base(sa->count),
            (int)garray_next_idx(sa->count));
@@ -262,6 +263,7 @@ sync_array_release(sync_array_t *sa, size_t start_idx, size_t end_idx)
          i < garray_next_idx(sa->count); ++i)
         printf(" %d", (int)garray_ent(sa->count, uint8, i));
     printf("\n");
+#endif
 
     /* Find first reachable element. */
     for (i = garray_base(sa->count);

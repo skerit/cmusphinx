@@ -174,12 +174,12 @@ state_align_search_step(ps_search_t *search)
     int i, frame_idx;
 
     /* FIXME: actually we should consume as many frames as available. */
-    frame_idx = acmod_frame(acmod);
+    frame_idx = acmod_wait(acmod, -1);
 
     /* Calculate senone scores. */
     for (i = 0; i < sas->n_phones; ++i)
         acmod_activate_hmm(acmod, sas->hmms + i);
-    senscr = acmod_score(acmod, &frame_idx);
+    senscr = acmod_score(acmod, frame_idx);
 
     /* Renormalize here if needed. */
     /* FIXME: Make sure to (unit-)test this!!! */

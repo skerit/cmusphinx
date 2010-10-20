@@ -848,24 +848,20 @@ fwdflat_renormalize_scores(fwdflat_search_t *ffs, int frame_idx, int32 norm)
 }
 
 static int
-fwdflat_search_one_frame(fwdflat_search_t *ffs)
+fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
 {
     acmod_t *acmod = ps_search_acmod(ffs);
     int16 const *senscr;
     int32 nf, i, j;
     int32 *nawl;
-    int fi, nfr, frame_idx;
-
-    if ((nfr = acmod_available(acmod)) <= 0)
-        return nfr;
-    frame_idx = acmod_frame(acmod);
+    int fi;
 
     /* Activate our HMMs for the current frame if need be. */
     if (!acmod->compallsen)
         compute_fwdflat_sen_active(ffs, frame_idx);
 
     /* Compute GMM scores for the current frame. */
-    senscr = acmod_score(acmod, &frame_idx);
+    senscr = acmod_score(acmod, frame_idx);
     ffs->st.n_senone_active_utt += acmod->n_senone_active;
 
     /* Mark backpointer table for current frame. */
@@ -904,7 +900,6 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs)
     }
     ffs->n_active_word[nf & 0x1] = j;
 
-    acmod_advance(acmod);
     /* Return the number of frames processed. */
     return 1;
 }
@@ -954,8 +949,6 @@ fwdflat_search_step(ps_search_t *base)
     acmod_t *acmod = ps_search_acmod(ffs);
     int frame_idx, nfr, k;
 
-    if ((nfr = acmod_available(acmod)) <= 0)
-        return nfr;
     frame_idx = acmod_frame(acmod);
     
     if (ffs->input_bptbl) {
@@ -987,14 +980,16 @@ fwdflat_search_step(ps_search_t *base)
         /* Now pull things from the arc buffer - everything above this
          * line will be done in a separate thread in the near
          * future. */
-        if (acmod_available(acmod) <= 0)
-            return 0;
+        /* FIXME */
+        /* if (acmod_available(acmod) <= 0)
+           return 0; */
         /* We do something different depending on whether the input
          * bptbl has been finalized or not.  If it has, we just run
          * out the clock, otherwise we only search forward as far as
          * the arc buffer goes. */
         nfr = 0;
-        while (acmod_available(acmod) > 0) {
+        /* FIXME: rewrite this.. */
+        while (0) {
             int end_win = frame_idx + ffs->max_sf_win;
             if (ffs->input_bptbl->active_fr < ffs->input_bptbl->n_frame /* not final */
                 && fwdflat_arc_buffer_iter(ffs->input_arcs, end_win - 1) == NULL)
@@ -1004,7 +999,7 @@ fwdflat_search_step(ps_search_t *base)
             E_INFO("Searching frame %d window end %d\n",
                    frame_idx, end_win);
             fwdflat_search_expand_arcs(ffs, frame_idx, end_win);
-            if ((k = fwdflat_search_one_frame(ffs)) <= 0)
+            if ((k = fwdflat_search_one_frame(ffs, frame_idx)) <= 0)
                 break;
             frame_idx += k;
             nfr += k;
@@ -1016,7 +1011,8 @@ fwdflat_search_step(ps_search_t *base)
     else {
         nfr = 0;
         E_INFO("Searching frame %d\n", frame_idx);
-        while ((k = fwdflat_search_one_frame(ffs)) > 0) {
+        /* Wait for next frame to be available. */
+        while ((k = fwdflat_search_one_frame(ffs, frame_idx)) > 0) {
             nfr += k;
         }
         if (k < 0)

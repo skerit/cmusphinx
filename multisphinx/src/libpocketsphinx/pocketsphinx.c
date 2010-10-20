@@ -56,6 +56,13 @@ static const arg_t ps_args_def[] = {
     CMDLN_EMPTY_OPTION
 };
 
+/* Feature and front-end parameters that may be in feat.params */
+static const arg_t feat_defn[] = {
+    waveform_to_cepstral_command_line_macro(),
+    cepstral_to_feature_command_line_macro(),
+    CMDLN_EMPTY_OPTION
+};
+
 /* I'm not sure what the portable way to do this is. */
 static int
 file_exists(const char *path)
@@ -93,7 +100,7 @@ ps_add_file(cmd_ln_t *config, const char *arg,
 void
 ps_init_defaults(cmd_ln_t *config)
 {
-    char const *hmmdir, *lmfile, *dictfile;
+    char const *hmmdir, *lmfile, *dictfile, *featparams;
 
     /* Disable memory mapping on Blackfin (FIXME: should be uClinux in general). */
 #ifdef __ADSPBLACKFIN__
@@ -151,6 +158,12 @@ ps_init_defaults(cmd_ln_t *config)
         ps_add_file(config, "-lda", hmmdir, "feature_transform");
         ps_add_file(config, "-featparams", hmmdir, "feat.params");
         ps_add_file(config, "-senmgau", hmmdir, "senmgau");
+    }
+    /* Look for feat.params in acoustic model dir. */
+    if ((featparams = cmd_ln_str_r(config, "-featparams"))) {
+        if (cmd_ln_parse_file_r(config, feat_defn, featparams, FALSE) != NULL) {
+	    E_INFO("Parsed model-specific feature parameters from %s\n", featparams);
+        }
     }
 }
 
@@ -363,27 +376,8 @@ ps_process_raw(ps_decoder_t *ps,
                int no_search,
                int full_utt)
 {
-    int n_searchfr = 0;
-
-    while (n_samples) {
-        int nfr;
-
-        /* Process some data into features. */
-        if ((nfr = acmod_process_raw(ps->acmod, &data,
-                                     &n_samples, full_utt)) < 0)
-            return nfr;
-
-        /* Score and search as much data as possible */
-        if (no_search)
-            continue;
-        /* FIXME: It doesn't work this way anymore. */
-        if ((nfr = ps_search_step(ps->fwdtree)) < 0)
-            return nfr;
-        ps->n_frame += nfr;
-        n_searchfr += nfr;
-    }
-
-    return n_searchfr;
+    return featbuf_process_raw(ps->fb, data,
+                               n_samples, full_utt);
 }
 
 int
@@ -393,27 +387,8 @@ ps_process_cep(ps_decoder_t *ps,
                int no_search,
                int full_utt)
 {
-    int n_searchfr = 0;
-
-    while (n_frames) {
-        int nfr;
-
-        /* Process some data into features. */
-        if ((nfr = acmod_process_cep(ps->acmod, &data,
-                                     &n_frames, full_utt)) < 0)
-            return nfr;
-
-        /* Score and search as much data as possible */
-        if (no_search)
-            continue;
-        /* FIXME: It doesn't work this way anymore. */
-        if ((nfr = ps_search_step(ps->fwdtree)) < 0)
-            return nfr;
-        ps->n_frame += nfr;
-        n_searchfr += nfr;
-    }
-
-    return n_searchfr;
+    return featbuf_process_cep(ps->fb, data,
+                               n_frames, full_utt);
 }
 
 int
@@ -421,21 +396,8 @@ ps_end_utt(ps_decoder_t *ps)
 {
     int rv;
 
-    acmod_end_utt(ps->acmod);
-
-    /* FIXME: It doesn't work this way anymore. */
-    /* Search any remaining frames. */
-    if ((rv = ps_search_step(ps->fwdtree)) < 0) {
-        ptmr_stop(&ps->perf);
-        return rv;
-    }
-    ps->n_frame += rv;
-    /* Finish search. */
-    if ((rv = ps_search_finish(ps->fwdtree)) < 0) {
-        ptmr_stop(&ps->perf);
-        return rv;
-    }
-    ps->n_frame += rv;
+    /* Mark the end of the utterance and wait for it to complete. */
+    rv = featbuf_end_utt(ps->fb, -1);
     ptmr_stop(&ps->perf);
 
     /* Log a backtrace if requested. */

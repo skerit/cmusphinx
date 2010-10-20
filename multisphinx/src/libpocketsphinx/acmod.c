@@ -130,6 +130,7 @@ acmod_init(cmd_ln_t *config, logmath_t *lmath, featbuf_t *fb)
     acmod->config = cmd_ln_retain(config);
     acmod->lmath = logmath_retain(lmath);
     acmod->fb = featbuf_retain(fb);
+    acmod->fcb = featbuf_get_fcb(acmod->fb);
 
     /* Load acoustic model parameters. */
     if (acmod_init_am(acmod) < 0)
@@ -144,7 +145,6 @@ acmod_init(cmd_ln_t *config, logmath_t *lmath, featbuf_t *fb)
     acmod->log_zero = logmath_get_zero(acmod->lmath);
     acmod->compallsen = cmd_ln_boolean_r(config, "-compallsen");
 
-    acmod->fcb = featbuf_get_fcb(acmod->fb);
     acmod->feat_buf = feat_array_alloc(acmod->fcb, 1);
     return acmod;
 
@@ -215,6 +215,21 @@ acmod_copy(acmod_t *other)
     return acmod;
 }
 
+int
+acmod_wait(acmod_t *acmod, int timeout)
+{
+    int rv;
+
+    if ((rv = featbuf_wait(acmod->fb, acmod->output_frame,
+                           timeout, acmod->feat_buf[0][0])) < 0) {
+        /* This means end of utterance. */
+        featbuf_release(acmod->fb, acmod->output_frame, -1);
+        acmod->eou = TRUE;
+        return rv;
+    }
+    return acmod->output_frame++;
+}
+
 int16 const *
 acmod_score(acmod_t *acmod, int frame_idx)
 {
@@ -235,6 +250,33 @@ acmod_score(acmod_t *acmod, int frame_idx)
                        acmod->compallsen);
 
     return acmod->senone_scores;
+}
+
+int
+acmod_release(acmod_t *acmod, int frame_idx)
+{
+    return featbuf_release(acmod->fb, frame_idx, frame_idx + 1);
+}
+
+int
+acmod_eou(acmod_t *acmod)
+{
+    return acmod->eou;
+}
+
+int
+acmod_frame(acmod_t *acmod)
+{
+    return acmod->output_frame;
+}
+
+int
+acmod_reset(acmod_t *acmod)
+{
+    acmod->output_frame = 0;
+    acmod->eou = FALSE;
+
+    return 0;
 }
 
 int

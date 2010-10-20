@@ -1719,18 +1719,19 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
 {
     acmod_t *acmod = ps_search_acmod(fts);
     int16 const *senscr;
-    int fi, nfr, frame_idx;
+    int fi, frame_idx;
 
-    if ((nfr = acmod_available(acmod)) <= 0)
-        return nfr;
-    frame_idx = acmod_frame(acmod);
+    if ((frame_idx = acmod_wait(acmod, -1)) == -1) {
+        /* FIXME: Need to release frames or whatever. */
+        return -1;
+    }
 
     /* Activate our HMMs for the current frame if need be. */
     if (!acmod->compallsen)
         compute_sen_active(fts, frame_idx);
 
     /* Compute GMM scores for the current frame. */
-    if ((senscr = acmod_score(acmod, &frame_idx)) == NULL)
+    if ((senscr = acmod_score(acmod, frame_idx)) == NULL)
         return 0;
     fts->st.n_senone_active_utt += acmod->n_senone_active;
 
@@ -1761,7 +1762,7 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     /* Deactivate pruned HMMs. */
     deactivate_channels(fts, frame_idx);
 
-    acmod_advance(acmod);
+    acmod_release(acmod, frame_idx);
     /* Return the number of frames processed. */
     return 1;
 }

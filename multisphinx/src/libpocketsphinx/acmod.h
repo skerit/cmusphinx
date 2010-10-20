@@ -136,6 +136,7 @@ struct acmod_s {
     /* Flags and counters: */
     int output_frame;          /**< Index of next frame to score. */
     int compallsen;            /**< Compute all senone scores. */
+    int eou;                   /**< At end of utterance input. */
 };
 typedef struct acmod_s acmod_t;
 
@@ -186,6 +187,13 @@ int acmod_free(acmod_t *acmod);
  *         utterance.
  */
 int acmod_wait(acmod_t *acmod, int timeout);
+
+/**
+ * Get the number of frames processed so far.
+ *
+ * @return Next frame index, or number of frames processed.
+ */
+int acmod_frame(acmod_t *acmod);
 
 /**
  * Calculate acoustic scores for a given frame index.

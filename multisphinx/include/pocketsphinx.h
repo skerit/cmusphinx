@@ -191,18 +191,6 @@ int ps_decode_raw(ps_decoder_t *ps, FILE *rawfh,
                   char const *uttid, long maxsamps);
 
 /**
- * Decode a senone score dump file.
- *
- * @param ps Decoder
- * @param fh Previously opened file handle positioned at start of file.
- * @param uttid Utterance ID (or NULL to generate automatically).
- * @return Number of frames read.
- */
-POCKETSPHINX_EXPORT
-int ps_decode_senscr(ps_decoder_t *ps, FILE *senfh,
-                     char const *uttid);
-
-/**
  * Start utterance processing.
  *
  * This function should be called before any utterance data is passed
@@ -230,14 +218,11 @@ char const *ps_get_uttid(ps_decoder_t *ps);
  * Decode raw audio data.
  *
  * @param ps Decoder.
- * @param no_search If non-zero, perform feature extraction but don't
- *                  do any recognition yet.  This may be necessary if
- *                  your processor has trouble doing recognition in
- *                  real-time.
+ * @param no_search This option does nothing.  This function never blocks.
  * @param full_utt If non-zero, this block of data is a full utterance
  *                 worth of data.  This may allow the recognizer to
  *                 produce more accurate results.
- * @return Number of frames of data searched, or <0 for error.
+ * @return 0, or <0 for error.
  */
 POCKETSPHINX_EXPORT
 int ps_process_raw(ps_decoder_t *ps,
@@ -250,14 +235,11 @@ int ps_process_raw(ps_decoder_t *ps,
  * Decode acoustic feature data.
  *
  * @param ps Decoder.
- * @param no_search If non-zero, perform feature extraction but don't
- *                  do any recognition yet.  This may be necessary if
- *                  your processor has trouble doing recognition in
- *                  real-time.
+ * @param no_search This option does nothing.  This function never blocks.
  * @param full_utt If non-zero, this block of data is a full utterance
  *                 worth of data.  This may allow the recognizer to
  *                 produce more accurate results.
- * @return Number of frames of data searched, or <0 for error.
+ * @return 0, or <0 for error.
  */
 POCKETSPHINX_EXPORT
 int ps_process_cep(ps_decoder_t *ps,
@@ -424,7 +406,7 @@ void ps_get_all_time(ps_decoder_t *ps, double *out_nspeech,
 /**
  * @mainpage PocketSphinx API Documentation
  * @author David Huggins-Daines <dhuggins@cs.cmu.edu>
- * @version 0.7
+ * @version 0.8
  * @date October, 2010
  *
  * @section intro_sec Introduction

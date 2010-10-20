@@ -115,3 +115,4 @@ src/programs/pocketsphinx_map_vocab
 test/unit/test_util/test_garray
 test/unit/test_acmod/test_sync_array
 test/unit/test_acmod/test_featbuf
+test/unit/test_acmod/test_acmod
