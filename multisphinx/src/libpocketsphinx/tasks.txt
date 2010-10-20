@@ -1,8 +1,11 @@
 * Reduce elastic window size by splitting silences - DONE
 * Sort entries before window_sf and track start frames - DONE
-* Split bptbl into retired and active components
-* Retire all backpointers at end of utterance
-  - Change backtrace code to use this
-* Give fwdflat its own bptbl
-* Update it to use retired portion of fwdtree bptbl with start frame
-* Move lattice generation code to bptbl and update
+* Split fwdtree and fwdflat from ngram_search - DONE
+* Give fwdflat its own bptbl - DONE
+* Figure out bscorestack problems
+* Split bptbl into active and retired
+  - Retire bps at end of frame:
+    * Push new frame
+    * Update oldest bp in pruning
+    * Retire to separate table instead of compacting (do this first)
+  - Retire all remaining bps at end of utterance

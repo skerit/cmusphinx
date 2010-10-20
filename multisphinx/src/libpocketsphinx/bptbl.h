@@ -79,9 +79,12 @@ typedef struct bp_s {
  */
 typedef struct bptbl_s {
     dict2pid_t *d2p;     /**< Tied state mapping. */
-    bp_t *ent;           /**< Backpointer entries. */
+    bp_t *retired;       /**< Retired backpointer entries. */
+    bp_t *ent;           /**< Active backpointer entries. */
+
     int32 n_ent;         /**< First free BPTable entry. */
     int32 n_alloc;       /**< Number of entries allocated for entry-based arrays (ent, permute) */
+
     int32 *bscore_stack;     /**< Array containing right context scores for word exits. */
     int32 bss_head;          /**< First free BScoreStack entry */
     int32 bscore_stack_size; /**< Number of entries allocated in bscore_stack. */
@@ -99,19 +102,12 @@ typedef struct bptbl_s {
      * bptbl entries.
      */
     int32 first_invert_bp;
-    /**
-     * Delta between "logical" and "physical" bptbl indices for active
-     * bps, defined as all bps >= ef_idx[0].
-     */
-    int32 active_delta;
-
     int32 dest_s_idx;        /**< bscorestack index corresponding to
                               * first_invert_bp (which is invalid by
                               * definition) */
-
-    /* FIXME: These two are a bit wasteful as they index everything though it's not necessary. */
-    int32 *permute;      /**< Current permutation of entries (used for gc/sorting). */
-    int16 *orig_sf;      /**< Start frame for each backpointer (used for sorting). */
+    int32 *permute;      /**< Current permutation of entries (indexed
+                          * by ent - first_invert_bp). */
+    int32 n_permute_alloc;
 
     /* All these are indexed by frame - active_sf */
     int32 n_active_alloc; /**< Number of frames allocated for frame-based arrays. */

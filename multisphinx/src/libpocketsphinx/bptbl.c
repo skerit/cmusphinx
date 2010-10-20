@@ -51,7 +51,6 @@
 /* Local headers. */
 #include "ngram_search.h"
 
-#define MOVE_BSCORE
 static int bptbl_rcsize(bptbl_t *bptbl, bp_t *be);
 
 #if 0
@@ -69,10 +68,13 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
     bptbl->d2p = dict2pid_retain(d2p);
     bptbl->n_alloc = n_alloc;
     bptbl->n_active_alloc = n_frame_alloc;
+    /* FIXME: This will be used for bptbl->ent too */
+    bptbl->n_permute_alloc = n_frame_alloc;
 
     bptbl->ent = ckd_calloc(bptbl->n_alloc, sizeof(*bptbl->ent));
-    bptbl->permute = ckd_calloc(bptbl->n_alloc, sizeof(*bptbl->permute));
-    bptbl->orig_sf = ckd_calloc(bptbl->n_alloc, sizeof(*bptbl->orig_sf));
+    bptbl->permute = ckd_calloc(bptbl->n_permute_alloc, sizeof(*bptbl->permute));
+
+    bptbl->retired = ckd_calloc(bptbl->n_alloc, sizeof(*bptbl->retired));
     bptbl->word_idx = ckd_calloc(dict_size(d2p->dict),
                                  sizeof(*bptbl->word_idx));
     bptbl->bscore_stack_size = bptbl->n_alloc * 20;
@@ -96,7 +98,6 @@ bptbl_free(bptbl_t *bptbl)
     ckd_free(bptbl->word_idx);
     ckd_free(bptbl->ent);
     ckd_free(bptbl->permute);
-    ckd_free(bptbl->orig_sf);
     ckd_free(bptbl->bscore_stack);
     ckd_free(bptbl->ef_idx);
     ckd_free(bptbl->frm_wordlist);
@@ -115,7 +116,6 @@ bptbl_reset(bptbl_t *bptbl)
     bitvec_clear_all(bptbl->valid_fr, bptbl->n_active_alloc);
     bptbl->first_invert_bp = 0;
     bptbl->dest_s_idx = 0;
-    bptbl->active_delta = 0;
     bptbl->n_frame = 0;
     bptbl->n_ent = 0;
     bptbl->bss_head = 0;
@@ -166,15 +166,13 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
 {
     int i, j, n_active_fr, last_gc_fr;
 
-    /* Invalidate all backpointer entries between sf and ef. */
-    E_DEBUG(2,("Garbage collecting from %d to %d (%d to %d):\n",
-               bptbl_ef_idx(bptbl, sf), bptbl_ef_idx(bptbl, ef), sf, ef));
-    /* Assert things that ensure these entries are all in the active
-     * region (i.e. we can unconditionally translate their indices by
-     * active_delta). */
     assert(cf >= ef);
     assert(ef > sf);
     assert(sf >= bptbl->active_fr);
+
+    /* Invalidate all backpointer entries between sf and ef. */
+    E_DEBUG(2,("Garbage collecting from %d to %d (%d to %d):\n",
+               bptbl_ef_idx(bptbl, sf), bptbl_ef_idx(bptbl, ef), sf, ef));
     for (i = bptbl_ef_idx(bptbl, sf);
          i < bptbl_ef_idx(bptbl, ef); ++i) {
         bptbl->ent[i].valid = FALSE;
@@ -183,7 +181,7 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
     /* Now re-activate all ones backwards reachable from the search graph. */
     E_DEBUG(2,("Finding coaccessible frames from backpointers from %d to %d\n",
                bptbl_ef_idx(bptbl, ef), bptbl_ef_idx(bptbl, cf)));
-    /* Collect coaccessible frames from these backpointers */
+    /* Mark everything immediately reachable from (ef..cf) */
     bitvec_clear_all(bptbl->valid_fr, cf - bptbl->active_fr);
     n_active_fr = 0;
     for (i = bptbl_ef_idx(bptbl, ef);
@@ -200,12 +198,16 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
     }
     /* Track the last frame with outgoing backpointers for gc */
     last_gc_fr = ef - 1;
+    /* Walk back from every frame marked active up to the last one
+     * marked active in the previous round (this means we scan some of
+     * them multiple times, if this gets slow this can be
+     * optimized). */
     while (n_active_fr > 0) {
         int next_gc_fr = 0;
         n_active_fr = 0;
         for (i = sf; i <= last_gc_fr; ++i) {
-            if (i >= bptbl->active_fr
-                && bitvec_is_set(bptbl->valid_fr, i - bptbl->active_fr)) {
+            /* NOTE: We asserted i >= bptbl->active_fr */
+            if (bitvec_is_set(bptbl->valid_fr, i - bptbl->active_fr)) {
                 bitvec_clear(bptbl->valid_fr, i - bptbl->active_fr);
                 /* Add all backpointers in this frame (the bogus
                  * lattice generation algorithm) */
@@ -269,7 +271,6 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
             int rcsize = bptbl_rcsize(bptbl, bptbl->ent + src);
             if (dest != src) {
                 E_DEBUG(4,("permute %d => %d\n", src, dest));
-#ifdef MOVE_BSCORE
                 if (bptbl->ent[src].s_idx != bptbl->dest_s_idx) {
                     E_DEBUG(4,("Moving %d rc scores from %d to %d for bptr %d\n",
                                rcsize, bptbl->ent[src].s_idx, bptbl->dest_s_idx, dest));
@@ -287,23 +288,21 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
                         E_INFOCONT("\n");
                     }
                 }
-#endif /* MOVE_BSCORE */
                 bptbl->ent[dest] = bptbl->ent[src];
-#ifdef MOVE_BSCORE
                 bptbl->ent[dest].s_idx = bptbl->dest_s_idx;
-#endif /* MOVE_BSCORE */
                 bptbl->ent[src].valid = FALSE;
             }
-            bptbl->permute[src] = dest;
+            assert(src - bptbl->first_invert_bp < bptbl->n_permute_alloc);
+            bptbl->permute[src - bptbl->first_invert_bp] = dest;
             bptbl->dest_s_idx += rcsize;
             ++dest;
         }
         else {
             E_DEBUG(4,("permute %d => -1\n", src));
-            bptbl->permute[src] = -1;
+            assert(src - bptbl->first_invert_bp < bptbl->n_permute_alloc);
+            bptbl->permute[src - bptbl->first_invert_bp] = -1;
         }
     }
-#ifdef MOVE_BSCORE
     /* We can keep compacting the bscore_stack since it is indirected. */
     if (src < bptbl->n_ent
         && dest != src
@@ -325,7 +324,6 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
         }
         bptbl->bss_head = active_dest_s_idx;
     }
-#endif /* MOVE_BSCORE */
     if (eidx == bptbl->n_ent)
         bptbl->n_ent = dest;
     E_INFO("Retired %d bps (%d to %d)\n",
@@ -334,92 +332,31 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
     return dest;
 }
 
-/**
- * Sort retired backpointer entries by start frame.
- *
- * @param bptbl Backpointer table.
- * @param sidx Index of first unordered entry.
- * @param eidx Index of last unordered entry plus one.
- */
-static int
-bptbl_forward_sort(bptbl_t *bptbl, int sidx, int eidx)
-{
-    int i;
-
-    E_DEBUG(2, ("Sorting forward from %d to %d\n", sidx, eidx));
-    /* Straightforward for now, we just insertion sort these dudes and
-     * update the permutation table and first_invert_bp as necessary.
-     * This could be done in conjunction with compaction but it
-     * becomes very complicated and possibly slower. */
-
-    /* Reset the permutation table (for now we have to do the
-     * backpointer update twice, we'll fix it later by storing the
-     * reverse permutation table and explicitly inverting it) */
-    for (i = 0; i < bptbl->n_ent; ++i) {
-        bptbl->permute[i] = i;
-        bptbl->orig_sf[i] = bp_sf(bptbl, i);
-    }
-
-    /* Luckily we don't need to move anything around in bscorestack
-     * aside from compressing it, since it's indirected through the
-     * bptbl entries. */
-
-    /* Crawl from sidx to eidx inserting and updating the permutation
-     * table as necessary. */
-    for (i = sidx; i < eidx; ++i) {
-        bp_t ent;
-        int j, k, isf;
-        isf = bptbl->orig_sf[i];
-        for (j = i - 1; j >= 0; --j)
-            if (bptbl->orig_sf[j] <= isf)
-                break;
-        ++j;
-        if (j == i)
-            continue;
-        E_DEBUG(3,("Inserting %d (sf %d) to %d (sf %d)\n",
-                   i, isf, j, bptbl->orig_sf[j]));
-        ent = bptbl->ent[i];
-        memmove(bptbl->ent + j + 1, bptbl->ent + j,
-                (i - j) * sizeof(*bptbl->ent));
-        memmove(bptbl->orig_sf + j + 1, bptbl->orig_sf + j,
-                (i - j) * sizeof(*bptbl->orig_sf));
-        bptbl->ent[j] = ent;
-        bptbl->orig_sf[j] = isf;
-        bptbl->permute[i] = j;
-        E_DEBUG(4,("permute %d => %d\n", i, j));
-        for (k = 0; k < i; ++k) {
-            if (bptbl->permute[k] >= j && bptbl->permute[k] < i) {
-                E_DEBUG(4,("permute %d => %d\n", k, bptbl->permute[k]+1));
-                ++bptbl->permute[k];
-            }
-        }
-    }
-
-    return 0;
-}
 
 /**
  * Remap backpointers in backpointer table.
  *
  * @param bptbl Backpointer table.
- * @param sidx Index of first backpointer to be updated
  * @param eidx Index of last backpointer to be updated plus one.
- * @param last_invert_bp Index of first backpointer which can be remapped plus one.
  * @param last_invert_bp Index of last backpointer which can be remapped plus one.
  */
 static void
-bptbl_invert(bptbl_t *bptbl, int sidx, int eidx,
-             int first_invert_bp, int last_invert_bp)
+bptbl_invert(bptbl_t *bptbl, int eidx, int last_invert_bp)
 {
+    int first_invert_bp = bptbl->first_invert_bp;
     int i;
 
-    E_DEBUG(2,("inverting %d:%d from %d to %d\n", first_invert_bp, last_invert_bp, sidx, eidx));
-    for (i = sidx; i < eidx; ++i) {
+    E_DEBUG(2,("inverting %d:%d from %d to %d\n", first_invert_bp, last_invert_bp,
+               first_invert_bp, eidx));
+    for (i = first_invert_bp; i < eidx; ++i) {
         if (bptbl->ent[i].bp >= first_invert_bp && bptbl->ent[i].bp < last_invert_bp) {
-            if (bptbl->ent[i].bp != bptbl->permute[bptbl->ent[i].bp])
+            assert(bptbl->ent[i].bp - bptbl->first_invert_bp < bptbl->n_permute_alloc);
+            assert(bptbl->ent[i].bp - bptbl->first_invert_bp >= 0);
+            if (bptbl->ent[i].bp != bptbl->permute[bptbl->ent[i].bp - first_invert_bp])
                 E_DEBUG(4,("invert %d => %d in %d\n",
-                           bptbl->ent[i].bp, bptbl->permute[bptbl->ent[i].bp], i));
-            bptbl->ent[i].bp = bptbl->permute[bptbl->ent[i].bp];
+                           bptbl->ent[i].bp, bptbl->permute[bptbl->ent[i].bp
+                                                            - first_invert_bp], i));
+            bptbl->ent[i].bp = bptbl->permute[bptbl->ent[i].bp - first_invert_bp];
             assert(bp_sf(bptbl, i) < bptbl->ent[i].frame);
         }
     }
@@ -466,25 +403,21 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
         bptbl_update_active_fr(bptbl, active_fr);
         return;
     }
+    if (bptbl_ef_idx(bptbl, active_fr) - bptbl->first_invert_bp
+        > bptbl->n_permute_alloc) {
+        while (bptbl_ef_idx(bptbl, active_fr) - bptbl->first_invert_bp
+               > bptbl->n_permute_alloc)
+            bptbl->n_permute_alloc *= 2;
+        bptbl->permute = ckd_realloc(bptbl->permute,
+                                     bptbl->n_permute_alloc
+                                     * sizeof(*bptbl->permute));
+        E_INFO("Resized permutation table to %d entries (active ef = %d first_invert_bp = %d)\n",
+               bptbl->n_permute_alloc, bptbl_ef_idx(bptbl, active_fr), bptbl->first_invert_bp);
+    }
     /* Mark, compact, snap pointers, sort, snap 'em again. */
     bptbl_mark(bptbl, prev_active_fr, active_fr, frame_idx);
     last_compacted_bp = bptbl_compact(bptbl, bptbl_ef_idx(bptbl, active_fr));
-    bptbl_invert(bptbl, bptbl->first_invert_bp, bptbl->n_ent,
-                 bptbl->first_invert_bp, bptbl_ef_idx(bptbl, active_fr));
-
-#ifdef FORWARD_SORT_RETIRED
-    bptbl_forward_sort(bptbl, bptbl->first_invert_bp, last_compacted_bp);
-    bptbl_invert(bptbl, bptbl->first_invert_bp, bptbl->n_ent,
-                 /* FIXME: don't actually have to start at 0. */
-                 0, bptbl_ef_idx(bptbl, active_fr));
-    int i;
-    for (i = bptbl->first_invert_bp; i < last_compacted_bp; ++i) {
-        assert(bptbl->orig_sf[i] == bp_sf(bptbl, i));
-    }
-    for (i = bptbl_ef_idx(bptbl, active_fr); i < bptbl->n_ent; ++i) {
-        assert(bptbl->orig_sf[i] == bp_sf(bptbl, i));
-    }
-#endif
+    bptbl_invert(bptbl, bptbl->n_ent, bptbl_ef_idx(bptbl, active_fr));
 
     bptbl->first_invert_bp = last_compacted_bp;
     bptbl_update_active_fr(bptbl, active_fr);
@@ -568,12 +501,6 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx, int32 path,
         bptbl->ent = ckd_realloc(bptbl->ent,
                                  bptbl->n_alloc
                                  * sizeof(*bptbl->ent));
-        bptbl->permute = ckd_realloc(bptbl->permute,
-                                     bptbl->n_alloc
-                                     * sizeof(*bptbl->permute));
-        bptbl->orig_sf = ckd_realloc(bptbl->orig_sf,
-                                     bptbl->n_alloc
-                                     * sizeof(*bptbl->orig_sf));
         E_INFO("Resized backpointer table to %d entries\n", bptbl->n_alloc);
     }
     if (bptbl->bss_head >= bptbl->bscore_stack_size
