@@ -91,6 +91,7 @@ sbthread_internal_main(LPVOID arg)
     sbthread_t *th = (sbthread_t *)arg;
     int rv;
 
+    logfp_index_alloc();
     rv = (*th->func)(th);
     return (DWORD)rv;
 }
@@ -408,6 +409,7 @@ sbthread_internal_main(void *arg)
     sbthread_t *th = (sbthread_t *)arg;
     int rv;
 
+    logfp_index_alloc();
     rv = (*th->func)(th);
     return (void *)(long)rv;
 }

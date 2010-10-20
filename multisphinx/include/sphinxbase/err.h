@@ -109,6 +109,9 @@ FILE *err_set_logfp(FILE *logfp);
 SPHINXBASE_EXPORT
 FILE * err_get_logfp(void);
 
+SPHINXBASE_EXPORT
+void logfp_index_alloc(void);
+
 
 /**
  * Append all log messages to a given file.
