@@ -4,6 +4,7 @@
 #include <time.h>
 
 #include <sphinxbase/feat.h>
+#include <sphinxbase/ckd_alloc.h>
 
 #include "pocketsphinx_internal.h"
 #include "fwdtree_search.h"
@@ -24,6 +25,7 @@ main(int argc, char *argv[])
 	int32 score;
 	int fffr;
 
+	ckd_set_jump(NULL, TRUE);
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
 			     "-dict", TESTDATADIR "/hub4.5000.dic",

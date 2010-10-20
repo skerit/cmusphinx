@@ -15,23 +15,22 @@
   - Test this on standalone fwdtree first - DONE
 
 * Implement arc buffers - DONE (mostly)
-  - Release old arcs
-  - Maybe rewrite bptbl and friends to use the new garray_t
-    + This would ease the future transition to circular arrays
+  - Release old arcs - DONE
+  - Rewrite bptbl and friends to use the new garray_t
 
 * Implement semi-shared acoustic models for search passes - DONE
 
-* Make fwdflat work properly with arc buffer input
-  - 
+* Make fwdflat work properly with arc buffer input - DONE
 
 * Rewrite lattice generation to be incremental on retired bps
-  - No problem with doing this
-  - oldest_bp represents the last node which is still generating arcs
-  - current code basically does selection sort
-  - makes more sense to radix sort them by start frame
-    * this is what fwdflat expects
-    * radix sort by frame, insertion sort by word id
-    * lattice generation is now very, very easy
-    * count start frames in retirement process
+  - This is pretty similar to the arc buffer code
+
+* Remove ngram_search_* and replace with new fwdflat and fwdtree
+  - Hook these up to the pocketsphinx API
+
+* Implement synchronized and generic arc buffers
 
 * Replace bptbl arrays with ring queues
+
+* Rewrite FSG search to use bptbl and arc buffers
+  - Construct grammars from arc buffers / lattices

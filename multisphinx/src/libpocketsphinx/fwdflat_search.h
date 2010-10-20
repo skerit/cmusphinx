@@ -108,6 +108,7 @@ typedef struct fwdflat_arc_buffer_s {
     int active_sf; /**< First frame of incoming arcs. */
     int next_sf;   /**< First frame not containing arcs (last frame + 1). */
 
+    int first_arc;  /**< First arc index tracked in buffer. */
     int active_arc; /**< First incoming arc. */
 } fwdflat_arc_buffer_t;
 
@@ -125,6 +126,11 @@ fwdflat_arc_buffer_t *fwdflat_arc_buffer_retain(fwdflat_arc_buffer_t *fab);
  * Release a pointer to an arc buffer.
  */
 int fwdflat_arc_buffer_free(fwdflat_arc_buffer_t *fab);
+
+/**
+ * Clear the contents of an arc buffer.
+ */
+void fwdflat_arc_buffer_reset(fwdflat_arc_buffer_t *fab);
 
 /**
  * Dump contents of arc buffer for debugging.

@@ -95,6 +95,12 @@ garray_size(garray_t *gar)
 }
 
 size_t
+garray_alloc_size(garray_t *gar)
+{
+    return gar->n_ent_alloc;
+}
+
+size_t
 garray_expand(garray_t *gar, size_t n_ent)
 {
     if (n_ent > gar->n_ent_alloc) {
@@ -129,6 +135,12 @@ garray_pop(garray_t *gar, size_t n_ent)
     else
         gar->n_ent -= n_ent;
     return gar->n_ent;
+}
+
+void
+garray_reset(garray_t *gar)
+{
+    gar->n_ent = 0;
 }
 
 size_t

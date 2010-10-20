@@ -79,6 +79,11 @@ int garray_free(garray_t *gar);
 size_t garray_size(garray_t *gar);
 
 /**
+ * Get the number of elements allocated in a garray_t
+ */
+size_t garray_alloc_size(garray_t *gar);
+
+/**
  * Extend the array to contain the desired number of elements
  */
 size_t garray_expand(garray_t *gar, size_t n_ent);
@@ -97,6 +102,11 @@ size_t garray_pop(garray_t *gar, size_t n_ent);
  * Remove elements from the start of the array.
  */
 size_t garray_shift(garray_t *gar, size_t n_ent);
+
+/**
+ * Remove all elements from the array.
+ */
+void garray_reset(garray_t *gar);
 
 /**
  * Set memory for elements to zero.

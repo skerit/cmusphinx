@@ -105,6 +105,15 @@ main(int argc, char *argv[])
 	}
 
 	fwdflat_arc_buffer_dump(arcs);
+	fwdflat_arc_buffer_release(arcs, 6);
+	for (a = fwdflat_arc_buffer_iter(arcs, 6);
+	     a != fwdflat_arc_buffer_iter(arcs, 8);
+	     a = fwdflat_arc_next(arcs, a)) {
+		printf("%d %d %d\n", a->wid, a->sf, a->ef);
+		TEST_ASSERT(a->wid == 42 || a->wid == 420);
+		TEST_ASSERT(a->sf >= 6 && a->sf < 8);
+	}
+	fwdflat_arc_buffer_dump(arcs);
 	fwdflat_arc_buffer_free(arcs);
 	bptbl_free(bptbl);
 	ps_free(ps);

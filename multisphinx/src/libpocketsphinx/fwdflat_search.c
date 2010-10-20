@@ -431,6 +431,7 @@ fwdflat_search_start(ps_search_t *base)
     int i;
 
     bptbl_reset(ffs->bptbl);
+    fwdflat_arc_buffer_reset(ffs->input_arcs);
     ffs->oldest_bp = -1;
     for (i = 0; i < ps_search_n_words(ffs); i++)
         ffs->word_idx[i] = NO_BP;
@@ -941,6 +942,8 @@ fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
         if (!(dict_filler_word(dict, arc->wid) || arc->wid == dict->startwid))
             ++ffs->input_words[arc->wid];
     }
+    if (0)
+        fwdflat_dump_active_words(ffs, sf, ef);
     return 0;
 }
 
@@ -1003,6 +1006,8 @@ fwdflat_search_step(ps_search_t *base)
             frame_idx += k;
             nfr += k;
         }
+        /* Do this in one batch. */
+        fwdflat_arc_buffer_release(ffs->input_arcs, frame_idx);
         return nfr;
     }
     else {
@@ -1048,6 +1053,9 @@ fwdflat_search_finish(ps_search_t *base)
                ffs->st.n_fwdflat_word_transition,
                ffs->st.n_fwdflat_word_transition / (cf + 1));
     }
+    E_INFO("Allocated %d arcs and %d start frames\n",
+           garray_alloc_size(ffs->input_arcs->arcs),
+           garray_alloc_size(ffs->input_arcs->sf_idx));
 
     ffs->done = TRUE;
     return 0;
@@ -1130,10 +1138,9 @@ fwdflat_arc_buffer_extend(fwdflat_arc_buffer_t *fab, int next_sf)
 {
     if (next_sf == fab->next_sf)
         return 0;
-    /* FIXME: Reuse old indices in the future, but not for now. */
-    garray_expand(fab->sf_idx, next_sf);
+    garray_expand(fab->sf_idx, next_sf - fab->first_sf);
     fab->next_sf = next_sf;
-    garray_clear(fab->sf_idx, fab->active_sf,
+    garray_clear(fab->sf_idx, fab->active_sf - fab->first_sf,
                  fab->next_sf - fab->active_sf);
     return next_sf - fab->active_sf;
 }
@@ -1179,7 +1186,9 @@ fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
 
     /* Save frame and arc counts. */
     n_active_fr = fab->next_sf - fab->active_sf;
-    n_arcs = garray_size(fab->arcs) - fab->active_arc;
+    n_arcs = garray_size(fab->arcs) - (fab->active_arc - fab->first_arc);
+    assert(n_arcs > 0);
+    assert(n_active_fr > 0);
 
     E_INFO("sf_idx before (%d:%d):", fab->active_sf, fab->next_sf);
     for (i = fab->active_sf; i < fab->next_sf; ++i)
@@ -1197,10 +1206,12 @@ fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
     }
 
     /* Permute incoming arcs to match frame counters */
+    assert(fab->active_sf >= fab->first_sf);
     active_sf = garray_slice(fab->sf_idx,
                              fab->active_sf - fab->first_sf, n_active_fr);
+    assert(fab->active_arc >= fab->first_arc);
     active_arc = garray_slice(fab->arcs,
-                              fab->active_arc, n_arcs);
+                              fab->active_arc - fab->first_arc, n_arcs);
 
     E_INFO("sf_idx after (%d:%d):", fab->active_sf, fab->next_sf);
     for (i = fab->active_sf; i < fab->next_sf; ++i)
@@ -1211,7 +1222,7 @@ fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
         fwdflat_arc_t *arc = garray_ptr(active_arc, fwdflat_arc_t, i);
         int *pos = garray_ptr(active_sf, int, arc->sf - fab->active_sf);
         /* Copy it into place. */
-        garray_ent(fab->arcs, fwdflat_arc_t, *pos) = *arc;
+        garray_ent(fab->arcs, fwdflat_arc_t, *pos - fab->first_arc) = *arc;
         /* Increment local frame counter. */
         *pos += 1;
     }
@@ -1235,7 +1246,7 @@ fwdflat_arc_buffer_iter(fwdflat_arc_buffer_t *fab, int sf)
     idx = garray_ent(fab->sf_idx, int, sf - fab->first_sf);
     if (idx >= fab->active_arc)
         return NULL;
-    return garray_ptr(fab->arcs, fwdflat_arc_t, idx);
+    return garray_ptr(fab->arcs, fwdflat_arc_t, idx - fab->first_arc);
 
 }
 
@@ -1243,7 +1254,8 @@ fwdflat_arc_t *
 fwdflat_arc_next(fwdflat_arc_buffer_t *fab, fwdflat_arc_t *ab)
 {
     ab += 1;
-    if (ab >= garray_ptr(fab->arcs, fwdflat_arc_t, fab->active_arc))
+    if (ab >= garray_ptr(fab->arcs, fwdflat_arc_t,
+                         fab->active_arc - fab->first_arc))
         return NULL;
     return ab;
 }
@@ -1258,9 +1270,30 @@ fwdflat_arc_buffer_wait(fwdflat_arc_buffer_t *fab, int sf)
 int
 fwdflat_arc_buffer_release(fwdflat_arc_buffer_t *fab, int first_sf)
 {
-    /* FIXME: Leave this alone for now until the other stuff works. */
-    /* Update the first frame pointer. */
-    /* Shift back arc entries. */
-    /* Shift back start frame entries. */
+    if (first_sf == fab->first_sf)
+        return 0;
+
+    /* Shift back start frames and arcs. */
+    E_INFO("Shifting back %d entries first_sf -> %d\n",
+           first_sf - fab->first_sf,
+           first_sf);
+    garray_shift(fab->sf_idx,
+                 first_sf - fab->first_sf);
+    fab->first_sf = first_sf;
+    E_INFO("Shifting back %d entries first_arc -> %d\n",
+           garray_ent(fab->sf_idx, int, 0) - fab->first_arc,
+           garray_ent(fab->sf_idx, int, 0));
+    garray_shift(fab->arcs,
+                 garray_ent(fab->sf_idx, int, 0) - fab->first_arc);
+    fab->first_arc = garray_ent(fab->sf_idx, int, 0);
     return 0;
+}
+
+void
+fwdflat_arc_buffer_reset(fwdflat_arc_buffer_t *fab)
+{
+    fab->first_sf = fab->active_sf = fab->next_sf = 0;
+    fab->first_arc = fab->active_arc = 0;
+    garray_reset(fab->arcs);
+    garray_reset(fab->sf_idx);
 }
