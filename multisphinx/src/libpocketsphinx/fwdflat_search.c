@@ -1189,10 +1189,12 @@ fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
     assert(n_arcs > 0);
     assert(n_active_fr > 0);
 
+#if 0
     E_INFO("sf_idx before (%d:%d):", fab->active_sf, fab->next_sf);
     for (i = fab->active_sf; i < fab->next_sf; ++i)
         E_INFOCONT(" %d", garray_ent(fab->sf_idx, int, i));
     E_INFOCONT("\n");
+#endif
 
     /* Sum forward frame counters to create arc indices */
     sf = garray_ptr(fab->sf_idx, int, fab->active_sf);
@@ -1216,6 +1218,7 @@ fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
         /* Increment local frame counter. */
         *pos += 1;
     }
+#if 0
     E_INFO("sf_idx after (%d:%d):", fab->active_sf, fab->next_sf);
     for (i = fab->active_sf; i < fab->next_sf; ++i) {
         int idx = garray_ent(fab->sf_idx, int, i);
@@ -1224,6 +1227,7 @@ fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
                    garray_ent(fab->arcs, fwdflat_arc_t, idx).ef);
     }
     E_INFOCONT("\n");
+#endif
 
     garray_free(active_sf);
     garray_free(active_arc);
@@ -1231,6 +1235,7 @@ fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
     /* Update frame and arc pointers. */
     fab->active_sf += n_active_fr;
     fab->active_arc += n_arcs;
+#if 0
     E_INFO("active_sf => %d active_arc => %d\n",
            fab->active_sf, fab->active_arc);
     E_INFO("active_arc-1 -> %d -> %d,%d,%d\n",
@@ -1239,6 +1244,7 @@ fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
            garray_ent(fab->arcs, fwdflat_arc_t, fab->active_arc-1).sf,
            garray_ent(fab->arcs, fwdflat_arc_t, fab->active_arc-1).ef
         );
+#endif
     return n_arcs;
 }
 
@@ -1281,17 +1287,21 @@ fwdflat_arc_buffer_release(fwdflat_arc_buffer_t *fab, int first_sf)
     /* Get the new first arc. */
     next_first_arc = garray_ent(fab->sf_idx, int, first_sf);
     /* Shift back start frames and arcs. */
+#if 0
     E_INFO("Shifting back %d entries first_sf -> %d -> %d\n",
            first_sf - garray_base(fab->sf_idx),
            first_sf, garray_ent(fab->sf_idx, int, first_sf));
+#endif
     garray_shift_from(fab->sf_idx, first_sf);
     garray_set_base(fab->sf_idx, first_sf);
+#if 0
     E_INFO("Shifting back %d entries first_arc -> %d -> %d,%d,%d\n",
            next_first_arc - garray_base(fab->arcs), next_first_arc,
            garray_ent(fab->arcs, fwdflat_arc_t, next_first_arc).wid,
            garray_ent(fab->arcs, fwdflat_arc_t, next_first_arc).sf,
            garray_ent(fab->arcs, fwdflat_arc_t, next_first_arc).ef
         );
+#endif
     garray_shift_from(fab->arcs, next_first_arc);
     garray_set_base(fab->arcs, next_first_arc);
     return 0;
