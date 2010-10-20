@@ -16,20 +16,26 @@ typedef struct feat_reader_s {
 } feat_reader_t;
 
 static int
-get_some_features(sbthread_t *th)
+consumer(sbthread_t *th)
 {
 	feat_reader_t *fr = sbthread_arg(th);
+	mfcc_t feat[52];
 
+	printf("Consumer %p started\n", fr);
 	while (!fr->done) {
 		/* Wait for frame to be available. */
-		featbuf_wait(fr->src, fr->fr, 1000);
+		if (featbuf_wait(fr->src, fr->fr, -1, feat) < 0)
+			break;
 
 		/* Do something with that frame. */
+		printf("Consumer %p got frame %d: %f %f\n",
+		       fr, fr->fr, feat[0], feat[1]);
 
 		/* Release that frame. */
-		featbuf_release(fr->src, fr->fr);
+		featbuf_release(fr->src, fr->fr, fr->fr + 1);
 		++fr->fr;
 	}
+	printf("Consumer %p exiting\n", fr);
 	return 0;
 }
 
@@ -37,9 +43,15 @@ int
 main(int argc, char *argv[])
 {
 	cmd_ln_t *config;
+	feat_reader_t *fr[5];
+	sbthread_t *thr[5];
 	featbuf_t *fb;
 	feat_t *feat;
 	fe_t *fe;
+	FILE *raw;
+	int16 buf[2048];
+	int nsamp;
+	int i;
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
@@ -55,11 +67,33 @@ main(int argc, char *argv[])
 	feat = featbuf_get_fcb(fb);
 
 	/* Create a couple threads to pull features out of it. */
+	for (i = 0; i < 5; ++i) {
+		fr[i] = ckd_calloc(1, sizeof(**fr));
+		fr[i]->src = featbuf_retain(fb);
+		thr[i] = sbthread_start(NULL, consumer, fr[i]);
+	}
 
-	/* Feed it some data. */
+	/* Feed them some data. */
+	raw = fopen(TESTDATADIR "/chan3.raw", "rb");
+	featbuf_start_utt(fb);
+	while ((nsamp = fread(buf, 2, 2048, raw)) > 0) {
+		int rv;
+		rv = featbuf_process_raw(fb, buf, nsamp, FALSE);
+		printf("Producer processed %d samples\n", nsamp);
+		TEST_ASSERT(rv == 0);
+	}
+	fclose(raw);
+	featbuf_end_utt(fb, -1);
 
 	/* Reap those threads. */
-	featbuf_free(fb);
-	cmd_ln_free(config);
+	for (i = 0; i < 5; ++i) {
+		sbthread_wait(thr[i]);
+		sbthread_free(thr[i]);
+		printf("featbuf rc %d\n", featbuf_free(fr[i]->src));
+		ckd_free(fr[i]);
+		printf("Reaped consumer %p\n", fr[i]);
+	}
+	printf("featbuf rc %d\n", featbuf_free(fb));
+	cmd_ln_free_r(config);
 	return 0;
 }

@@ -87,9 +87,6 @@ sync_array_retain(sync_array_t *sa)
     }
     ++sa->refcount;
     sbmtx_unlock(sa->mtx);
-
-    garray_retain(sa->data);
-    garray_retain(sa->count);
     return sa;
 }
 
@@ -118,7 +115,9 @@ sync_array_free(sync_array_t *sa)
     printf("Freeing sync array\n");
     garray_free(sa->data);
     garray_free(sa->count);
+    sbevent_free(sa->evt);
     sbmtx_free(sa->mtx);
+    ckd_free(sa);
     return 0;
 }
 

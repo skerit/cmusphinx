@@ -141,6 +141,10 @@ featbuf_init(cmd_ln_t *config)
                             sizeof(*fb->cepbuf));
     fb->featbuf = feat_array_alloc(fb->fcb,
                                    feat_window_size(fb->fcb) + 1);
+    /* Each element is a complete (flattened) frame of features. */
+    fb->sa = sync_array_init(0,
+                             feat_dimension(fb->fcb)
+                             * sizeof(mfcc_t));
     return fb;
 error_out:
     featbuf_free(fb);
@@ -163,11 +167,17 @@ featbuf_free(featbuf_t *fb)
     if (fb == NULL)
         return 0;
     /* Piggyback on the refcount of the sync array. */
-    if ((rc = sync_array_free(fb->sa)) > 0)
+    rc = sync_array_free(fb->sa);
+    if (rc > 0)
         return rc;
-    cmd_ln_free_r(fb->config);
+
+    /* Not refcounting these things internally. */
     fe_free(fb->fe);
     feat_free(fb->fcb);
+    /* Not really sure why we can't do this. */
+    /* cmd_ln_free_r(fb->config); */
+
+    /* Non-refcounted things. */
     ckd_free(fb->cepbuf);
     feat_array_free(fb->featbuf);
     ckd_free(fb);
@@ -282,6 +292,7 @@ featbuf_process_raw(featbuf_t *fb,
         if (fe_process_frames(fb->fe, &rptr, &n_samps,
                               &fb->cepbuf, &nframes) < 0)
             return -1;
+        printf("Processing %d frames from audio\n", nframes);
         if (nframes)
             featbuf_process_cep(fb, &fb->cepbuf, 1, FALSE);
     }
@@ -314,8 +325,7 @@ featbuf_process_cep(featbuf_t *fb,
                                      fb->featbuf);
         if (fb->beginutt)
             fb->beginutt = FALSE;
-        if (fb->endutt)
-            assert(nfeat == n_frames);
+        printf("Processing %d frames from cepstra\n", nfeat);
         for (i = 0; i < nfeat; ++i) {
             if (featbuf_process_feat(fb, fb->featbuf[i]) < 0)
                 return -1;
