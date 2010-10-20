@@ -120,3 +120,7 @@ represent, and do some experiments.
 Basically the right thing to do for now is to run the lattice
 generation pass in a pipeline with the other passes, and retire
 backpointer entries after they're processed by it.
+
+We should however apply the bogus algorithm to see how much we can
+remove.  It can work incrementally since the existence of an active
+backpointer im that frame implies that it will have a successor.

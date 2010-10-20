@@ -93,9 +93,13 @@ bptbl_free(bptbl_t *bptbl)
 void
 dump_bptable(bptbl_t *bptbl)
 {
-    int i;
+    int i, j;
+
     E_INFO("Backpointer table (%d entries):\n", bptbl->n_ent);
-    for (i = 0; i < bptbl->n_ent; ++i) {
+    for (j = i = 0; i < bptbl->n_ent; ++i) {
+        if (bptbl->ent[i].valid == FALSE)
+            continue;
+        ++j;
         E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
                     i, dict_wordstr(bptbl->d2p->dict, bptbl->ent[i].wid),
                     bp_sf(bptbl, i),
@@ -103,71 +107,16 @@ dump_bptable(bptbl_t *bptbl)
                     bptbl->ent[i].score,
                     bptbl->ent[i].bp);
     }
+    E_INFO("%d valid entries\n", j);
 }
 
-
-#if 0
-void
-bptable_gc(bptbl_t *bpt, int oldest_bp, int frame_idx)
-{
-    E_INFO("Before sorting (%d : %d)\n", bpt->first_unsorted, oldest_bp);
-    for (i = bpt->first_unsorted; i < oldest_bp; ++i) {
-        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
-                    i, dict_wordstr(bpt->d2p->dict, bpt->ent[i].wid),
-                    bp_sf(bpt, i),
-                    bpt->ent[i].frame,
-                    bpt->ent[i].score,
-                    bpt->ent[i].bp);
-    }
-    /* Insertion sort everything from first_unsorted to oldest_bp.
-     * Although this is O(N**2), the backpointers are mostly sorted,
-     * and we expect N to be fairly small */
-    while (bpt->first_unsorted < (oldest_bp - 1)) {
-        int i = bpt->first_unsorted, j;
-        int sf;
-        bp_t tmp;
-
-        /* Short-cut already-sorted case. */
-        sf = bp_sf(bpt, i);
-        if (sf <= bp_sf(bpt, i + 1)) {
-            ++bpt->first_unsorted;
-            continue;
-        }
-        /* Copy this backpointer and it into the correct position. */
-        memcpy(&tmp, bpt->ent + i, sizeof(tmp));
-        while (i < (oldest_bp - 1) && sf > bp_sf(bpt, i + 1)) {
-            memcpy(bpt->ent + i + 1, bpt->ent + i, sizeof(*bpt->ent));
-            ++i;
-        }
-        memcpy(bpt->ent + i, &tmp, sizeof(tmp));
-        /* Update all backpointers. */
-        for (j = bpt->first_unsorted; j < oldest_bp; ++j) {
-            if (bpt->ent[j].bp == bpt->first_unsorted)
-                bpt->ent[j].bp = i;
-            else if (bpt->ent[j].bp <= i)
-                --bpt->ent[j].bp;
-        }
-        /* Increment first_unsorted. */
-        ++bpt->first_unsorted;
-    }
-    bpt->first_unsorted = oldest_bp;
-    E_INFO("After sorting (%d : %d)\n", old_first_unsorted, oldest_bp);
-    for (i = old_first_unsorted; i < oldest_bp; ++i) {
-        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
-                    i, dict_wordstr(bpt->d2p->dict, bpt->ent[i].wid),
-                    bp_sf(bpt, i),
-                    bpt->ent[i].frame,
-                    bpt->ent[i].score,
-                    bpt->ent[i].bp);
-    }
-}
 
 static void
-bptbl_gc(bptbl_t *bptbl, int oldest_bp)
+bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
 {
     int prev_window_sf, window_sf;
-    int32 *agenda;
-    int i, j, n_bp, n_bp_active;
+    glist_t agenda;
+    int i, j;
 
     /* window_sf is the first frame which is still active in search
      * (i.e. for which outgoing word arcs can still be generated).
@@ -177,61 +126,71 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp)
      * (window_sf - 1) will never be reachable. */
     prev_window_sf = bptbl->window_sf;
     window_sf = bptbl->ent[oldest_bp].frame + 1;
-    E_INFO("window_sf %d prev_window_sf %d\n", window_sf, prev_window_sf);
     assert(window_sf >= prev_window_sf);
-    if (window_sf == prev_window_sf)
+    if (window_sf <= prev_window_sf + 1)
         return;
-    /* We can't garbage collect anything in window_sf - 1 since there
-     * can still be backpointers pointing at it.  */
-    if (window_sf - 1 == prev_window_sf)
-        return;
-    E_INFO("Garbage collecting from %d to %d\n",
-           prev_window_sf, window_sf - 1);
     /* Invalidate all backpointer entries up to window_sf - 1. */
-    for (i = 0; i < bptbl->ef_idx[window_sf - 1]; ++i)
-        bptbl->ent[i].valid = FALSE;
-    /* Now re-activate all reachable ones. */
-    n_bp = bptbl->ef_idx[window_sf] - bptbl->ef_idx[window_sf - 1];
-    E_INFO("Finding accessible from %d backpointers:\n", n_bp);
-    /* The bptbl is a tree so there will never be more active nodes
-     * than this in the agenda. */
-    agenda = ckd_calloc(n_bp, sizeof(*agenda));
-    for (i = 0; i < n_bp; ++i) {
-        int32 bp = bptbl->ef_idx[bptbl->window_sf - 1] + i;
-        agenda[i] = bp;
+    /* FIXME: actually anything behind window_sf - 1 is fair game, but
+     * we haven't yet figured out how to do that efficiently. */
+    E_INFO("Garbage collecting from %d to %d:\n",
+           prev_window_sf - 1, window_sf - 1);
+    for (i = bptbl->ef_idx[prev_window_sf - 1];
+         i < bptbl->ef_idx[window_sf - 1]; ++i) {
         E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
-               bp, dict_wordstr(bptbl->d2p->dict,
-                                bptbl->ent[bp].wid),
-               bp_sf(bptbl, bp),
-               bptbl->ent[bp].frame,
-               bptbl->ent[bp].score,
-               bptbl->ent[bp].bp);
+               i, dict_wordstr(bptbl->d2p->dict,
+                                bptbl->ent[i].wid),
+               bp_sf(bptbl, i),
+               bptbl->ent[i].frame,
+               bptbl->ent[i].score,
+               bptbl->ent[i].bp);
+        bptbl->ent[i].valid = FALSE;
     }
-    n_bp_active = n_bp;
-    while (n_bp_active) {
-        E_INFO_NOFN("");
-        for (j = 0; j < n_bp; ++j) {
-            E_INFOCONT(" %-5d", agenda[j]);
-            if (agenda[j] == NO_BP)
-                continue;
-            agenda[j] = bptbl->ent[agenda[j]].bp;
-            if (agenda[j] == NO_BP)
-                --n_bp_active;
-            else {
-                bptbl->ent[agenda[j]].valid = TRUE;
+    /* Now re-activate all ones reachable from the elastic
+     * window. (make sure frame_idx has been pushed!) */
+    E_INFO("Finding accessible from backpointers from %d to %d\n",
+           bptbl->ef_idx[window_sf], bptbl->ef_idx[frame_idx]);
+    agenda = NULL;
+    for (i = bptbl->ef_idx[window_sf];
+         i < bptbl->ef_idx[frame_idx]; ++i) {
+        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
+               i, dict_wordstr(bptbl->d2p->dict,
+                                bptbl->ent[i].wid),
+               bp_sf(bptbl, i),
+               bptbl->ent[i].frame,
+               bptbl->ent[i].score,
+               bptbl->ent[i].bp);
+        agenda = glist_add_int32(agenda, i);
+    }
+    while (agenda) {
+        int32 bp = gnode_int32(agenda);
+        bp = bptbl->ent[bp].bp;
+        agenda = gnode_free(agenda, NULL);
+        /* Add all adjacent backpointers (the bogus lattice generation
+         * algorithm) */
+        if (bp != NO_BP && bptbl->ent[bp].frame >= prev_window_sf - 1) {
+            bptbl->ent[bp].valid = TRUE;
+            for (j = bptbl->ef_idx[bptbl->ent[bp].frame];
+                 j < bptbl->ef_idx[bptbl->ent[bp].frame + 1];
+                 ++j) {
+                agenda = glist_add_int32(agenda, j);
             }
         }
-        E_INFOCONT("\n");
     }
-    ckd_free(agenda);
-    j = 0;
-    for (i = 0; i < bptbl->ef_idx[window_sf - 1]; ++i)
-        if (bptbl->ent[i].valid == FALSE)
-            ++j;
-    E_INFO("Invalidated %d entries\n", j);
+    E_INFO("Invalidated entries:\n");
+    for (i = bptbl->ef_idx[prev_window_sf];
+         i < bptbl->ef_idx[window_sf]; ++i) {
+        if (bptbl->ent[i].valid == FALSE) {
+            E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
+                        i, dict_wordstr(bptbl->d2p->dict,
+                                        bptbl->ent[i].wid),
+                        bp_sf(bptbl, i),
+                        bptbl->ent[i].frame,
+                        bptbl->ent[i].score,
+                        bptbl->ent[i].bp);
+        }
+    }
     bptbl->window_sf = window_sf;
 }
-#endif
 
 int
 bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
@@ -239,6 +198,7 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     E_INFO("pushing frame %d, oldest bp %d in frame %d\n",
            frame_idx, oldest_bp, oldest_bp == NO_BP ? -1 : bptbl->ent[oldest_bp].frame);
     bptbl->ef_idx[frame_idx] = bptbl->n_ent;
+    bptbl_gc(bptbl, oldest_bp, frame_idx);
     if (frame_idx >= bptbl->n_frame_alloc) {
         bptbl->n_frame_alloc *= 2;
         bptbl->ef_idx = ckd_realloc(bptbl->ef_idx - 1,
@@ -307,8 +267,8 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx, int32 path,
     for (i = rcsize, bss = bptbl->bscore_stack + bptbl->bss_head; i > 0; --i, bss++)
         *bss = WORST_SCORE;
     bptbl->bscore_stack[bptbl->bss_head + rc] = score;
-    E_DEBUG(2,("Entered bp %d sf %d ef %d window_sf %d\n", bptbl->n_ent,
-               bp_sf(bptbl, bptbl->n_ent), frame_idx, bptbl->window_sf));
+    E_INFO("Entered bp %d sf %d ef %d window_sf %d\n", bptbl->n_ent,
+           bp_sf(bptbl, bptbl->n_ent), frame_idx, bptbl->window_sf);
     assert(bp_sf(bptbl, bptbl->n_ent) >= bptbl->window_sf);
 
     bptbl->n_ent++;
