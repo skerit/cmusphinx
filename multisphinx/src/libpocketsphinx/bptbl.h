@@ -82,26 +82,39 @@ typedef struct bptbl_s {
     bp_t *ent;           /**< Backpointer entries. */
     int32 n_ent;         /**< First free BPTable entry. */
     int32 n_alloc;       /**< Number of entries allocated for entry-based arrays (ent, permute) */
-    int32 active_fr;     /**< First frame containing active
-                            backpointers.  Also the first frame which
-                            is indexed by end frame.  ef_idx indices
-                            should be added to this to get actual
-                            frame indices. */
-    /* FIXME: These two are a bit wasteful. */
-    int32 *permute;      /**< Current permutation of entries (used for gc/sorting). */
-    int16 *orig_sf;      /**< Start frame for each backpointer (used for sorting). */
-    int32 first_invert_bp; /**< First reordered backpointer (used in gc) */
-
     int32 *bscore_stack;     /**< Array containing right context scores for word exits. */
     int32 bss_head;          /**< First free BScoreStack entry */
     int32 bscore_stack_size; /**< Number of entries allocated in bscore_stack. */
 
-    int32 n_frame;       /**< Number of frames searched (may be greater than n_frame_alloc). */
+    int32 n_frame;       /**< Number of frames searched. */
+    /**
+     * First frame containing active backpointers.  Also the first
+     * frame which is indexed by end frame.  ef_idx indices should be
+     * added to this to get actual frame indices.
+     */
+    int32 active_fr;
+    /**
+     * Index of first bptbl entry to be reordered by compaction and
+     * insertion sort.  Also marks the end of the region of retired
+     * bptbl entries.
+     */
+    int32 first_invert_bp;
+    /**
+     * Delta between "logical" and "physical" bptbl indices for active
+     * bps, defined as all bps >= ef_idx[0].
+     */
+    int32 active_delta;
+
+    /* FIXME: These two are a bit wasteful as they index everything though it's not necessary. */
+    int32 *permute;      /**< Current permutation of entries (used for gc/sorting). */
+    int16 *orig_sf;      /**< Start frame for each backpointer (used for sorting). */
+
     /* All these are indexed by frame - active_sf */
     int32 n_active_alloc; /**< Number of frames allocated for frame-based arrays. */
     int32 *ef_idx;       /**< First BPTable entry exiting in each frame */
     ps_latnode_t **frm_wordlist;   /**< List of active words in each frame. */
     bitvec_t *valid_fr;  /**< Set of accessible frames (used in gc) */
+
     int32 *word_idx;     /**< BPTable index for any word in current frame;
                             cleared before each frame */
 } bptbl_t;

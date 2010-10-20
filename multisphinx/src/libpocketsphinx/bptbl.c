@@ -104,6 +104,7 @@ bptbl_reset(bptbl_t *bptbl)
     }
     bitvec_clear_all(bptbl->valid_fr, bptbl->n_active_alloc);
     bptbl->first_invert_bp = 0;
+    bptbl->active_delta = 0;
     bptbl->n_frame = 0;
     bptbl->n_ent = 0;
     bptbl->bss_head = 0;
@@ -155,17 +156,22 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
     int i, j, n_active_fr, last_gc_fr;
 
     /* Invalidate all backpointer entries between sf and ef. */
-    E_DEBUG(2,("Garbage collecting from %d to %d (%d to %d):\n",
-               bptbl_ef_idx(bptbl, sf), bptbl_ef_idx(bptbl, ef), sf, ef));
+    E_INFO("Garbage collecting from %d to %d (%d to %d):\n",
+           bptbl_ef_idx(bptbl, sf), bptbl_ef_idx(bptbl, ef), sf, ef);
+    /* Assert things that ensure these entries are all in the active
+     * region (i.e. we can unconditionally translate their indices by
+     * active_delta). */
+    assert(cf >= ef);
+    assert(ef > sf);
+    assert(sf >= bptbl->active_fr);
     for (i = bptbl_ef_idx(bptbl, sf);
          i < bptbl_ef_idx(bptbl, ef); ++i) {
         bptbl->ent[i].valid = FALSE;
     }
 
-    /* Now re-activate all ones backwards reachable from the elastic
-     * window. (make sure cf has been pushed!) */
-    E_DEBUG(2, ("Finding coaccessible frames from backpointers from %d to %d\n",
-                bptbl_ef_idx(bptbl, ef), bptbl_ef_idx(bptbl, cf)));
+    /* Now re-activate all ones backwards reachable from the search graph. */
+    E_INFO("Finding coaccessible frames from backpointers from %d to %d\n",
+           bptbl_ef_idx(bptbl, ef), bptbl_ef_idx(bptbl, cf));
     /* Collect coaccessible frames from these backpointers */
     bitvec_clear_all(bptbl->valid_fr, cf - bptbl->active_fr);
     n_active_fr = 0;
@@ -396,15 +402,10 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     /* Mark, compact, snap pointers, sort, snap 'em again. */
     bptbl_mark(bptbl, prev_active_fr, active_fr, frame_idx);
     last_compacted_bp = bptbl_compact(bptbl, bptbl_ef_idx(bptbl, active_fr));
-    bptbl_invert(bptbl, bptbl->first_invert_bp, last_compacted_bp,
-                 bptbl->first_invert_bp, bptbl_ef_idx(bptbl, active_fr));
-    bptbl_invert(bptbl, bptbl_ef_idx(bptbl, active_fr), bptbl->n_ent,
+    bptbl_invert(bptbl, bptbl->first_invert_bp, bptbl->n_ent,
                  bptbl->first_invert_bp, bptbl_ef_idx(bptbl, active_fr));
     bptbl_forward_sort(bptbl, bptbl->first_invert_bp, last_compacted_bp);
-    bptbl_invert(bptbl, bptbl->first_invert_bp, last_compacted_bp,
-                 /* FIXME: don't actually have to start at 0. */
-                 0, bptbl_ef_idx(bptbl, active_fr));
-    bptbl_invert(bptbl, bptbl_ef_idx(bptbl, active_fr), bptbl->n_ent,
+    bptbl_invert(bptbl, bptbl->first_invert_bp, bptbl->n_ent,
                  /* FIXME: don't actually have to start at 0. */
                  0, bptbl_ef_idx(bptbl, active_fr));
 #if 0
@@ -439,6 +440,15 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     bptbl->ef_idx[frame_idx - bptbl->active_fr] = bptbl->n_ent;
     bptbl->n_frame = frame_idx + 1;
     bptbl_gc(bptbl, oldest_bp, frame_idx);
+    if (bptbl->first_invert_bp > 0) {
+        E_INFO("Retired bps from 0 to %d Empty %d to %d Active %d to %d\n",
+               bptbl->first_invert_bp - 1, bptbl->first_invert_bp,
+               bptbl->ef_idx[0] - 1, bptbl->ef_idx[0], bptbl->n_ent);
+        assert(bptbl->ent[bptbl->first_invert_bp - 1].valid == TRUE);
+        assert(bptbl->ent[bptbl->first_invert_bp].valid == FALSE);
+        assert(bptbl->ent[bptbl->ef_idx[0] - 1].valid == FALSE);
+        assert(bptbl->ent[bptbl->ef_idx[0]].valid == TRUE);
+    }
     return bptbl->n_ent;
 }
 
