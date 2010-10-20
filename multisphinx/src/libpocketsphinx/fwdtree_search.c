@@ -1956,79 +1956,6 @@ fwdtree_search_free_all_rc(fwdtree_search_t *fts, int32 w)
     fts->word_chan[w] = NULL;
 }
 
-static bp_t *
-fwdtree_search_find_exit(fwdtree_search_t *fts)
-{
-    bp_t *bpe;
-
-    /* No hypothesis means no exit node! */
-    if (fts->bptbl->n_frame == 0)
-        return NULL;
-
-    /* Look for </s> in the last frame. */
-    if ((bpe = bptbl_find_exit(fts->bptbl,
-                               ps_search_finish_wid(fts))) != NULL)
-        return bpe;
-
-    /* If not found then take the best scoring word exit (with warning). */
-    bpe = bptbl_find_exit(fts->bptbl, BAD_S3WID);
-    if (bpe == NULL) {
-        E_ERROR("No word exits in last frame: recognition failure?\n");
-        return NULL;
-    }
-    return bpe;
-}
-
-static char const *
-fwdtree_search_hyp(ps_search_t *base, int32 *out_score)
-{
-    fwdtree_search_t *fts = (fwdtree_search_t *)base;
-    bp_t *exit, *bpe;
-    char *c;
-    size_t len;
-
-    exit = fwdtree_search_find_exit(fts);
-    if (exit == NULL)
-        return NULL;
-    if (out_score)
-        *out_score = exit->score;
-
-    /* BPTBL: Replace all of this with arc buffers. */
-    bpe = exit;
-    len = 0;
-    while (bpe != NULL) {
-        assert(bpe->valid);
-        if (dict_real_word(ps_search_dict(fts), bpe->wid))
-            len += strlen(dict_basestr(ps_search_dict(fts), bpe->wid)) + 1;
-        bpe = bptbl_prev(fts->bptbl, bpe);
-    }
-
-    ckd_free(base->hyp_str);
-    if (len == 0) {
-	base->hyp_str = NULL;
-	return base->hyp_str;
-    }
-    base->hyp_str = ckd_calloc(1, len);
-
-    bpe = exit;
-    c = base->hyp_str + len - 1;
-    while (bpe != NULL) {
-        size_t len;
-        if (dict_real_word(ps_search_dict(fts), bpe->wid)) {
-            len = strlen(dict_basestr(ps_search_dict(fts), bpe->wid));
-            c -= len;
-            memcpy(c, dict_basestr(ps_search_dict(fts), bpe->wid), len);
-            if (c > base->hyp_str) {
-                --c;
-                *c = ' ';
-            }
-        }
-        bpe = bptbl_prev(fts->bptbl, bpe);
-    }
-
-    return base->hyp_str;
-}
-
 static void
 fwdtree_search_save_bp(fwdtree_search_t *fts, int frame_idx,
                        int32 w, int32 score, int32 path, int32 rc)
@@ -2067,125 +1994,19 @@ fwdtree_search_prob(ps_search_t *base)
     return 0;
 }
 
-static void
-fwdtree_search_bp2itor(ps_seg_t *seg, int bp)
+static char const *
+fwdtree_search_hyp(ps_search_t *base, int32 *out_score)
 {
-    fwdtree_search_t *fts = (fwdtree_search_t *)seg->search;
-    bp_t *be, *pbe;
+    fwdtree_search_t *fts = (fwdtree_search_t *)base;
 
-    be = bptbl_ent(fts->bptbl, bp);
-    pbe = bptbl_ent(fts->bptbl, be->bp);
-    seg->word = dict_wordstr(ps_search_dict(fts), be->wid);
-    seg->ef = be->frame;
-    seg->sf = pbe ? pbe->frame + 1 : 0;
-    seg->prob = 0; /* Bogus value... */
-    /* Compute acoustic and LM scores for this segment. */
-    if (pbe == NULL) {
-        seg->ascr = be->score;
-        seg->lscr = 0;
-        seg->lback = 0;
-    }
-    else {
-        int32 start_score;
-
-        /* Find ending path score of previous word. */
-        start_score = fwdtree_search_exit_score(fts, pbe,
-                                     dict_first_phone(ps_search_dict(fts), be->wid));
-        assert(start_score BETTER_THAN WORST_SCORE);
-        if (be->wid == ps_search_silence_wid(fts)) {
-            /* FIXME: Nasty action at a distance here to deal with the
-             * silence length limiting stuff in fwdtree_search_fwdtree.c */
-            if (dict_first_phone(ps_search_dict(fts), be->wid)
-                == ps_search_acmod(fts)->mdef->sil)
-                seg->lscr = 0;
-            else
-                seg->lscr = fts->silpen;
-        }
-        else if (dict_filler_word(ps_search_dict(fts), be->wid)) {
-            seg->lscr = fts->fillpen;
-        }
-        else {
-            seg->lscr = ngram_tg_score(fts->lmset,
-                                       be->real_wid,
-                                       pbe->real_wid,
-                                       pbe->prev_real_wid, &seg->lback)>>SENSCR_SHIFT;
-            seg->lscr = (int32)(seg->lscr * seg->lwf);
-        }
-        seg->ascr = be->score - start_score - seg->lscr;
-    }
-}
-
-static void
-ngram_bp_seg_free(ps_seg_t *seg)
-{
-    bptbl_seg_t *itor = (bptbl_seg_t *)seg;
-    
-    ckd_free(itor->bpidx);
-    ckd_free(itor);
+    ckd_free(base->hyp_str);
+    base->hyp_str = bptbl_hyp(fts->bptbl, out_score, ps_search_finish_wid(fts));
+    return base->hyp_str;
 }
 
 static ps_seg_t *
-ngram_bp_seg_next(ps_seg_t *seg)
+fwdtree_search_seg_iter(ps_search_t *base, int32 *out_score)
 {
-    bptbl_seg_t *itor = (bptbl_seg_t *)seg;
-
-    if (++itor->cur == itor->n_bpidx) {
-        ngram_bp_seg_free(seg);
-        return NULL;
-    }
-
-    fwdtree_search_bp2itor(seg, itor->bpidx[itor->cur]);
-    return seg;
-}
-
-static ps_segfuncs_t ngram_bp_segfuncs = {
-    /* seg_next */ ngram_bp_seg_next,
-    /* seg_free */ ngram_bp_seg_free
-};
-
-static ps_seg_t *
-fwdtree_search_seg_iter(ps_search_t *search, int32 *out_score)
-{
-    fwdtree_search_t *fts = (fwdtree_search_t *)search;
-    bptbl_seg_t *itor;
-    bp_t *exit, *bpe;
-    int cur;
-
-    exit = fwdtree_search_find_exit(fts);
-    if (exit == NULL)
-        return NULL;
-    if (out_score)
-        *out_score = exit->score;
-
-    /* Calling this an "iterator" is a bit of a misnomer since we have
-     * to get the entire backtrace in order to produce it.  On the
-     * other hand, all we actually need is the bptbl IDs, and we can
-     * allocate a fixed-size array of them. */
-    itor = ckd_calloc(1, sizeof(*itor));
-    itor->base.vt = &ngram_bp_segfuncs;
-    itor->base.search = ps_search_base(fts);
-    itor->base.lwf = 1.0;
-    itor->n_bpidx = 0;
-    bpe = exit;
-    while (bpe != NULL) {
-        ++itor->n_bpidx;
-        bpe = bptbl_prev(fts->bptbl, bpe);
-    }
-    if (itor->n_bpidx == 0) {
-        ckd_free(itor);
-        return NULL;
-    }
-    itor->bpidx = ckd_calloc(itor->n_bpidx, sizeof(*itor->bpidx));
-    cur = itor->n_bpidx - 1;
-    bpe = exit;
-    while (bpe != NULL) {
-        itor->bpidx[cur] = bptbl_idx(fts->bptbl, bpe);
-        bpe = bptbl_prev(fts->bptbl, bpe);
-        --cur;
-    }
-
-    /* Fill in relevant fields for first element. */
-    fwdtree_search_bp2itor((ps_seg_t *)itor, itor->bpidx[0]);
-
-    return (ps_seg_t *)itor;
+    fwdtree_search_t *fts = (fwdtree_search_t *)base;
+    return bptbl_seg_iter(fts->bptbl, out_score, ps_search_finish_wid(fts));
 }

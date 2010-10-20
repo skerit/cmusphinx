@@ -893,15 +893,13 @@ fwdflat_search_finish(ps_search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
     int32 cf;
-    int fi;
-
+    
     bitvec_clear_all(ffs->word_active, ps_search_n_words(ffs));
 
     /* This is the number of frames processed. */
     cf = ps_search_acmod(ffs)->output_frame;
-    /* Add a mark in the backpointer table for one past the final frame. */
-    fi = bptbl_push_frame(ffs->bptbl, ffs->oldest_bp);
-    assert(fi == cf);
+    /* Finalize the backpointer table. */
+    bptbl_finalize(ffs->bptbl);
 
     /* Print out some statistics. */
     if (cf > 0) {
@@ -929,259 +927,19 @@ fwdflat_search_prob(ps_search_t *base)
     return 0;
 }
 
-static int
-fwdflat_search_find_exit(fwdflat_search_t *ffs, int frame_idx, int32 *out_best_score)
-{
-    /* End of backpointers for this frame. */
-    int end_bpidx;
-    int best_exit, bp;
-    int32 best_score;
-
-    /* No hypothesis means no exit node! */
-    if (ffs->bptbl->n_frame == 0)
-        return NO_BP;
-
-    if (frame_idx == -1 || frame_idx >= ffs->bptbl->n_frame)
-        frame_idx = ffs->bptbl->n_frame - 1;
-    end_bpidx = bptbl_ef_idx(ffs->bptbl, frame_idx);
-
-    best_score = WORST_SCORE;
-    best_exit = NO_BP;
-
-    /* Scan back to find a frame with some backpointers in it. */
-    while (frame_idx >= 0 && bptbl_ef_idx(ffs->bptbl, frame_idx) == end_bpidx)
-        --frame_idx;
-    /* This is NOT an error, it just means there is no hypothesis yet. */
-    if (frame_idx < 0)
-        return NO_BP;
-
-    /* Now find the entry for </s> OR the best scoring entry. */
-    for (bp = bptbl_ef_idx(ffs->bptbl, frame_idx); bp < end_bpidx; ++bp) {
-        bp_t *bpe = bptbl_ent(ffs->bptbl, bp);
-        if (bpe->wid == ps_search_finish_wid(ffs)
-            || bpe->score BETTER_THAN best_score) {
-            best_score = bpe->score;
-            best_exit = bp;
-        }
-        if (bpe->wid == ps_search_finish_wid(ffs))
-            break;
-    }
-
-    if (out_best_score) *out_best_score = best_score;
-    return best_exit;
-}
-
 static char const *
 fwdflat_search_hyp(ps_search_t *base, int32 *out_score)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
-    char *c;
-    size_t len;
-    int bp, bpidx;
-
-    bpidx = fwdflat_search_find_exit(ffs, -1, out_score);
-    if (bpidx == NO_BP)
-        return NULL;
-
-    bp = bpidx;
-    len = 0;
-    while (bp != NO_BP) {
-        bp_t *be = bptbl_ent(ffs->bptbl, bp);
-        E_INFO("bp %d -> %d\n", bp, be->bp);
-        assert(be->valid);
-        bp = be->bp;
-        if (dict_real_word(ps_search_dict(ffs), be->wid))
-            len += strlen(dict_basestr(ps_search_dict(ffs), be->wid)) + 1;
-    }
 
     ckd_free(base->hyp_str);
-    if (len == 0) {
-	base->hyp_str = NULL;
-	return base->hyp_str;
-    }
-    base->hyp_str = ckd_calloc(1, len);
-
-    bp = bpidx;
-    c = base->hyp_str + len - 1;
-    while (bp != NO_BP) {
-        bp_t *be = bptbl_ent(ffs->bptbl, bp);
-        size_t len;
-
-        bp = be->bp;
-        if (dict_real_word(ps_search_dict(ffs), be->wid)) {
-            len = strlen(dict_basestr(ps_search_dict(ffs), be->wid));
-            c -= len;
-            memcpy(c, dict_basestr(ps_search_dict(ffs), be->wid), len);
-            if (c > base->hyp_str) {
-                --c;
-                *c = ' ';
-            }
-        }
-    }
-
+    base->hyp_str = bptbl_hyp(ffs->bptbl, out_score, ps_search_finish_wid(ffs));
     return base->hyp_str;
 }
 
-static int32
-fwdflat_search_exit_score(fwdflat_search_t *ffs, bp_t *pbe, int rcphone)
-{
-    /* DICT2PID */
-    /* Get the mapping from right context phone ID to index in the
-     * right context table and the bptbl->bscore_stack. */
-    /* FIXME: This function gets called like 50 zillion times, either
-     * it should be inlined or we should find a better way to do
-     * this. */
-    E_DEBUG(99,("fwdflat_search_exit_score(%d,%d)\n", bptbl_idx(ffs->bptbl, pbe), rcphone));
-    assert(pbe->valid);
-    if (pbe->last2_phone == -1) {
-        /* No right context for single phone predecessor words. */
-        E_DEBUG(99,("last2_phone = %d s_idx = %d bscore = %d\n", -1,
-                    pbe->s_idx, ffs->bptbl->bscore_stack[pbe->s_idx]));
-        assert(ffs->bptbl->bscore_stack[pbe->s_idx] != WORST_SCORE);
-        return ffs->bptbl->bscore_stack[pbe->s_idx];
-    }
-    else {
-        xwdssid_t *rssid;
-        /* Find the index for the last diphone of the previous word +
-         * the first phone of the current word. */
-        rssid = dict2pid_rssid(ps_search_dict2pid(ffs),
-                               pbe->last_phone, pbe->last2_phone);
-        E_DEBUG(99,("last2_phone = %d s_idx = %d rc = %d n_rc = %d bscore = %d\n",
-                    pbe->last2_phone, pbe->s_idx, rssid->cimap[rcphone],
-                    rssid->n_ssid,
-                    ffs->bptbl->bscore_stack[pbe->s_idx + rssid->cimap[rcphone]]));
-        /* This may be WORST_SCORE, which means that there was no exit
-         * with rcphone as right context. */
-        return ffs->bptbl->bscore_stack[pbe->s_idx + rssid->cimap[rcphone]];
-    }
-}
-
-static void
-fwdflat_search_bp2itor(ps_seg_t *seg, int bp)
-{
-    fwdflat_search_t *ffs = (fwdflat_search_t *)seg->search;
-    bp_t *be, *pbe;
-
-    be = bptbl_ent(ffs->bptbl, bp);
-    pbe = bptbl_ent(ffs->bptbl, be->bp);
-    seg->word = dict_wordstr(ps_search_dict(ffs), be->wid);
-    seg->ef = be->frame;
-    seg->sf = pbe ? pbe->frame + 1 : 0;
-    seg->prob = 0; /* Bogus value... */
-    /* Compute acoustic and LM scores for this segment. */
-    if (pbe == NULL) {
-        seg->ascr = be->score;
-        seg->lscr = 0;
-        seg->lback = 0;
-    }
-    else {
-        int32 start_score;
-
-        /* Find ending path score of previous word. */
-        start_score = fwdflat_search_exit_score(ffs, pbe,
-                                                dict_first_phone(ps_search_dict(ffs),
-                                                                 be->wid));
-        assert(start_score BETTER_THAN WORST_SCORE);
-        if (be->wid == ps_search_silence_wid(ffs)) {
-            /* FIXME: Nasty action at a distance here to deal with the
-             * silence length limiting stuff in fwdflat_search_fwdflat.c */
-            if (dict_first_phone(ps_search_dict(ffs), be->wid)
-                == ps_search_acmod(ffs)->mdef->sil)
-                seg->lscr = 0;
-            else
-                seg->lscr = ffs->silpen;
-        }
-        else if (dict_filler_word(ps_search_dict(ffs), be->wid)) {
-            seg->lscr = ffs->fillpen;
-        }
-        else {
-            seg->lscr = ngram_tg_score(ffs->lmset,
-                                       be->real_wid,
-                                       pbe->real_wid,
-                                       pbe->prev_real_wid, &seg->lback)>>SENSCR_SHIFT;
-            seg->lscr = (int32)(seg->lscr * seg->lwf);
-        }
-        seg->ascr = be->score - start_score - seg->lscr;
-    }
-}
-
-static void
-ngram_bp_seg_free(ps_seg_t *seg)
-{
-    bptbl_seg_t *itor = (bptbl_seg_t *)seg;
-    
-    ckd_free(itor->bpidx);
-    ckd_free(itor);
-}
-
 static ps_seg_t *
-ngram_bp_seg_next(ps_seg_t *seg)
+fwdflat_search_seg_iter(ps_search_t *base, int32 *out_score)
 {
-    bptbl_seg_t *itor = (bptbl_seg_t *)seg;
-
-    if (++itor->cur == itor->n_bpidx) {
-        ngram_bp_seg_free(seg);
-        return NULL;
-    }
-
-    fwdflat_search_bp2itor(seg, itor->bpidx[itor->cur]);
-    return seg;
-}
-
-static ps_segfuncs_t ngram_bp_segfuncs = {
-    /* seg_next */ ngram_bp_seg_next,
-    /* seg_free */ ngram_bp_seg_free
-};
-
-static ps_seg_t *
-fwdflat_search_bp_iter(fwdflat_search_t *ffs, int bpidx, float32 lwf)
-{
-    bptbl_seg_t *itor;
-    int bp, cur;
-
-    /* Calling this an "iterator" is a bit of a misnomer since we have
-     * to get the entire backtrace in order to produce it.  On the
-     * other hand, all we actually need is the bptbl IDs, and we can
-     * allocate a fixed-size array of them. */
-    itor = ckd_calloc(1, sizeof(*itor));
-    itor->base.vt = &ngram_bp_segfuncs;
-    itor->base.search = ps_search_base(ffs);
-    itor->base.lwf = lwf;
-    itor->n_bpidx = 0;
-    bp = bpidx;
-    while (bp != NO_BP) {
-        bp_t *be = bptbl_ent(ffs->bptbl, bp);
-        bp = be->bp;
-        ++itor->n_bpidx;
-    }
-    if (itor->n_bpidx == 0) {
-        ckd_free(itor);
-        return NULL;
-    }
-    itor->bpidx = ckd_calloc(itor->n_bpidx, sizeof(*itor->bpidx));
-    cur = itor->n_bpidx - 1;
-    bp = bpidx;
-    while (bp != NO_BP) {
-        bp_t *be = bptbl_ent(ffs->bptbl, bp);
-        itor->bpidx[cur] = bp;
-        bp = be->bp;
-        --cur;
-    }
-
-    /* Fill in relevant fields for first element. */
-    fwdflat_search_bp2itor((ps_seg_t *)itor, itor->bpidx[0]);
-
-    return (ps_seg_t *)itor;
-}
-
-static ps_seg_t *
-fwdflat_search_seg_iter(ps_search_t *search, int32 *out_score)
-{
-    fwdflat_search_t *ffs = (fwdflat_search_t *)search;
-    int32 bpidx;
-
-    bpidx = fwdflat_search_find_exit(ffs, -1, out_score);
-    return fwdflat_search_bp_iter(ffs, bpidx, 1.0);
-
-    return NULL;
+    fwdflat_search_t *ffs = (fwdflat_search_t *)base;
+    return bptbl_seg_iter(ffs->bptbl, out_score, ps_search_finish_wid(ffs));
 }

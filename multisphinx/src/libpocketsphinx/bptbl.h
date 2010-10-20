@@ -126,6 +126,7 @@ typedef struct bptbl_s {
  */
 typedef struct bptbl_seg_s {
     ps_seg_t base;  /**< Base structure. */
+    bptbl_t *bptbl; /**< Backpointer table. */
     int32 *bpidx;   /**< Sequence of backpointer IDs. */
     int16 n_bpidx;  /**< Number of backpointer IDs. */
     int16 cur;      /**< Current position in bpidx. */
@@ -161,6 +162,9 @@ int bptbl_finalize(bptbl_t *bptbl);
 
 /**
  * Find the best scoring exit in the final frame.
+ *
+ * @param wid End word ID (or BAD_S3WID to return the best exit
+ * regardless of word ID)
  */
 bp_t *bptbl_find_exit(bptbl_t *bptbl, int32 wid);
 
@@ -222,5 +226,26 @@ int bptbl_ef_count(bptbl_t *bptbl, int frame_idx);
  * trigram" search.
  */
 void bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp);
+
+/**
+ * Construct a hypothesis string from the best path in bptbl.
+ *
+ * @param out_score Output: Score of hypothesis.
+ * @param wid End word ID (or BAD_S3WID to return the best exit
+ * regardless of word ID)
+ * @return Newly allocated hypothesis string (free with ckd_free()).
+ */
+char *
+bptbl_hyp(bptbl_t *bptbl, int32 *out_score, int32 finish_wid);
+
+/**
+ * Construct a segmentation iterator from the best path in bptbl.
+ *
+ * @param out_score Output: Score of hypothesis.
+ * @param wid End word ID (or BAD_S3WID to return the best exit
+ * regardless of word ID)
+ * @return New segmentation iterator.
+ */
+ps_seg_t *bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid);
 
 #endif /* __BPTBL_H__ */

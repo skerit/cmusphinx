@@ -53,7 +53,7 @@
 
 static int bptbl_rcsize(bptbl_t *bptbl, bp_t *be);
 
-#if 1
+#if 0
 #undef E_DEBUG
 #define E_DEBUG(level,x) E_INFO x
 #undef E_DEBUGCONT
@@ -550,20 +550,23 @@ bptbl_find_exit(bptbl_t *bptbl, int32 wid)
         /* Final, so it's in retired. */
         start = bptbl->retired + bptbl->first_invert_bp - 1;
         end = bptbl->retired + bptbl->first_invert_bp;
+        ef = start->frame;
+        while (start >= bptbl->retired && start->frame == ef)
+            --start;
     }
     else {
         /* Not final, so it's in ent. */
         start = bptbl->ent + bptbl->n_ent - bptbl->ef_idx[0] - 1;
         end = bptbl->ent + bptbl->n_ent - bptbl->ef_idx[0];
+        ef = start->frame;
+        while (start >= bptbl->ent && start->frame == ef)
+            --start;
     }
-    if (start->frame != bptbl->n_frame - 1) {
-        E_WARN("No exits in final frame %d, using frame %d instead\n",
-               bptbl->n_frame - 1, start->frame);
-    }
-    ef = start->frame;
-    while (start >= bptbl->retired && start->frame == ef)
-        --start;
     ++start;
+    if (ef != bptbl->n_frame - 1) {
+        E_WARN("No exits in final frame %d, using frame %d instead\n",
+               bptbl->n_frame - 1, ef);
+    }
     E_INFO("Last frame %d has %d entries\n", ef, end - start);
     best_score = start->score;
     best = NULL;
@@ -733,3 +736,168 @@ bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp)
             ent->prev_real_wid = prev->real_wid;
     }
 }
+
+char *
+bptbl_hyp(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
+{
+    bp_t *exit, *bpe;
+    char *c, *hyp_str;
+    size_t len;
+
+    /* Look for </s> in the last frame. */
+    if ((exit = bptbl_find_exit(bptbl, finish_wid)) == NULL) {
+        /* If not found then take the best scoring word exit (with warning). */
+        exit = bptbl_find_exit(bptbl, BAD_S3WID);
+        if (exit == NULL) {
+            E_ERROR("No word exits in last frame: recognition failure?\n");
+            return NULL;
+        }
+        E_WARN("No %s found in last frame, using %d instead\n",
+               dict_wordstr(bptbl->d2p->dict, finish_wid),
+               dict_wordstr(bptbl->d2p->dict, exit->wid));
+    }
+    if (out_score)
+        *out_score = exit->score;
+
+    bpe = exit;
+    len = 0;
+    while (bpe != NULL) {
+        assert(bpe->valid);
+        if (dict_real_word(bptbl->d2p->dict, bpe->wid))
+            len += strlen(dict_basestr(bptbl->d2p->dict, bpe->wid)) + 1;
+        bpe = bptbl_prev(bptbl, bpe);
+    }
+
+    if (len == 0)
+	return NULL;
+    hyp_str = ckd_calloc(1, len);
+
+    bpe = exit;
+    c = hyp_str + len - 1;
+    while (bpe != NULL) {
+        size_t len;
+        if (dict_real_word(bptbl->d2p->dict, bpe->wid)) {
+            len = strlen(dict_basestr(bptbl->d2p->dict, bpe->wid));
+            c -= len;
+            memcpy(c, dict_basestr(bptbl->d2p->dict, bpe->wid), len);
+            if (c > hyp_str) {
+                --c;
+                *c = ' ';
+            }
+        }
+        bpe = bptbl_prev(bptbl, bpe);
+    }
+
+    return hyp_str;
+}
+
+static void
+bptbl_bp2itor(ps_seg_t *seg, int bp)
+{
+    bptbl_seg_t *bseg = (bptbl_seg_t *)seg;
+    bp_t *be, *pbe;
+
+    be = bptbl_ent(bseg->bptbl, bp);
+    pbe = bptbl_ent(bseg->bptbl, be->bp);
+    seg->word = dict_wordstr(bseg->bptbl->d2p->dict, be->wid);
+    seg->ef = be->frame;
+    seg->sf = pbe ? pbe->frame + 1 : 0;
+    seg->prob = 0; /* Bogus value... */
+    /* Compute acoustic and LM scores for this segment. */
+    if (pbe == NULL) {
+        seg->ascr = be->score;
+        seg->lscr = 0;
+        seg->lback = 0;
+    }
+    else {
+        /* Language model score calculation (for what it's worth,
+         * which isn't much since we don't have real language model
+         * state) is search-dependent. */
+        seg->ascr = be->score - pbe->score;
+        seg->lscr = 0;
+    }
+}
+
+static void
+bptbl_seg_free(ps_seg_t *seg)
+{
+    bptbl_seg_t *itor = (bptbl_seg_t *)seg;
+    
+    ckd_free(itor->bpidx);
+    ckd_free(itor);
+}
+
+static ps_seg_t *
+bptbl_seg_next(ps_seg_t *seg)
+{
+    bptbl_seg_t *itor = (bptbl_seg_t *)seg;
+
+    if (++itor->cur == itor->n_bpidx) {
+        bptbl_seg_free(seg);
+        return NULL;
+    }
+
+    bptbl_bp2itor(seg, itor->bpidx[itor->cur]);
+    return seg;
+}
+
+static ps_segfuncs_t bptbl_segfuncs = {
+    /* seg_next */ bptbl_seg_next,
+    /* seg_free */ bptbl_seg_free
+};
+
+ps_seg_t *
+bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
+{
+    bptbl_seg_t *itor;
+    bp_t *exit, *bpe;
+    int cur;
+
+    /* Look for </s> in the last frame. */
+    if ((exit = bptbl_find_exit(bptbl, finish_wid)) == NULL) {
+        /* If not found then take the best scoring word exit (with warning). */
+        exit = bptbl_find_exit(bptbl, BAD_S3WID);
+        if (exit == NULL) {
+            E_ERROR("No word exits in last frame: recognition failure?\n");
+            return NULL;
+        }
+        E_WARN("No %s found in last frame, using %d instead\n",
+               dict_wordstr(bptbl->d2p->dict, finish_wid),
+               dict_wordstr(bptbl->d2p->dict, exit->wid));
+    }
+    if (out_score)
+        *out_score = exit->score;
+
+    /* Calling this an "iterator" is a bit of a misnomer since we have
+     * to get the entire backtrace in order to produce it.  On the
+     * other hand, all we actually need is the bptbl IDs, and we can
+     * allocate a fixed-size array of them. */
+    itor = ckd_calloc(1, sizeof(*itor));
+    itor->base.vt = &bptbl_segfuncs;
+    itor->base.lwf = 1.0;
+    itor->bptbl = bptbl;
+    itor->n_bpidx = 0;
+    bpe = exit;
+    while (bpe != NULL) {
+        ++itor->n_bpidx;
+        bpe = bptbl_prev(bptbl, bpe);
+    }
+    if (itor->n_bpidx == 0) {
+        ckd_free(itor);
+        return NULL;
+    }
+    itor->bpidx = ckd_calloc(itor->n_bpidx, sizeof(*itor->bpidx));
+    cur = itor->n_bpidx - 1;
+    bpe = exit;
+    while (bpe != NULL) {
+        itor->bpidx[cur] = bptbl_idx(bptbl, bpe);
+        bpe = bptbl_prev(bptbl, bpe);
+        --cur;
+    }
+
+    /* Fill in relevant fields for first element. */
+    bptbl_bp2itor((ps_seg_t *)itor, itor->bpidx[0]);
+
+    return (ps_seg_t *)itor;
+}
+
