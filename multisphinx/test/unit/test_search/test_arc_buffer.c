@@ -6,6 +6,7 @@ int
 main(int argc, char *argv[])
 {
 	fwdflat_arc_buffer_t *arcs;
+	fwdflat_arc_t *a;
 	ps_decoder_t *ps;
 	cmd_ln_t *config;
 	bptbl_t *bptbl;
@@ -89,6 +90,21 @@ main(int argc, char *argv[])
 	E_INFO("Added %d arcs\n", i);
 	fwdflat_arc_buffer_commit(arcs);
 
+	a = fwdflat_arc_buffer_iter(arcs, 2);
+	TEST_ASSERT(a->wid == 69);
+	a = fwdflat_arc_next(arcs, a);
+	TEST_ASSERT(a->wid == 69);
+	a = fwdflat_arc_next(arcs, a);
+	TEST_ASSERT(a == fwdflat_arc_buffer_iter(arcs, 3));
+
+	for (a = fwdflat_arc_buffer_iter(arcs, 6);
+	     a != fwdflat_arc_buffer_iter(arcs, 8);
+	     a = fwdflat_arc_next(arcs, a)) {
+		TEST_ASSERT(a->wid == 42 || a->wid == 420);
+		TEST_ASSERT(a->sf >= 6 && a->sf < 8);
+	}
+
+	fwdflat_arc_buffer_dump(arcs);
 	fwdflat_arc_buffer_free(arcs);
 	bptbl_free(bptbl);
 	ps_free(ps);

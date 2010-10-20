@@ -127,6 +127,11 @@ fwdflat_arc_buffer_t *fwdflat_arc_buffer_retain(fwdflat_arc_buffer_t *fab);
 int fwdflat_arc_buffer_free(fwdflat_arc_buffer_t *fab);
 
 /**
+ * Dump contents of arc buffer for debugging.
+ */
+void fwdflat_arc_buffer_dump(fwdflat_arc_buffer_t *fab);
+
+/**
  * Extend the arc buffer up to the given frame index.
  *
  * @param next_sf Index of last start frame to be added to the buffer,
