@@ -117,13 +117,13 @@ typedef struct bptbl_s {
     int32 dest_s_idx;        /**< bscorestack index corresponding to
                               * first_invert_bp (which is invalid by
                               * definition) */
-    bpidx_t *permute;      /**< Current permutation of entries (indexed
-                            * by ent - first_invert_bp). */
-    int32 n_permute_alloc;
 
-    /* All these are indexed by frame - active_fr */
+    garray_t *permute;      /**< Current permutation of entries (indexed
+                            * by ent - first_invert_bp). */
+    garray_t *ef_idx;    /**< First BPTable entry exiting in each frame */
+
+    /* This is indexed by frame - active_fr */
     int32 n_frame_alloc; /**< Number of frames allocated for frame-based arrays. */
-    bpidx_t *ef_idx;       /**< First BPTable entry exiting in each frame */
     bitvec_t *valid_fr;  /**< Set of accessible frames (used in gc) */
 } bptbl_t;
 
