@@ -127,7 +127,8 @@ fwdflat_search_update_widmap(fwdflat_search_t *ffs)
 
 ps_search_t *
 fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
-                    dict_t *dict, dict2pid_t *d2p)
+                    dict_t *dict, dict2pid_t *d2p,
+                    bptbl_t *input_bptbl)
 {
     fwdflat_search_t *ffs;
     const char *path;
@@ -152,12 +153,19 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     ffs->word_active = bitvec_alloc(dict_size(dict));
     ffs->word_idx = ckd_calloc(dict_size(dict),
                                sizeof(*ffs->word_idx));
+    E_INFO("Allocated %d KiB for word HMMs\n",
+           (int)dict_size(dict) * sizeof(*ffs->word_chan) / 1024);
 
     ffs->bptbl = bptbl_init(d2p, cmd_ln_int32_r(config, "-latsize"), 256);
+    if (input_bptbl)
+        ffs->input_bptbl = bptbl_retain(input_bptbl);
 
     /* Allocate active word list array */
     ffs->active_word_list = ckd_calloc_2d(2, dict_size(dict),
                                           sizeof(**ffs->active_word_list));
+    E_INFO("Allocated %d KiB for active word list\n",
+           (dict_size(dict) * sizeof(**ffs->active_word_list)
+            + dict_size(dict) * sizeof(*ffs->active_word_list)) / 1024);
 
     /* Load language model(s) */
     if ((path = cmd_ln_str_r(config, "-lmctl"))) {
@@ -716,8 +724,6 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
         for (w = 0; w < ps_search_n_words(ffs); w++) {
             int32 n_used;
 
-            if (!dict_real_word(ps_search_dict(ffs), w))
-                continue;
             if (!ngram_model_set_known_wid(ffs->lmset,
                                            dict_basewid(ps_search_dict(ffs),w)))
                 continue;

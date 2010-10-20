@@ -1,7 +1,8 @@
 check_PROGRAMS = \
 	test_bptbl \
 	test_fwdtree \
-	test_fwdflat
+	test_fwdflat \
+	test_fwdtree_fwdflat
 
 TESTS = $(check_PROGRAMS)
 

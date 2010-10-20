@@ -36,11 +36,11 @@
  */
 
 /**
- * @file ngram_search_fwdflat.h Flat lexicon based Viterbi search.
+ * @file fwdflat_search.h Flat lexicon based Viterbi search.
  */
 
-#ifndef __NGRAM_SEARCH_FWDFLAT_H__
-#define __NGRAM_SEARCH_FWDFLAT_H__
+#ifndef __FWDFLAT_SEARCH_H__
+#define __FWDFLAT_SEARCH_H__
 
 /* SphinxBase headers. */
 
@@ -89,18 +89,12 @@ typedef struct first_node_s {
 /**
  * Various statistics for profiling.
  */
-typedef struct ngram_search_stats_s {
-    int32 n_phone_eval;
-    int32 n_root_chan_eval;
-    int32 n_nonroot_chan_eval;
-    int32 n_last_chan_eval;
-    int32 n_word_lastchan_eval;
-    int32 n_lastphn_cand_utt;
+typedef struct fwdflat_stats_s {
     int32 n_fwdflat_chan;
     int32 n_fwdflat_words;
     int32 n_fwdflat_word_transition;
     int32 n_senone_active_utt;
-} ngram_search_stats_t;
+} fwdflat_stats_t;
 
 /**
  * Word loop-based forward search.
@@ -123,6 +117,13 @@ typedef struct fwdflat_search_s {
                             cleared before each frame */
 
     /**
+     * Input backpointer table (determines word list).
+     */
+    bptbl_t *input_bptbl;
+    int16 min_ef_width;   /**< Minimum number of active endpoints. */
+    int16 max_sf_win;     /**< Lookahead window for active words */
+
+    /**
      * First HMMs for multiple-phone words.
      */
     first_node_t **word_chan;
@@ -141,7 +142,7 @@ typedef struct fwdflat_search_s {
     int32 best_score; /**< Best Viterbi path score. */
     int32 renormalized; /**< renormalized? (FIXME: allow multiple renorms) */
 
-    ngram_search_stats_t st; /**< Various statistics for profiling. */
+    fwdflat_stats_t st; /**< Various statistics for profiling. */
 
     /* A children's treasury of beam widths. */
     int32 fwdflatbeam;
@@ -149,8 +150,6 @@ typedef struct fwdflat_search_s {
     int32 fillpen;
     int32 silpen;
     int32 pip;
-    int32 min_ef_width;
-    int32 max_sf_win;
 
     /** Are we done? */
     int done;
@@ -160,7 +159,7 @@ typedef struct fwdflat_search_s {
  * Initialize fwdflat search.
  */
 ps_search_t *fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
-                                 dict_t *dict, dict2pid_t *d2p);
+                                 dict_t *dict, dict2pid_t *d2p,
+                                 bptbl_t *input_bptbl);
 
-
-#endif /* __NGRAM_SEARCH_FWDFLAT_H__ */
+#endif /* __FWDFLAT_SEARCH_H__ */

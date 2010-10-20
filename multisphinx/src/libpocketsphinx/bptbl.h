@@ -80,6 +80,7 @@ typedef struct bp_s {
  * Back pointer table
  */
 typedef struct bptbl_s {
+    int refcount;        /**< Reference count. */
     dict2pid_t *d2p;     /**< Tied state mapping. */
 
     bp_t *retired;       /**< Retired backpointer entries. */
@@ -139,9 +140,14 @@ typedef struct bptbl_seg_s {
 bptbl_t *bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc);
 
 /**
+ * Retain a pointer to a bptbl.
+ */
+bptbl_t *bptbl_retain(bptbl_t *bpt);
+
+/**
  * Release a bptbl.
  */
-void bptbl_free(bptbl_t *bpt);
+int bptbl_free(bptbl_t *bpt);
 
 /**
  * Dump contents of a bptbl for debugging.

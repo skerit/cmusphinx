@@ -32,7 +32,7 @@ main(int argc, char *argv[])
 	ps = ps_init(config);
 	acmod = ps->acmod;
 	cmd_ln_set_str_r(config, "-lm", TESTDATADIR "/hub4.5000.DMP");
-	fwdflat = fwdflat_search_init(config, acmod, ps->dict, ps->d2p);
+	fwdflat = fwdflat_search_init(config, acmod, ps->dict, ps->d2p, NULL);
 
 	nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
 			      ".mfc", 0, -1, NULL, -1);
@@ -41,7 +41,7 @@ main(int argc, char *argv[])
 				   ".mfc", 0, -1, feat, -1)) < 0)
 		E_FATAL("Failed to read mfc file\n");
 	ps_search_start(fwdflat);
-	for (i = 0; i < nfr; ++i) {
+	for (i = 20; i < 200; ++i) {
 		acmod_process_feat(acmod, feat[i]);
 		while (acmod->n_feat_frame > 0) {
 			ps_search_step(fwdflat, acmod->output_frame);

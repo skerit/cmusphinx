@@ -155,18 +155,15 @@ typedef struct bestbp_rc_s {
 /**
  * Various statistics for profiling.
  */
-typedef struct ngram_search_stats_s {
+typedef struct fwdtree_stats_s {
     int32 n_phone_eval;
     int32 n_root_chan_eval;
     int32 n_nonroot_chan_eval;
     int32 n_last_chan_eval;
     int32 n_word_lastchan_eval;
     int32 n_lastphn_cand_utt;
-    int32 n_fwdflat_chan;
-    int32 n_fwdflat_words;
-    int32 n_fwdflat_word_transition;
     int32 n_senone_active_utt;
-} ngram_search_stats_t;
+} fwdtree_stats_t;
 
 /**
  * Approximate tree-based forward search.
@@ -295,7 +292,7 @@ typedef struct fwdtree_search_s {
     int32 last_phone_best_score; /**< Best Viterbi path score for last phone. */
     int32 renormalized; /**< renormalized? (FIXME: allow multiple renorms) */
 
-    ngram_search_stats_t st; /**< Various statistics for profiling. */
+    fwdtree_stats_t st; /**< Various statistics for profiling. */
 
     /* A children's treasury of beam widths. */
     int32 beam;

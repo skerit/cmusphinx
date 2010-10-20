@@ -72,12 +72,20 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
     bptbl->n_permute_alloc = n_frame_alloc;
 
     bptbl->ent = ckd_calloc(bptbl->n_ent_alloc, sizeof(*bptbl->ent));
+    E_INFO("Allocated %d KiB for active backpointers\n",
+           bptbl->n_ent_alloc * sizeof(*bptbl->ent) / 1024);
     bptbl->permute = ckd_calloc(bptbl->n_permute_alloc, sizeof(*bptbl->permute));
+    E_INFO("Allocated %d KiB for permutation table\n",
+           bptbl->n_permute_alloc * sizeof(*bptbl->permute) / 1024);
 
     bptbl->retired = ckd_calloc(bptbl->n_retired_alloc, sizeof(*bptbl->retired));
+    E_INFO("Allocated %d KiB for retired backpointers\n",
+           bptbl->n_retired_alloc * sizeof(*bptbl->retired) / 1024);
     bptbl->bscore_stack_size = bptbl->n_ent_alloc * 20;
     bptbl->bscore_stack = ckd_calloc(bptbl->bscore_stack_size,
                                      sizeof(*bptbl->bscore_stack));
+    E_INFO("Allocated %d KiB for right context scores\n",
+           bptbl->bscore_stack_size * sizeof(*bptbl->bscore_stack) / 1024);
     bptbl->ef_idx = ckd_calloc(bptbl->n_frame_alloc,
                                sizeof(*bptbl->ef_idx));
     bptbl->valid_fr = bitvec_alloc(bptbl->n_frame_alloc);
@@ -85,11 +93,21 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
     return bptbl;
 }
 
-void
+bptbl_t *
+bptbl_retain(bptbl_t *bpt)
+{
+    ++bpt->refcount;
+    return bpt;
+}
+
+int
 bptbl_free(bptbl_t *bptbl)
 {
     if (bptbl == NULL)
-        return;
+        return 0;
+    if (--bptbl->refcount > 0)
+        return bptbl->refcount;
+
     dict2pid_free(bptbl->d2p);
     ckd_free(bptbl->ent);
     ckd_free(bptbl->retired);
@@ -98,6 +116,7 @@ bptbl_free(bptbl_t *bptbl)
     ckd_free(bptbl->ef_idx);
     bitvec_free(bptbl->valid_fr);
     ckd_free(bptbl);
+    return 0;
 }
 
 void
@@ -278,7 +297,9 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
         bptbl->retired = ckd_realloc(bptbl->retired,
                                      bptbl->n_retired_alloc
                                      * sizeof(*bptbl->retired));
-        E_INFO("Resized retired backpointer table to %d entries\n", bptbl->n_retired_alloc);
+        E_INFO("Resized retired backpointer table to %d entries (%d KiB)\n",
+               bptbl->n_retired_alloc,
+               bptbl->n_retired_alloc * sizeof(*bptbl->retired) / 1024);
     }
 
     /* Note we use the "raw" backpointer indices here. */
@@ -467,8 +488,9 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
         bptbl->permute = ckd_realloc(bptbl->permute,
                                      bptbl->n_permute_alloc
                                      * sizeof(*bptbl->permute));
-        E_INFO("Resized permutation table to %d entries (active ef = %d ef_idx[0] = %d)\n",
-               bptbl->n_permute_alloc, bptbl_ef_idx(bptbl, active_fr), bptbl->ef_idx[0]);
+        E_INFO("Resized permutation table to %d entries (%d KiB)\n",
+               bptbl->n_permute_alloc,
+               bptbl->n_permute_alloc * sizeof(*bptbl->permute) / 1024);
     }
     /* Mark, compact, snap pointers. */
     n_retired = bptbl_mark(bptbl, active_fr, frame_idx);
@@ -675,7 +697,8 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
         bptbl->ent = ckd_realloc(bptbl->ent,
                                  bptbl->n_ent_alloc
                                  * sizeof(*bptbl->ent));
-        E_INFO("Resized backpointer table to %d entries\n", bptbl->n_ent_alloc);
+        E_INFO("Resized backpointer table to %d entries (%d KiB)\n",
+               bptbl->n_ent_alloc, bptbl->n_ent_alloc * sizeof(*bptbl->ent) / 1024);
     }
     if (bptbl->bss_head >= bptbl->bscore_stack_size
         - bin_mdef_n_ciphone(bptbl->d2p->mdef)) {
@@ -683,7 +706,9 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
         bptbl->bscore_stack = ckd_realloc(bptbl->bscore_stack,
                                           bptbl->bscore_stack_size
                                           * sizeof(*bptbl->bscore_stack));
-        E_INFO("Resized score stack to %d entries\n", bptbl->bscore_stack_size);
+        E_INFO("Resized score stack to %d entries (%d KiB)\n",
+               bptbl->bscore_stack_size,
+               bptbl->bscore_stack_size * sizeof(*bptbl->bscore_stack) / 1024);
     }
 
     be = bptbl_ent(bptbl, bptbl->n_ent);
