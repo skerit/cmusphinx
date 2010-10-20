@@ -1224,7 +1224,7 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
          * not possible to have any candidates that fail this
          * assertion. */
         assert(fts->cand_sf[i].bp_ef >= fts->bptbl->active_fr);
-        /* For the i-th unique end frame... */
+        /* For the i-th unique start frame... */
         /* BPTBL: Replace this with explicit iteration over bp_ef. */
         bp = bptbl_ef_idx(fts->bptbl, fts->cand_sf[i].bp_ef);
         bpend = bptbl_ef_idx(fts->bptbl, fts->cand_sf[i].bp_ef + 1);
