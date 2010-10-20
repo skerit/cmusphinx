@@ -14,9 +14,9 @@ AC_C_BIGENDIAN
 AC_CHECK_TYPES(long long)
 AC_CHECK_SIZEOF(long long)
 AC_CHECK_FUNCS([popen perror snprintf])
-AC_CHECK_HEADER(errno.h)
 AC_CHECK_FUNCS(dup2)
 AC_CHECK_LIB(m, log)
+AC_CHECK_HEADERS([errno.h pthread.h])
 AC_CHECK_LIB(pthread, pthread_create)
 AM_ICONV
 
@@ -24,12 +24,6 @@ dnl
 dnl Check for pkgconfig
 dnl
 AC_CHECK_PROG(HAVE_PKGCONFIG, pkg-config, yes, no)
-
-dnl
-dnl Check for Doxygen, and build dox if present
-dnl
-AC_CHECK_PROG(HAVE_DOXYGEN, doxygen, yes, no)
-AM_CONDITIONAL(BUILD_DOXYGEN, test "x$HAVE_DOXYGEN" = "xyes")
 
 dnl
 dnl Enable debugging
@@ -106,4 +100,20 @@ src/libpocketsphinx/Makefile
 src/programs/Makefile
 doc/Makefile
 doc/doxyfile
+test/Makefile
+test/unit/Makefile
+test/unit/testfuncs.sh
+test/unit/test_case/Makefile
+test/unit/test_cmdln/Makefile
+test/unit/test_bitvec/Makefile
+test/unit/test_fsg/Makefile
+test/unit/test_thread/Makefile
+test/unit/test_alloc/Makefile
+test/unit/test_ngram/Makefile
+test/unit/test_feat/Makefile
+test/unit/test_hash/Makefile
+test/unit/test_string/Makefile
+test/unit/test_fe/Makefile
+test/unit/test_util/Makefile
+test/unit/test_logmath/Makefile
 ])

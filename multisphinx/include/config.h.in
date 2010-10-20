@@ -9,6 +9,9 @@
 /* Define to 1 if you have the `dup2' function. */
 #undef HAVE_DUP2
 
+/* Define to 1 if you have the <errno.h> header file. */
+#undef HAVE_ERRNO_H
+
 /* Define if you have the iconv() function and it works. */
 #undef HAVE_ICONV
 
@@ -32,6 +35,9 @@
 
 /* Define to 1 if you have the `popen' function. */
 #undef HAVE_POPEN
+
+/* Define to 1 if you have the <pthread.h> header file. */
+#undef HAVE_PTHREAD_H
 
 /* Define to 1 if you have the `snprintf' function. */
 #undef HAVE_SNPRINTF

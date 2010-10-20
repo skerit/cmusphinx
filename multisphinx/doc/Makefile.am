@@ -1,7 +1,3 @@
-if BUILD_DOXYGEN
-all-local: html/index.html
-endif
-
 headers = $(top_srcdir)/include/pocketsphinx.h \
 	$(top_srcdir)/include/fsg_set.h \
 	$(top_srcdir)/include/ps_lattice.h

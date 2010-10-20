@@ -1,6 +1,6 @@
 SUBDIRS = src \
-	  doc \
 	  include \
+	  test \
 	  python
 
 EXTRA_DIST = autogen.sh							\
