@@ -1,3 +1,8 @@
 * Reduce elastic window size by splitting silences - DONE
-* Sort entries before window_sf and track start frames
-* Change fwdflat code to use start frame tracking
+* Sort entries before window_sf and track start frames - DONE
+* Split bptbl into retired and active components
+* Retire all backpointers at end of utterance
+  - Change backtrace code to use this
+* Give fwdflat its own bptbl
+* Update it to use retired portion of fwdtree bptbl with start frame
+* Move lattice generation code to bptbl and update

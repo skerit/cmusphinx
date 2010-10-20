@@ -128,3 +128,6 @@ If looking up backpointers is not particularly frequent then we could
 add a layer of indirection between them and the actual backpointer
 table, at which point there is no longer any need to compact it - we
 can just use a freelist to allocate new backpointers as needed.
+
+---
+
