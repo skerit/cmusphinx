@@ -690,11 +690,13 @@ eval_word_chan(ngram_search_t *ngs, int frame_idx)
         if (hmm_frame(&rhmm->hmm) < frame_idx)
             continue;
 
-#if __CHAN_DUMP__
-            E_INFOCONT("1ph word chan %d: %s\n", w,
-                       dict_wordstr(ps_search_dict(ngs), w));
-#endif
+#if 1
+        E_INFOCONT("1ph word chan %d: %s\n", w,
+                   dict_wordstr(ps_search_dict(ngs), w));
+        score = hmm_dump_vit_eval(&(rhmm)->hmm, stderr);
+#else
         score = chan_v_eval(rhmm);
+#endif
         if (score BETTER_THAN bestscore && w != ps_search_finish_wid(ngs))
             bestscore = score;
 
@@ -1045,6 +1047,18 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
     ngs->n_active_word[nf & 0x1] = nawl - ngs->active_word_list[nf & 0x1];
 }
 
+/* Check if a given backpointer has been around for too long. */
+static int
+too_old_too_cold(ngram_search_t *ngs, int bp,int frame_idx)
+{
+    if (frame_idx - bp_sf(ngs->bptbl, bp) > 20) {
+        E_INFO("Pruning too-old HMM (bp %d sf %d frame_idx %d)\n",
+               bp, bp_sf(ngs->bptbl, bp), frame_idx);
+        return TRUE;
+    }
+    return FALSE;
+}
+
 /*
  * Prune currently active word channels for next frame.  Also, perform exit
  * transitions out of such channels and active successors.
@@ -1132,16 +1146,11 @@ prune_word_chan(ngram_search_t *ngs, int frame_idx)
                 ngram_search_save_bp(ngs, frame_idx, w,
                              hmm_out_score(&rhmm->hmm),
                              hmm_out_history(&rhmm->hmm), 0);
-                /* Special exception for silences which have a tendency to
-                 * go on way too long - prune them which forces re-entry. */
+                /* If it's silence, and it's too old, then forcibly re-enter it. */
                 if (rhmm->ciphone == ps_search_acmod(ngs)->mdef->sil
-                    && frame_idx - bp_sf(ngs->bptbl, hmm_out_history(&rhmm->hmm)) > 20) {
-                    E_INFO("Pruning too-old SIL (bp %d sf %d frame_idx %d)\n",
-                           hmm_out_history(&rhmm->hmm),
-                           bp_sf(ngs->bptbl, hmm_out_history(&rhmm->hmm)),
-                           frame_idx);
-                    hmm_frame(&rhmm->hmm) = frame_idx;
-                }
+                    && too_old_too_cold(ngs, hmm_out_history(&rhmm->hmm),
+                                        frame_idx))
+                    hmm_clear_scores(&rhmm->hmm);
             }
         }
     }
@@ -1330,7 +1339,7 @@ word_transition(ngram_search_t *ngs, int frame_idx)
      * Hypothesize successors to words finished in this frame.
      * Main dictionary, multi-phone words transition to HMM-trees roots.
      */
-    for (i = ngs->n_root_chan, rhmm = ngs->root_chan; i > 0; --i, rhmm++) {
+    for (i = 0, rhmm = ngs->root_chan; i < ngs->n_root_chan; ++i, ++rhmm) {
         bestbp_rc_ptr = &(ngs->bestbp_rc[rhmm->ciphone]);
 
         newscore = bestbp_rc_ptr->score + ngs->nwpen + ngs->pip
@@ -1417,8 +1426,15 @@ word_transition(ngram_search_t *ngs, int frame_idx)
     w = ps_search_silence_wid(ngs);
     rhmm = (root_chan_t *) ngs->word_chan[w];
     bestbp_rc_ptr = &(ngs->bestbp_rc[ps_search_acmod(ngs)->mdef->sil]);
-    newscore = bestbp_rc_ptr->score + ngs->silpen + ngs->pip
-        + phone_loop_search_score(pls, rhmm->ciphone);
+    /* Omit silence penalty for transitions between silence and
+     * silence (brought on by too_old_too_cold() */
+    if (bestbp_rc_ptr->lc == ps_search_acmod(ngs)->mdef->sil) {
+        newscore = bestbp_rc_ptr->score + ngs->pip;
+    }
+    else {
+        newscore = bestbp_rc_ptr->score + ngs->silpen + ngs->pip
+            + phone_loop_search_score(pls, rhmm->ciphone);
+    }
     if (newscore BETTER_THAN thresh) {
         if ((hmm_frame(&rhmm->hmm) < frame_idx)
             || (newscore BETTER_THAN hmm_in_score(&rhmm->hmm))) {
