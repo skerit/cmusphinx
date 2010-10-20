@@ -72,6 +72,10 @@ main(int argc, char *argv[])
 	ps_search_finish(fwdtree);
 	hyp = ps_search_hyp(fwdtree, &score);
 	printf("fwdtree: %s (%d)\n", hyp, score);
+#if 0 /* FIXME: Doesn't work yet.  Splice results together. */
+	hyp = ps_search_hyp(fwdflat, &score);
+	printf("fwdflat: %s (%d)\n", hyp, score);
+#endif
 
 	while (fffr < input_nfr) {
 		fffr += acmod_process_feat(acmod2, feat[fffr]);

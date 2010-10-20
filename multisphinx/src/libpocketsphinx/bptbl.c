@@ -575,7 +575,8 @@ bptbl_finalize(bptbl_t *bptbl)
      * about that).  Do the same thing for bptbl_active_frame. */
     garray_reset_to(bptbl->ent, bptbl_end_idx(bptbl));
     garray_reset_to(bptbl->ef_idx, bptbl->n_frame);
-    E_INFO("Retired %d bps: now %d retired, %d active, first_active_sf %d\n", n_retired,
+    E_INFO("Retired %d bps: now %d retired, %d active, first_active_sf %d\n",
+           n_retired,
            bptbl_retired_idx(bptbl),
            bptbl_end_idx(bptbl) - bptbl_active_idx(bptbl),
            bptbl->oldest_bp == NO_BP
@@ -596,7 +597,28 @@ bptbl_finalize(bptbl_t *bptbl)
 int
 bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
 {
-    return 0;
+    bpidx_t base_idx;
+    bp_t *ent;
+
+    if (first_idx > bptbl_retired_idx(bptbl)) {
+        E_INFO("%d outside retired, releasing up to %d\n",
+               first_idx, bptbl_retired_idx(bptbl));
+        first_idx = bptbl_retired_idx(bptbl);
+    }
+
+    base_idx = garray_base(bptbl->retired);
+    E_INFO("Releasing bptrs from %d to %d\n",
+           base_idx, first_idx);
+    if (first_idx < base_idx)
+        return 0;
+
+    ent = bptbl_ent(bptbl, first_idx);
+    garray_shift_from(bptbl->rc, ent->s_idx);
+    garray_set_base(bptbl->rc, ent->s_idx);
+    garray_shift_from(bptbl->retired, first_idx);
+    garray_set_base(bptbl->retired, first_idx);
+
+    return first_idx - base_idx;
 }
 
 bp_t *

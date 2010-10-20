@@ -105,12 +105,6 @@ typedef struct bptbl_s {
      * However, no active backpointer has a starting frame before
      */
     int32 oldest_bp;
-    /**
-     * Index of first bptbl entry to be reordered by compaction.  Also
-     * marks the end of the region of retired bptbl entries.  FIXME:
-     * This is really the wrong name for it.
-     */
-    bpidx_t first_invert_bp;
     int32 dest_s_idx;        /**< bscorestack index corresponding to
                               * first_invert_bp (which is invalid by
                               * definition) */

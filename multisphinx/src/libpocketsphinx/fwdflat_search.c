@@ -970,17 +970,19 @@ fwdflat_search_step(ps_search_t *base)
         else 
             next_sf = bptbl_ent(ffs->input_bptbl,
                                 ffs->input_bptbl->oldest_bp)->frame + 1;
-
         /* Extend the arc buffer the appropriate number of frames. */
         if (fwdflat_arc_buffer_extend(ffs->input_arcs, next_sf) > 0) {
+            E_INFO("oldest_bp %d next_idx %d\n",
+                   ffs->input_bptbl->oldest_bp, ffs->next_idx);
             /* Add the next chunk of bps to the arc buffer. */
             ffs->next_idx = fwdflat_arc_buffer_add_bps
                 (ffs->input_arcs, ffs->input_bptbl,
-                 ffs->next_idx,
-                 ffs->input_bptbl->first_invert_bp);
+                 ffs->next_idx, bptbl_retired_idx(ffs->input_bptbl));
             fwdflat_arc_buffer_commit(ffs->input_arcs);
             /* Release bps we won't need anymore. */
-            bptbl_release(ffs->input_bptbl, ffs->next_idx);
+            E_INFO("oldest_bp %d next_idx %d\n",
+                   ffs->input_bptbl->oldest_bp, ffs->next_idx);
+            bptbl_release(ffs->input_bptbl, ffs->input_bptbl->oldest_bp);
         }
 
         /* Now pull things from the arc buffer - everything above this
@@ -1180,7 +1182,7 @@ fwdflat_arc_buffer_add_bps(fwdflat_arc_buffer_t *fab,
            fab->active_sf, fab->next_sf,
            start, end);
     if (next_idx == -1)
-        next_idx = start;
+        next_idx = end;
     return next_idx;
 }
 
