@@ -468,12 +468,12 @@ ngram_fwdtree_start(ngram_search_t *ngs)
     memset(&ngs->st, 0, sizeof(ngs->st));
 
     /* Reset backpointer table. */
-    bptbl_reset(ngs->bptbl);
-    ngs->oldest_bp = -1;
+    ngs->bpidx = 0;
+    ngs->bss_head = 0;
 
     /* Reset word lattice. */
     for (i = 0; i < n_words; ++i)
-        ngs->bptbl->word_idx[i] = NO_BP;
+        ngs->word_lat_idx[i] = NO_BP;
 
     /* Reset active HMM and word lists. */
     ngs->n_active_chan[0] = ngs->n_active_chan[1] = 0;
@@ -486,6 +486,7 @@ ngram_fwdtree_start(ngram_search_t *ngs)
     /* Reset other stuff. */
     for (i = 0; i < n_words; i++)
         ngs->last_ltrans[i].sf = -1;
+    ngs->n_frame = 0;
 
     /* Clear the hypothesis string. */
     ckd_free(base->hyp_str);
@@ -505,22 +506,6 @@ ngram_fwdtree_start(ngram_search_t *ngs)
     hmm_enter(&rhmm->hmm, 0, NO_BP, 0);
 }
 
-static int32
-update_oldest_bp(ngram_search_t *ngs, hmm_t *hmm)
-{
-    int j;
-
-    for (j = 0; j < hmm->n_emit_state; ++j)
-        if (hmm_score(hmm, j) BETTER_THAN WORST_SCORE)
-            if (hmm_history(hmm, j) < ngs->oldest_bp)
-                ngs->oldest_bp = hmm_history(hmm, j);
-    if (hmm_out_score(hmm) BETTER_THAN WORST_SCORE)
-        if (hmm_out_history(hmm) < ngs->oldest_bp)
-            ngs->oldest_bp = hmm_out_history(hmm);
-
-    return ngs->oldest_bp;
-}
-
 /*
  * Mark the active senones for all senones belonging to channels that are active in the
  * current frame.
@@ -533,14 +518,11 @@ compute_sen_active(ngram_search_t *ngs, int frame_idx)
     int32 i, w, *awl;
 
     acmod_clear_active(ps_search_acmod(ngs));
-    ngs->oldest_bp = ngs->bptbl->n_ent;
 
     /* Flag active senones for root channels */
     for (i = ngs->n_root_chan, rhmm = ngs->root_chan; i > 0; --i, rhmm++) {
-        if (hmm_frame(&rhmm->hmm) == frame_idx) {
+        if (hmm_frame(&rhmm->hmm) == frame_idx)
             acmod_activate_hmm(ps_search_acmod(ngs), &rhmm->hmm);
-            update_oldest_bp(ngs, &rhmm->hmm);
-        }
     }
 
     /* Flag active senones for nonroot channels in HMM tree */
@@ -548,27 +530,22 @@ compute_sen_active(ngram_search_t *ngs, int frame_idx)
     acl = ngs->active_chan_list[frame_idx & 0x1];
     for (hmm = *(acl++); i > 0; --i, hmm = *(acl++)) {
         acmod_activate_hmm(ps_search_acmod(ngs), &hmm->hmm);
-        update_oldest_bp(ngs, &hmm->hmm);
     }
 
     /* Flag active senones for individual word channels */
-    /* These are the only ones that can actually generate new backpointers. */
     i = ngs->n_active_word[frame_idx & 0x1];
     awl = ngs->active_word_list[frame_idx & 0x1];
     for (w = *(awl++); i > 0; --i, w = *(awl++)) {
         for (hmm = ngs->word_chan[w]; hmm; hmm = hmm->next) {
             acmod_activate_hmm(ps_search_acmod(ngs), &hmm->hmm);
-            update_oldest_bp(ngs, &hmm->hmm);
         }
     }
     for (i = 0; i < ngs->n_1ph_words; i++) {
         w = ngs->single_phone_wid[i];
         rhmm = (root_chan_t *) ngs->word_chan[w];
 
-        if (hmm_frame(&rhmm->hmm) == frame_idx) {
+        if (hmm_frame(&rhmm->hmm) == frame_idx)
             acmod_activate_hmm(ps_search_acmod(ngs), &rhmm->hmm);
-            update_oldest_bp(ngs, &rhmm->hmm);
-        }
     }
 }
 
@@ -673,6 +650,7 @@ eval_word_chan(ngram_search_t *ngs, int frame_idx)
 
             assert(hmm_frame(&hmm->hmm) == frame_idx);
             score = chan_v_eval(hmm);
+            /*printf("eval word chan %d score %d\n", w, score); */
 
             if (score BETTER_THAN bestscore)
                 bestscore = score;
@@ -691,13 +669,8 @@ eval_word_chan(ngram_search_t *ngs, int frame_idx)
         if (hmm_frame(&rhmm->hmm) < frame_idx)
             continue;
 
-#if 0
-        E_INFOCONT("1ph word chan %d: %s\n", w,
-                   dict_wordstr(ps_search_dict(ngs), w));
-        score = hmm_dump_vit_eval(&(rhmm)->hmm, stderr);
-#else
         score = chan_v_eval(rhmm);
-#endif
+        /* printf("eval 1ph word chan %d score %d\n", w, score); */
         if (score BETTER_THAN bestscore && w != ps_search_finish_wid(ngs))
             bestscore = score;
 
@@ -898,13 +871,13 @@ prune_nonroot_chan(ngram_search_t *ngs, int frame_idx)
 static void
 last_phone_transition(ngram_search_t *ngs, int frame_idx)
 {
-    int32 i, j, k, nf, bp, w;
+    int32 i, j, k, nf, bp, bplast, w;
     lastphn_cand_t *candp;
     int32 *nawl;
     int32 thresh;
     int32 bestscore, dscr;
     chan_t *hmm;
-    bp_t *bpe;
+    bptbl_t *bpe;
     int32 n_cand_sf = 0;
 
     nf = frame_idx + 1;
@@ -921,7 +894,7 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
         if (candp->bp == -1)
             continue;
         /* Backpointer entry for it. */
-        bpe = bptbl_ent(ngs->bptbl, candp->bp);
+        bpe = &(ngs->bp_table[candp->bp]);
 
         /* Subtract starting score for candidate, leave it with only word score */
         start_score = ngram_search_exit_score
@@ -980,16 +953,11 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
 
     /* Compute best LM score and bp for new cands entered in the sorted lists above */
     for (i = 0; i < n_cand_sf; i++) {
-        int32 bpend;
-        /* This is the last frame that contains end-sorted
-         * backpointers.  Luckily by the definition of window_sf it's
-         * not possible to have any candidates that fail this
-         * assertion. */
-        assert(ngs->cand_sf[i].bp_ef >= ngs->bptbl->active_fr);
         /* For the i-th unique end frame... */
-        bp = bptbl_ef_idx(ngs->bptbl, ngs->cand_sf[i].bp_ef);
-        bpend = bptbl_ef_idx(ngs->bptbl, ngs->cand_sf[i].bp_ef + 1);
-        for (bpe = bptbl_ent(ngs->bptbl, bp); bp < bpend; bp++, bpe++) {
+        bp = ngs->bp_table_idx[ngs->cand_sf[i].bp_ef];
+        bplast = ngs->bp_table_idx[ngs->cand_sf[i].bp_ef + 1] - 1;
+
+        for (bpe = &(ngs->bp_table[bp]); bp <= bplast; bp++, bpe++) {
             if (!bpe->valid)
                 continue;
             /* For each candidate at the start frame find bp->cand transition-score */
@@ -1003,7 +971,7 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
                     dscr += ngram_tg_score(ngs->lmset,
                                            dict_basewid(ps_search_dict(ngs), candp->wid),
                                            bpe->real_wid,
-                                           bpe->prev_real_wid, &n_used);
+                                           bpe->prev_real_wid, &n_used)>>SENSCR_SHIFT;
 
                 if (dscr BETTER_THAN ngs->last_ltrans[candp->wid].dscr) {
                     ngs->last_ltrans[candp->wid].dscr = dscr;
@@ -1051,19 +1019,6 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
         }
     }
     ngs->n_active_word[nf & 0x1] = nawl - ngs->active_word_list[nf & 0x1];
-}
-
-/* Check if a given backpointer has been around for too long. */
-static int
-too_old_too_cold(ngram_search_t *ngs, int bp, int frame_idx)
-{
-    if (ngs->max_silence >= 0
-        && frame_idx - bp_sf(ngs->bptbl, bp) > ngs->max_silence) {
-        E_DEBUG(4,("Pruning too-old HMM (bp %d sf %d frame_idx %d)\n",
-                   bp, bp_sf(ngs->bptbl, bp), frame_idx));
-        return TRUE;
-    }
-    return FALSE;
 }
 
 /*
@@ -1153,11 +1108,6 @@ prune_word_chan(ngram_search_t *ngs, int frame_idx)
                 ngram_search_save_bp(ngs, frame_idx, w,
                              hmm_out_score(&rhmm->hmm),
                              hmm_out_history(&rhmm->hmm), 0);
-                /* If it's silence, and it's too old, then forcibly re-enter it. */
-                if (rhmm->ciphone == ps_search_acmod(ngs)->mdef->sil
-                    && too_old_too_cold(ngs, hmm_out_history(&rhmm->hmm),
-                                        frame_idx))
-                    hmm_clear_scores(&rhmm->hmm);
             }
         }
     }
@@ -1226,7 +1176,7 @@ bptable_maxwpf(ngram_search_t *ngs, int frame_idx)
 {
     int32 bp, n;
     int32 bestscr, worstscr;
-    bp_t *bpe, *bestbpe, *worstbpe;
+    bptbl_t *bpe, *bestbpe, *worstbpe;
 
     /* Don't prune if no pruing. */
     if (ngs->maxwpf == -1 || ngs->maxwpf == ps_search_n_words(ngs))
@@ -1236,9 +1186,8 @@ bptable_maxwpf(ngram_search_t *ngs, int frame_idx)
     bestscr = (int32) 0x80000000;
     bestbpe = NULL;
     n = 0;
-    for (bp = bptbl_ef_idx(ngs->bptbl, frame_idx);
-         bp < bptbl_ef_idx(ngs->bptbl, frame_idx + 1); bp++) {
-        bpe = bptbl_ent(ngs->bptbl, bp);
+    for (bp = ngs->bp_table_idx[frame_idx]; bp < ngs->bpidx; bp++) {
+        bpe = &(ngs->bp_table[bp]);
         if (dict_filler_word(ps_search_dict(ngs), bpe->wid)) {
             if (bpe->score BETTER_THAN bestscr) {
                 bestscr = bpe->score;
@@ -1255,14 +1204,14 @@ bptable_maxwpf(ngram_search_t *ngs, int frame_idx)
     }
 
     /* Allow up to maxwpf best entries to survive; mark the remaining with valid = 0 */
-    n = bptbl_ef_count(ngs->bptbl, frame_idx) - n; /* No. of entries after limiting fillers */
+    n = (ngs->bpidx
+         - ngs->bp_table_idx[frame_idx]) - n;  /* No. of entries after limiting fillers */
     for (; n > ngs->maxwpf; --n) {
         /* Find worst BPTable entry */
         worstscr = (int32) 0x7fffffff;
         worstbpe = NULL;
-        for (bp = bptbl_ef_idx(ngs->bptbl, frame_idx);
-             bp < bptbl_ef_idx(ngs->bptbl, frame_idx + 1); bp++) {
-            bpe = bptbl_ent(ngs->bptbl, bp);
+        for (bp = ngs->bp_table_idx[frame_idx]; (bp < ngs->bpidx); bp++) {
+            bpe = &(ngs->bp_table[bp]);
             if (bpe->valid && (bpe->score WORSE_THAN worstscr)) {
                 worstscr = bpe->score;
                 worstbpe = bpe;
@@ -1282,7 +1231,7 @@ word_transition(ngram_search_t *ngs, int frame_idx)
     int32 rc;
     int32 *rcss;                /* right context score stack */
     int32 thresh, newscore;
-    bp_t *bpe;
+    bptbl_t *bpe;
     root_chan_t *rhmm;
     struct bestbp_rc_s *bestbp_rc_ptr;
     phone_loop_search_t *pls;
@@ -1300,12 +1249,10 @@ word_transition(ngram_search_t *ngs, int frame_idx)
     pls = (phone_loop_search_t *)ps_search_lookahead(ngs);
     /* Ugh, this is complicated.  Scan all word exits for this frame
      * (they have already been created by prune_word_chan()). */
-    for (bp = bptbl_ef_idx(ngs->bptbl, frame_idx);
-         bp < bptbl_ef_idx(ngs->bptbl, frame_idx + 1); bp++) {
-        bpe = bptbl_ent(ngs->bptbl, bp);
-        ngs->bptbl->word_idx[bpe->wid] = NO_BP;
+    for (bp = ngs->bp_table_idx[frame_idx]; bp < ngs->bpidx; bp++) {
+        bpe = &(ngs->bp_table[bp]);
+        ngs->word_lat_idx[bpe->wid] = NO_BP;
 
-        /* No transitions from the finish word for obvious reasons. */
         if (bpe->wid == ps_search_finish_wid(ngs))
             continue;
         k++;
@@ -1314,7 +1261,7 @@ word_transition(ngram_search_t *ngs, int frame_idx)
         /* Array of HMM scores corresponding to all the possible right
          * context expansions of the final phone.  It's likely that a
          * lot of these are going to be missing, actually. */
-        rcss = &(ngs->bptbl->bscore_stack[bpe->s_idx]);
+        rcss = &(ngs->bscore_stack[bpe->s_idx]);
         if (bpe->last2_phone == -1) {
             /* No right context expansion. */
             for (rc = 0; rc < bin_mdef_n_ciphone(ps_search_acmod(ngs)->mdef); ++rc) {
@@ -1348,7 +1295,7 @@ word_transition(ngram_search_t *ngs, int frame_idx)
      * Hypothesize successors to words finished in this frame.
      * Main dictionary, multi-phone words transition to HMM-trees roots.
      */
-    for (i = 0, rhmm = ngs->root_chan; i < ngs->n_root_chan; ++i, ++rhmm) {
+    for (i = ngs->n_root_chan, rhmm = ngs->root_chan; i > 0; --i, rhmm++) {
         bestbp_rc_ptr = &(ngs->bestbp_rc[rhmm->ciphone]);
 
         newscore = bestbp_rc_ptr->score + ngs->nwpen + ngs->pip
@@ -1368,19 +1315,16 @@ word_transition(ngram_search_t *ngs, int frame_idx)
     }
 
     /*
-     * Single phone words; no right context for these.  Cannot use
-     * bestbp_rc as LM scores have to be included.  First find best
-     * transition to these words, including language model score, and
-     * store it in last_ltrans (which is otherwise not used here).
+     * Single phone words; no right context for these.  Cannot use bestbp_rc as
+     * LM scores have to be included.  First find best transition to these words.
      */
     for (i = 0; i < ngs->n_1ph_LMwords; i++) {
         w = ngs->single_phone_wid[i];
         ngs->last_ltrans[w].dscr = (int32) 0x80000000;
     }
-    for (bp = bptbl_ef_idx(ngs->bptbl, frame_idx);
-         bp < bptbl_ef_idx(ngs->bptbl, frame_idx + 1); bp++) {
-        bpe = bptbl_ent(ngs->bptbl, bp);
-        if (bpe == NULL || !bpe->valid)
+    for (bp = ngs->bp_table_idx[frame_idx]; bp < ngs->bpidx; bp++) {
+        bpe = &(ngs->bp_table[bp]);
+        if (!bpe->valid)
             continue;
 
         for (i = 0; i < ngs->n_1ph_LMwords; i++) {
@@ -1394,11 +1338,10 @@ word_transition(ngram_search_t *ngs, int frame_idx)
                 newscore += ngram_tg_score(ngs->lmset,
                                            dict_basewid(dict, w),
                                            bpe->real_wid,
-                                           bpe->prev_real_wid, &n_used);
+                                           bpe->prev_real_wid, &n_used)>>SENSCR_SHIFT;
 
             /* FIXME: Not sure how WORST_SCORE could be better, but it
-             * apparently happens (uh, maybe because WORST_SCORE >
-             * (int32)0x80000000?). */
+             * apparently happens. */
             if (newscore BETTER_THAN ngs->last_ltrans[w].dscr) {
                 ngs->last_ltrans[w].dscr = newscore;
                 ngs->last_ltrans[w].bp = bp;
@@ -1417,7 +1360,7 @@ word_transition(ngram_search_t *ngs, int frame_idx)
         newscore = ngs->last_ltrans[w].dscr + ngs->pip
             + phone_loop_search_score(pls, rhmm->ciphone);
         if (newscore BETTER_THAN thresh) {
-            bpe = bptbl_ent(ngs->bptbl, ngs->last_ltrans[w].bp);
+            bpe = ngs->bp_table + ngs->last_ltrans[w].bp;
             if ((hmm_frame(&rhmm->hmm) < frame_idx)
                 || (newscore BETTER_THAN hmm_in_score(&rhmm->hmm))) {
                 hmm_enter(&rhmm->hmm,
@@ -1436,15 +1379,8 @@ word_transition(ngram_search_t *ngs, int frame_idx)
     w = ps_search_silence_wid(ngs);
     rhmm = (root_chan_t *) ngs->word_chan[w];
     bestbp_rc_ptr = &(ngs->bestbp_rc[ps_search_acmod(ngs)->mdef->sil]);
-    /* Omit silence penalty for transitions between silence and
-     * silence (brought on by too_old_too_cold() */
-    if (bestbp_rc_ptr->lc == ps_search_acmod(ngs)->mdef->sil) {
-        newscore = bestbp_rc_ptr->score + ngs->pip;
-    }
-    else {
-        newscore = bestbp_rc_ptr->score + ngs->silpen + ngs->pip
-            + phone_loop_search_score(pls, rhmm->ciphone);
-    }
+    newscore = bestbp_rc_ptr->score + ngs->silpen + ngs->pip
+        + phone_loop_search_score(pls, rhmm->ciphone);
     if (newscore BETTER_THAN thresh) {
         if ((hmm_frame(&rhmm->hmm) < frame_idx)
             || (newscore BETTER_THAN hmm_in_score(&rhmm->hmm))) {
@@ -1512,7 +1448,7 @@ ngram_fwdtree_search(ngram_search_t *ngs, int frame_idx)
     ngs->st.n_senone_active_utt += ps_search_acmod(ngs)->n_senone_active;
 
     /* Mark backpointer table for current frame. */
-    bptbl_push_frame(ngs->bptbl, ngs->oldest_bp, frame_idx);
+    ngram_search_mark_bptable(ngs, frame_idx);
 
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
@@ -1536,6 +1472,7 @@ ngram_fwdtree_search(ngram_search_t *ngs, int frame_idx)
     /* Deactivate pruned HMMs. */
     deactivate_channels(ngs, frame_idx);
 
+    ++ngs->n_frame;
     /* Return the number of frames processed. */
     return 1;
 }
@@ -1550,7 +1487,7 @@ ngram_fwdtree_finish(ngram_search_t *ngs)
     /* This is the number of frames processed. */
     cf = ps_search_acmod(ngs)->output_frame;
     /* Add a mark in the backpointer table for one past the final frame. */
-    bptbl_push_frame(ngs->bptbl, ngs->oldest_bp, cf);
+    ngram_search_mark_bptable(ngs, cf);
 
     /* Deactivate channels lined up for the next frame */
     /* First, root channels of HMM tree */
@@ -1589,7 +1526,7 @@ ngram_fwdtree_finish(ngram_search_t *ngs)
     /* Print out some statistics. */
     if (cf > 0) {
         E_INFO("%8d words recognized (%d/fr)\n",
-               ngs->bptbl->n_ent, (ngs->bptbl->n_ent + (cf >> 1)) / (cf + 1));
+               ngs->bpidx, (ngs->bpidx + (cf >> 1)) / (cf + 1));
         E_INFO("%8d senones evaluated (%d/fr)\n", ngs->st.n_senone_active_utt,
                (ngs->st.n_senone_active_utt + (cf >> 1)) / (cf + 1));
         E_INFO("%8d channels searched (%d/fr), %d 1st, %d last\n",

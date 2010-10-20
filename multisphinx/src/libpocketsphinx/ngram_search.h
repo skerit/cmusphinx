@@ -51,7 +51,6 @@
 
 /* Local headers. */
 #include "pocketsphinx_internal.h"
-#include "bptbl.h"
 #include "hmm.h"
 
 /**
@@ -104,6 +103,32 @@ typedef struct root_chan_s {
                                    unique right context */
 } root_chan_t;
 
+/**
+ * Back pointer table (forward pass lattice; actually a tree)
+ */
+typedef struct bptbl_s {
+    int16    frame;		/**< start or end frame */
+    uint8    valid;		/**< For absolute pruning */
+    uint8    refcnt;            /**< Reference count (number of successors) */
+    int32    wid;		/**< Word index */
+    int32    bp;		/**< Back Pointer */
+    int32    score;		/**< Score (best among all right contexts) */
+    int32    s_idx;		/**< Start of BScoreStack for various right contexts*/
+    int32    real_wid;		/**< wid of this or latest predecessor real word */
+    int32    prev_real_wid;	/**< real word predecessor of real_wid */
+    int16    last_phone;        /**< last phone of this word */
+    int16    last2_phone;       /**< next-to-last phone of this word */
+} bptbl_t;
+
+/**
+ * Segmentation "iterator" for backpointer table results.
+ */
+typedef struct bptbl_seg_s {
+    ps_seg_t base;  /**< Base structure. */
+    int32 *bpidx;   /**< Sequence of backpointer IDs. */
+    int16 n_bpidx;  /**< Number of backpointer IDs. */
+    int16 cur;      /**< Current position in bpidx. */
+} bptbl_seg_t;
 
 /*
  * Candidates words for entering their last phones.  Cleared and rebuilt in each
@@ -146,6 +171,8 @@ typedef struct bestbp_rc_s {
     int32 path;                 /* BP table index corresponding to this entry */
     int32 lc;                   /* right most ci-phone of above BP entry word */
 } bestbp_rc_t;
+
+#define NO_BP		-1
 
 /**
  * Various statistics for profiling.
@@ -270,9 +297,18 @@ struct ngram_search_s {
     cand_sf_t *cand_sf;
     bestbp_rc_t *bestbp_rc;
 
-    bptbl_t *bptbl;
-    int32 oldest_bp; /**< Oldest bptable entry active in decoding graph. */
+    bptbl_t *bp_table;       /* Forward pass lattice */
+    int32 bpidx;             /* First free BPTable entry */
+    int32 bp_table_size;
+    int32 *bscore_stack;     /* Score stack for all possible right contexts */
+    int32 bss_head;          /* First free BScoreStack entry */
+    int32 bscore_stack_size;
 
+    int32 n_frame_alloc; /**< Number of frames allocated in bp_table_idx and friends. */
+    int32 n_frame;       /**< Number of frames actually present. */
+    int32 *bp_table_idx; /* First BPTable entry for each frame */
+    int32 *word_lat_idx; /* BPTable index for any word in current frame;
+                            cleared before each frame */
 
     uint16 *zeroPermTab; /**< Null right context table, just an array of
                             n_ciphone zeros (!!) */
@@ -280,6 +316,7 @@ struct ngram_search_s {
     /*
      * Flat lexicon (2nd pass) search stuff.
      */
+    ps_latnode_t **frm_wordlist;   /**< List of active words in each frame. */
     int32 *fwdflat_wordlist;    /**< List of active word IDs for utterance. */
     bitvec_t *expand_word_flag;
     int32 *expand_word_list;
@@ -316,8 +353,6 @@ struct ngram_search_s {
     int32 pip;
     int32 maxwpf;
     int32 maxhmmpf;
-    /* Maximum number of frames a silence word is allowed to persist. */
-    int max_silence;
 };
 typedef struct ngram_search_s ngram_search_t;
 
@@ -333,6 +368,13 @@ ps_search_t *ngram_search_init(cmd_ln_t *config,
  * Finalize the N-Gram search module.
  */
 void ngram_search_free(ps_search_t *ngs);
+
+/**
+ * Record the current frame's index in the backpointer table.
+ *
+ * @return the current backpointer index.
+ */
+int ngram_search_mark_bptable(ngram_search_t *ngs, int frame_idx);
 
 /**
  * Enter a word in the backpointer table.
@@ -377,7 +419,6 @@ ps_lattice_t *ngram_search_lattice(ps_search_t *search);
 /**
  * Get the exit score for a backpointer entry with a given right context.
  */
-int32 ngram_search_exit_score(ngram_search_t *ngs, bp_t *pbe, int rcphone);
-
+int32 ngram_search_exit_score(ngram_search_t *ngs, bptbl_t *pbe, int rcphone);
 
 #endif /* __NGRAM_SEARCH_H__ */

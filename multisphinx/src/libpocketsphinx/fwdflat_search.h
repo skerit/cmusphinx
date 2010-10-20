@@ -45,7 +45,8 @@
 /* SphinxBase headers. */
 
 /* Local headers. */
-#include "ngram_search.h"
+#include "bptbl.h"
+#include "hmm.h"
 
 /**
  * Phone HMM data type.
@@ -84,6 +85,22 @@ typedef struct first_node_s {
     int16    ci2phone;		/**< second ciphone of this node; one first HMM for each
                                    unique right context */
 } first_node_t;
+
+/**
+ * Various statistics for profiling.
+ */
+typedef struct ngram_search_stats_s {
+    int32 n_phone_eval;
+    int32 n_root_chan_eval;
+    int32 n_nonroot_chan_eval;
+    int32 n_last_chan_eval;
+    int32 n_word_lastchan_eval;
+    int32 n_lastphn_cand_utt;
+    int32 n_fwdflat_chan;
+    int32 n_fwdflat_words;
+    int32 n_fwdflat_word_transition;
+    int32 n_senone_active_utt;
+} ngram_search_stats_t;
 
 /**
  * Word loop-based forward search.

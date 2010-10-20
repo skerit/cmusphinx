@@ -49,7 +49,7 @@
 #include <sphinxbase/err.h>
 
 /* Local headers. */
-#include "ngram_search.h"
+#include "bptbl.h"
 
 static int bptbl_rcsize(bptbl_t *bptbl, bp_t *be);
 
