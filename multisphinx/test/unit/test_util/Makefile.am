@@ -4,6 +4,7 @@ check_PROGRAMS = \
 	test_bit_encode \
 	test_build_directory \
 	test_heap \
+	test_garray \
 	test_filename
 
 TESTS = $(check_PROGRAMS)

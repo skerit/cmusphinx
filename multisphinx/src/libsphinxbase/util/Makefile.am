@@ -10,6 +10,7 @@ libsphinxutil_la_SOURCES = \
         cmd_ln.c \
         err.c \
         filename.c \
+	garray.c \
 	genrand.c \
         glist.c \
         hash_table.c \

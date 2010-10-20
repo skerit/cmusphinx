@@ -18,6 +18,7 @@ sphinxbaseinclude_HEADERS =			\
 	filename.h				\
 	fixpoint.h				\
 	fsg_model.h				\
+	garray.h				\
 	genrand.h				\
 	glist.h					\
 	hash_table.h				\
