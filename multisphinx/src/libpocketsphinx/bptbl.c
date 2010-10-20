@@ -304,8 +304,6 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
                bptbl->n_retired_alloc * sizeof(*bptbl->retired) / 1024);
     }
 
-    E_INFO("eidx %d calc = %d\n", eidx, eidx - bptbl->ef_idx[0]);
-
     /* Note we use the "raw" backpointer indices here. */
     for (src = 0; src < eidx - bptbl->ef_idx[0]; ++src) {
         if (bptbl->ent[src].valid) {
@@ -489,10 +487,6 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     }
     E_DEBUG(2,("GC from frame %d to %d\n", prev_active_fr, active_fr));
     /* Expand the permutation table if necessary. */
-    E_INFO("bptbl_ef_idx(%d) = %d calc = %d\n",
-           active_fr, bptbl_ef_idx(bptbl, active_fr),
-           bptbl_ef_idx(bptbl, active_fr) - bptbl->ef_idx[0]);
-
     if ((bptbl_ef_idx(bptbl, active_fr) - bptbl->ef_idx[0])
         > bptbl->n_permute_alloc) {
         while (bptbl_ef_idx(bptbl, active_fr) - bptbl->ef_idx[0]
@@ -557,9 +551,7 @@ bptbl_finalize(bptbl_t *bptbl)
     /* If there is nothing to GC then finish up. */
     if (bptbl->n_ent == bptbl->ef_idx[0])
         return 0;
-    E_INFO("bptbl->n_ent = %d calc = %d\n",
-           bptbl->n_ent,
-           bptbl->n_ent - bptbl->ef_idx[0]);
+    /* Expand the permutation table if necessary (probably). */
     if (bptbl->n_ent - bptbl->ef_idx[0]
         > bptbl->n_permute_alloc) {
         while (bptbl->n_ent - bptbl->ef_idx[0]
