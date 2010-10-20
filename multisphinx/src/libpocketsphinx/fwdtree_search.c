@@ -91,7 +91,7 @@ static void fwdtree_search_update_widmap(fwdtree_search_t *fts);
 static void fwdtree_search_calc_beams(fwdtree_search_t *fts);
 static void init_search_tree(fwdtree_search_t *fts);
 static void init_nonroot_chan(fwdtree_search_t *fts, nonroot_node_t * hmm,
-                              int32 ph, int32 ci);
+                              int32 ph, int32 ci, int32 tmatid);
 static void create_search_tree(fwdtree_search_t *fts);
 static void reinit_search_subtree(fwdtree_search_t *fts, nonroot_node_t * hmm);
 static void reinit_search_tree(fwdtree_search_t *fts);
@@ -230,11 +230,16 @@ fwdtree_search_calc_beams(fwdtree_search_t *fts)
     acmod = ps_search_acmod(fts);
 
     /* Log beam widths. */
-    fts->beam = logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-beam"));
-    fts->wbeam = logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-wbeam"));
-    fts->pbeam = logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-pbeam"));
-    fts->lpbeam = logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-lpbeam"));
-    fts->lponlybeam = logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-lponlybeam"));
+    fts->beam = logmath_log(acmod->lmath,
+                            cmd_ln_float64_r(config, "-beam")) >> SENSCR_SHIFT;
+    fts->wbeam = logmath_log(acmod->lmath,
+                             cmd_ln_float64_r(config, "-wbeam")) >> SENSCR_SHIFT;
+    fts->pbeam = logmath_log(acmod->lmath,
+                             cmd_ln_float64_r(config, "-pbeam")) >> SENSCR_SHIFT;
+    fts->lpbeam = logmath_log(acmod->lmath,
+                              cmd_ln_float64_r(config, "-lpbeam")) >> SENSCR_SHIFT;
+    fts->lponlybeam = logmath_log(acmod->lmath, 
+                                  cmd_ln_float64_r(config, "-lponlybeam")) >> SENSCR_SHIFT;
 
     /* Absolute pruning parameters. */
     fts->maxwpf = cmd_ln_int32_r(config, "-maxwpf");
@@ -242,11 +247,16 @@ fwdtree_search_calc_beams(fwdtree_search_t *fts)
     fts->max_silence = cmd_ln_int32_r(config, "-maxsilfr");
 
     /* Various penalties which may or may not be useful. */
-    fts->wip = logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-wip"));
-    fts->nwpen = logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-nwpen"));
-    fts->pip = logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-pip"));
-    fts->silpen = logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-silprob"));
-    fts->fillpen = logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-fillprob"));
+    fts->wip = logmath_log(acmod->lmath,
+                           cmd_ln_float32_r(config, "-wip")) >> SENSCR_SHIFT;
+    fts->nwpen = logmath_log(acmod->lmath,
+                             cmd_ln_float32_r(config, "-nwpen")) >> SENSCR_SHIFT;
+    fts->pip = logmath_log(acmod->lmath,
+                           cmd_ln_float32_r(config, "-pip")) >> SENSCR_SHIFT;
+    fts->silpen = logmath_log(acmod->lmath,
+                              cmd_ln_float32_r(config, "-silprob")) >> SENSCR_SHIFT;
+    fts->fillpen = logmath_log(acmod->lmath,
+                               cmd_ln_float32_r(config, "-fillprob")) >> SENSCR_SHIFT;
 }
 
 /*
@@ -324,7 +334,7 @@ init_search_tree(fwdtree_search_t *fts)
         fts->rhmm_1ph[i].ciphone = dict_first_phone(dict, w);
         hmm_init(fts->hmmctx, &fts->rhmm_1ph[i].hmm, TRUE,
                  bin_mdef_pid2ssid(ps_search_acmod(fts)->mdef, fts->rhmm_1ph[i].ciphone),
-                 fts->rhmm_1ph[i].ciphone);
+                 bin_mdef_pid2tmatid(ps_search_acmod(fts)->mdef, fts->rhmm_1ph[i].ciphone));
         fts->rhmm_1ph[i].next = NULL;
 
         fts->word_chan[w] = (nonroot_node_t *) &(fts->rhmm_1ph[i]);
@@ -341,13 +351,14 @@ init_search_tree(fwdtree_search_t *fts)
  * One-time initialization of internal channels in HMM tree.
  */
 static void
-init_nonroot_chan(fwdtree_search_t *fts, nonroot_node_t * hmm, int32 ph, int32 ci)
+init_nonroot_chan(fwdtree_search_t *fts, nonroot_node_t * hmm, int32 ph, 
+                  int32 ci, int32 tmatid)
 {
     hmm->next = NULL;
     hmm->alt = NULL;
     hmm->info.penult_phn_wid = -1;
     hmm->ciphone = ci;
-    hmm_init(fts->hmmctx, &hmm->hmm, FALSE, ph, ci);
+    hmm_init(fts->hmmctx, &hmm->hmm, FALSE, ph, tmatid);
 }
 
 /*
@@ -365,7 +376,7 @@ create_search_tree(fwdtree_search_t *fts)
 {
     nonroot_node_t *hmm;
     root_node_t *rhmm;
-    int32 w, i, j, p, ph;
+    int32 w, i, j, p, ph, tmatid;
     int32 n_words;
     dict_t *dict = ps_search_dict(fts);
     dict2pid_t *d2p = ps_search_dict2pid(fts);
@@ -410,7 +421,7 @@ create_search_tree(fwdtree_search_t *fts)
         }
         if (i == fts->n_root_chan) {
             rhmm = &(fts->root_chan[fts->n_root_chan]);
-            rhmm->hmm.tmatid = ciphone;
+            rhmm->hmm.tmatid = bin_mdef_pid2tmatid(ps_search_acmod(fts)->mdef, ciphone);
             /* Begin with CI phone?  Not sure this makes a difference... */
             hmm_mpx_ssid(&rhmm->hmm, 0) =
                 bin_mdef_pid2ssid(ps_search_acmod(fts)->mdef, ciphone);
@@ -435,10 +446,11 @@ create_search_tree(fwdtree_search_t *fts)
         else {
             /* Add remaining phones, except the last, to tree */
             ph = dict2pid_internal(d2p, w, 1);
+            tmatid = bin_mdef_pid2tmatid(ps_search_acmod(fts)->mdef, dict_pron(dict, w, 1));
             hmm = rhmm->next;
             if (hmm == NULL) {
                 rhmm->next = hmm = listelem_malloc(fts->chan_alloc);
-                init_nonroot_chan(fts, hmm, ph, dict_pron(dict, w, 1));
+                init_nonroot_chan(fts, hmm, ph, dict_pron(dict, w, 1), tmatid);
                 fts->n_nonroot_chan++;
             }
             else {
@@ -448,7 +460,7 @@ create_search_tree(fwdtree_search_t *fts)
                     prev_hmm = hmm;
                 if (!hmm) {     /* thanks, rkm! */
                     prev_hmm->alt = hmm = listelem_malloc(fts->chan_alloc);
-                    init_nonroot_chan(fts, hmm, ph, dict_pron(dict, w, 1));
+                    init_nonroot_chan(fts, hmm, ph, dict_pron(dict, w, 1), tmatid);
                     fts->n_nonroot_chan++;
                 }
             }
@@ -457,10 +469,11 @@ create_search_tree(fwdtree_search_t *fts)
                                             dict_second_phone(dict, w)), ph));
             for (p = 2; p < dict_pronlen(dict, w) - 1; p++) {
                 ph = dict2pid_internal(d2p, w, p);
+                tmatid = bin_mdef_pid2tmatid(ps_search_acmod(fts)->mdef, dict_pron(dict, w, p));
                 if (!hmm->next) {
                     hmm->next = listelem_malloc(fts->chan_alloc);
                     hmm = hmm->next;
-                    init_nonroot_chan(fts, hmm, ph, dict_pron(dict, w, p));
+                    init_nonroot_chan(fts, hmm, ph, dict_pron(dict, w, p), tmatid);
                     fts->n_nonroot_chan++;
                 }
                 else {
@@ -471,7 +484,7 @@ create_search_tree(fwdtree_search_t *fts)
                         prev_hmm = hmm;
                     if (!hmm) { /* thanks, rkm! */
                         prev_hmm->alt = hmm = listelem_malloc(fts->chan_alloc);
-                        init_nonroot_chan(fts, hmm, ph, dict_pron(dict, w, p));
+                        init_nonroot_chan(fts, hmm, ph, dict_pron(dict, w, p), tmatid);
                         fts->n_nonroot_chan++;
                     }
                 }
@@ -1229,7 +1242,7 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
                     dscr += ngram_tg_score(fts->lmset,
                                            dict_basewid(ps_search_dict(fts), candp->wid),
                                            bpe->real_wid,
-                                           bpe->prev_real_wid, &n_used);
+                                           bpe->prev_real_wid, &n_used)>>SENSCR_SHIFT;
 
                 if (dscr BETTER_THAN fts->last_ltrans[candp->wid].dscr) {
                     fts->last_ltrans[candp->wid].dscr = dscr;
@@ -1629,7 +1642,7 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
                 newscore += ngram_tg_score(fts->lmset,
                                            dict_basewid(dict, w),
                                            bpe->real_wid,
-                                           bpe->prev_real_wid, &n_used);
+                                           bpe->prev_real_wid, &n_used)>>SENSCR_SHIFT;
 
             /* FIXME: Not sure how WORST_SCORE could be better, but it
              * apparently happens (uh, maybe because WORST_SCORE >
@@ -1854,14 +1867,16 @@ fwdtree_search_alloc_all_rc(fwdtree_search_t *fts, int32 w)
 {
     nonroot_node_t *hmm, *thmm;
     xwdssid_t *rssid;
-    int32 i;
+    int32 i, tmatid, ciphone;
 
     /* DICT2PID */
     /* Get pointer to array of triphones for final diphone. */
     assert(!dict_is_single_phone(ps_search_dict(fts), w));
+    ciphone = dict_last_phone(ps_search_dict(fts),w);
     rssid = dict2pid_rssid(ps_search_dict2pid(fts),
-                           dict_last_phone(ps_search_dict(fts),w),
+                           ciphone,
                            dict_second_last_phone(ps_search_dict(fts),w));
+    tmatid = bin_mdef_pid2tmatid(ps_search_acmod(fts)->mdef, ciphone);
     hmm = fts->word_chan[w];
     if ((hmm == NULL) || (hmm_nonmpx_ssid(&hmm->hmm) != rssid->ssid[0])) {
         hmm = listelem_malloc(fts->chan_alloc);
@@ -1869,8 +1884,8 @@ fwdtree_search_alloc_all_rc(fwdtree_search_t *fts, int32 w)
         fts->word_chan[w] = hmm;
 
         hmm->info.rc_id = 0;
-        hmm->ciphone = dict_last_phone(ps_search_dict(fts),w);
-        hmm_init(fts->hmmctx, &hmm->hmm, FALSE, rssid->ssid[0], hmm->ciphone);
+        hmm->ciphone = ciphone;
+        hmm_init(fts->hmmctx, &hmm->hmm, FALSE, rssid->ssid[0], tmatid);
         E_DEBUG(3,("allocated rc_id 0 ssid %d ciphone %d lc %d word %s\n",
                    rssid->ssid[0], hmm->ciphone,
                    dict_second_last_phone(ps_search_dict(fts),w),
@@ -1884,8 +1899,8 @@ fwdtree_search_alloc_all_rc(fwdtree_search_t *fts, int32 w)
             hmm = thmm;
 
             hmm->info.rc_id = i;
-            hmm->ciphone = dict_last_phone(ps_search_dict(fts),w);
-            hmm_init(fts->hmmctx, &hmm->hmm, FALSE, rssid->ssid[i], hmm->ciphone);
+            hmm->ciphone = ciphone;
+            hmm_init(fts->hmmctx, &hmm->hmm, FALSE, rssid->ssid[i], tmatid);
             E_DEBUG(3,("allocated rc_id %d ssid %d ciphone %d lc %d word %s\n",
                        i, rssid->ssid[i], hmm->ciphone,
                        dict_second_last_phone(ps_search_dict(fts),w),
@@ -2118,7 +2133,7 @@ fwdtree_search_bp2itor(ps_seg_t *seg, int bp)
             seg->lscr = ngram_tg_score(fts->lmset,
                                        be->real_wid,
                                        pbe->real_wid,
-                                       pbe->prev_real_wid, &seg->lback);
+                                       pbe->prev_real_wid, &seg->lback)>>SENSCR_SHIFT;
             seg->lscr = (int32)(seg->lscr * seg->lwf);
         }
         seg->ascr = be->score - start_score - seg->lscr;

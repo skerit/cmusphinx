@@ -93,13 +93,18 @@ fwdflat_search_calc_beams(fwdflat_search_t *ffs)
     acmod = ps_search_acmod(ffs);
 
     /* Log beam widths. */
-    ffs->fwdflatbeam = logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-fwdflatbeam"));
-    ffs->fwdflatwbeam = logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-fwdflatwbeam"));
+    ffs->fwdflatbeam = logmath_log(acmod->lmath,
+                                   cmd_ln_float64_r(config, "-fwdflatbeam")) >> SENSCR_SHIFT;
+    ffs->fwdflatwbeam = logmath_log(acmod->lmath,
+                                    cmd_ln_float64_r(config, "-fwdflatwbeam")) >> SENSCR_SHIFT;
 
     /* Other things. */
-    ffs->pip = logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-pip"));
-    ffs->silpen = logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-silprob"));
-    ffs->fillpen = logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-fillprob"));
+    ffs->pip = logmath_log(acmod->lmath,
+                           cmd_ln_float32_r(config, "-pip")) >> SENSCR_SHIFT;
+    ffs->silpen = logmath_log(acmod->lmath,
+                              cmd_ln_float32_r(config, "-silprob")) >> SENSCR_SHIFT;
+    ffs->fillpen = logmath_log(acmod->lmath,
+                               cmd_ln_float32_r(config, "-fillprob")) >> SENSCR_SHIFT;
     ffs->min_ef_width = cmd_ln_int32_r(ps_search_config(ffs), "-fwdflatefwid");
     ffs->max_sf_win = cmd_ln_int32_r(ps_search_config(ffs), "-fwdflatsfwin");
 }
@@ -294,19 +299,21 @@ fwdflat_search_alloc_all_rc(fwdflat_search_t *ffs, int32 w)
 {
     internal_node_t *fhmm, *hmm;
     xwdssid_t *rssid;
-    int32 i;
+    int32 i, tmatid, ciphone;
 
     /* DICT2PID */
     /* Get pointer to array of triphones for final diphone. */
     assert(!dict_is_single_phone(ps_search_dict(ffs), w));
+    ciphone = dict_last_phone(ps_search_dict(ffs),w);
     rssid = dict2pid_rssid(ps_search_dict2pid(ffs),
-                           dict_last_phone(ps_search_dict(ffs),w),
+                           ciphone,
                            dict_second_last_phone(ps_search_dict(ffs),w));
+    tmatid = bin_mdef_pid2tmatid(ps_search_acmod(ffs)->mdef, ciphone);
     fhmm = hmm = listelem_malloc(ffs->chan_alloc);
     hmm->rc_id = 0;
     hmm->next = NULL;
     hmm->ciphone = dict_last_phone(ps_search_dict(ffs),w);
-    hmm_init(ffs->hmmctx, &hmm->hmm, FALSE, rssid->ssid[0], hmm->ciphone);
+    hmm_init(ffs->hmmctx, &hmm->hmm, FALSE, rssid->ssid[0], tmatid);
     E_DEBUG(3,("allocated rc_id 0 ssid %d ciphone %d lc %d word %s\n",
                rssid->ssid[0], hmm->ciphone,
                dict_second_last_phone(ps_search_dict(ffs),w),
@@ -320,8 +327,8 @@ fwdflat_search_alloc_all_rc(fwdflat_search_t *ffs, int32 w)
             hmm = thmm;
 
             hmm->rc_id = i;
-            hmm->ciphone = dict_last_phone(ps_search_dict(ffs),w);
-            hmm_init(ffs->hmmctx, &hmm->hmm, FALSE, rssid->ssid[i], hmm->ciphone);
+            hmm->ciphone = ciphone;
+            hmm_init(ffs->hmmctx, &hmm->hmm, FALSE, rssid->ssid[i], tmatid);
             E_DEBUG(3,("allocated rc_id %d ssid %d ciphone %d lc %d word %s\n",
                        i, rssid->ssid[i], hmm->ciphone,
                        dict_second_last_phone(ps_search_dict(ffs),w),
@@ -367,7 +374,7 @@ build_fwdflat_chan(fwdflat_search_t *ffs)
         rhmm->next = NULL;
         hmm_init(ffs->hmmctx, &rhmm->hmm, TRUE,
                  bin_mdef_pid2ssid(ps_search_acmod(ffs)->mdef, rhmm->ciphone),
-                 rhmm->ciphone);
+                 bin_mdef_pid2tmatid(ps_search_acmod(ffs)->mdef, rhmm->ciphone));
 
         /* HMMs for word-internal phones */
         prevhmm = NULL;
@@ -377,7 +384,9 @@ build_fwdflat_chan(fwdflat_search_t *ffs)
             hmm->rc_id = -1;
             hmm->next = NULL;
             hmm_init(ffs->hmmctx, &hmm->hmm, FALSE,
-                     dict2pid_internal(d2p,wid,p), hmm->ciphone);
+                     dict2pid_internal(d2p,wid,p),
+                     bin_mdef_pid2tmatid(ps_search_acmod(ffs)->mdef,
+                                         hmm->ciphone));
 
             if (prevhmm)
                 prevhmm->next = hmm;
@@ -723,8 +732,8 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
             newscore += ngram_tg_score(ffs->lmset,
                                        dict_basewid(dict, w),
                                        ent->real_wid,
-                                       ent->prev_real_wid, &n_used);
-            newscore += pip;
+                                       ent->prev_real_wid, &n_used)>>SENSCR_SHIFT;
+            newscore += pip >> SENSCR_SHIFT;
 
             /* Enter the next word */
             if (newscore BETTER_THAN thresh) {
@@ -1085,7 +1094,7 @@ fwdflat_search_bp2itor(ps_seg_t *seg, int bp)
             seg->lscr = ngram_tg_score(ffs->lmset,
                                        be->real_wid,
                                        pbe->real_wid,
-                                       pbe->prev_real_wid, &seg->lback);
+                                       pbe->prev_real_wid, &seg->lback)>>SENSCR_SHIFT;
             seg->lscr = (int32)(seg->lscr * seg->lwf);
         }
         seg->ascr = be->score - start_score - seg->lscr;

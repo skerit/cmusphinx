@@ -164,8 +164,6 @@ ngram_search_init(cmd_ln_t *config,
                                 sizeof(*ngs->word_chan));
     ngs->word_lat_idx = ckd_calloc(dict_size(dict),
                                    sizeof(*ngs->word_lat_idx));
-    ngs->zeroPermTab = ckd_calloc(bin_mdef_n_ciphone(acmod->mdef),
-                                  sizeof(*ngs->zeroPermTab));
     ngs->word_active = bitvec_alloc(dict_size(dict));
     ngs->last_ltrans = ckd_calloc(dict_size(dict),
                                   sizeof(*ngs->last_ltrans));
@@ -311,7 +309,6 @@ ngram_search_free(ps_search_t *search)
 
     ckd_free(ngs->word_chan);
     ckd_free(ngs->word_lat_idx);
-    ckd_free(ngs->zeroPermTab);
     bitvec_free(ngs->word_active);
     ckd_free(ngs->bp_table);
     ckd_free(ngs->bscore_stack);
@@ -341,57 +338,47 @@ ngram_search_mark_bptable(ngram_search_t *ngs, int frame_idx)
     return ngs->bpidx;
 }
 
-/**
- * Find trigram predecessors for a backpointer table entry.
- */
 static void
-cache_bptable_paths(ngram_search_t *ngs, int32 bp)
+set_real_wid(ngram_search_t *ngs, int32 bp)
 {
-    int32 w, prev_bp;
-    bptbl_t *be;
+    int32 prev_bp;
 
     assert(bp != NO_BP);
-
-    be = &(ngs->bp_table[bp]);
-    prev_bp = bp;
-    w = be->wid;
-
-    while (dict_filler_word(ps_search_dict(ngs), w)) {
-        prev_bp = ngs->bp_table[prev_bp].bp;
-        if (prev_bp == NO_BP)
-            return;
-        w = ngs->bp_table[prev_bp].wid;
+    prev_bp = ngs->bp_table[bp].bp;
+    /* Propagate lm state for fillers, update it for words. */
+    if (dict_filler_word(ps_search_dict(ngs), ngs->bp_table[bp].wid)) {
+        if (prev_bp != NO_BP)
+            ngs->bp_table[bp].real_wid = ngs->bp_table[prev_bp].real_wid;
     }
-
-    be->real_wid = dict_basewid(ps_search_dict(ngs), w);
-
-    prev_bp = ngs->bp_table[prev_bp].bp;
-    be->prev_real_wid =
-        (prev_bp != NO_BP) ? ngs->bp_table[prev_bp].real_wid : -1;
+    else {
+        ngs->bp_table[bp].real_wid = dict_basewid(ps_search_dict(ngs),
+                                                  ngs->bp_table[bp].wid);
+    }
 }
 
 void
 ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
                      int32 w, int32 score, int32 path, int32 rc)
 {
-    int32 _bp_;
+    int32 bp;
 
     /* Look for an existing exit for this word in this frame. */
-    _bp_ = ngs->word_lat_idx[w];
-    if (_bp_ != NO_BP) {
+    bp = ngs->word_lat_idx[w];
+    if (bp != NO_BP) {
         /* Keep only the best scoring one (this is a potential source
          * of search errors...) */
-        if (ngs->bp_table[_bp_].score WORSE_THAN score) {
-            if (ngs->bp_table[_bp_].bp != path) {
-                ngs->bp_table[_bp_].bp = path;
-                cache_bptable_paths(ngs, _bp_);
+        if (ngs->bp_table[bp].score WORSE_THAN score) {
+            assert(path != bp);
+            if (ngs->bp_table[bp].bp != path) {
+                ngs->bp_table[bp].bp = path;
+                set_real_wid(ngs, bp);
             }
-            ngs->bp_table[_bp_].score = score;
+            ngs->bp_table[bp].score = score;
         }
         /* But do keep track of scores for all right contexts, since
          * we need them to determine the starting path scores for any
          * successors of this word exit. */
-        ngs->bscore_stack[ngs->bp_table[_bp_].s_idx + rc] = score;
+        ngs->bscore_stack[ngs->bp_table[bp].s_idx + rc] = score;
     }
     else {
         int32 i, rcsize, *bss;
@@ -428,6 +415,7 @@ ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
         be->score = score;
         be->s_idx = ngs->bss_head;
         be->valid = TRUE;
+        assert(path != ngs->bpidx);
 
         /* DICT2PID */
         /* Get diphone ID for final phone and number of ssids corresponding to it. */
@@ -445,7 +433,7 @@ ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
         for (i = rcsize, bss = ngs->bscore_stack + ngs->bss_head; i > 0; --i, bss++)
             *bss = WORST_SCORE;
         ngs->bscore_stack[ngs->bss_head + rc] = score;
-        cache_bptable_paths(ngs, ngs->bpidx);
+        set_real_wid(ngs, ngs->bpidx);
 
         ngs->bpidx++;
         ngs->bss_head += rcsize;
@@ -547,14 +535,16 @@ ngram_search_alloc_all_rc(ngram_search_t *ngs, int32 w)
 {
     chan_t *hmm, *thmm;
     xwdssid_t *rssid;
-    int32 i;
+    int32 i, tmatid, ciphone;
 
     /* DICT2PID */
     /* Get pointer to array of triphones for final diphone. */
     assert(!dict_is_single_phone(ps_search_dict(ngs), w));
+    ciphone = dict_last_phone(ps_search_dict(ngs),w);
     rssid = dict2pid_rssid(ps_search_dict2pid(ngs),
-                           dict_last_phone(ps_search_dict(ngs),w),
+                           ciphone,
                            dict_second_last_phone(ps_search_dict(ngs),w));
+    tmatid = bin_mdef_pid2tmatid(ps_search_acmod(ngs)->mdef, ciphone);
     hmm = ngs->word_chan[w];
     if ((hmm == NULL) || (hmm_nonmpx_ssid(&hmm->hmm) != rssid->ssid[0])) {
         hmm = listelem_malloc(ngs->chan_alloc);
@@ -562,8 +552,8 @@ ngram_search_alloc_all_rc(ngram_search_t *ngs, int32 w)
         ngs->word_chan[w] = hmm;
 
         hmm->info.rc_id = 0;
-        hmm->ciphone = dict_last_phone(ps_search_dict(ngs),w);
-        hmm_init(ngs->hmmctx, &hmm->hmm, FALSE, rssid->ssid[0], hmm->ciphone);
+        hmm->ciphone = ciphone;
+        hmm_init(ngs->hmmctx, &hmm->hmm, FALSE, rssid->ssid[0], tmatid);
         E_DEBUG(3,("allocated rc_id 0 ssid %d ciphone %d lc %d word %s\n",
                    rssid->ssid[0], hmm->ciphone,
                    dict_second_last_phone(ps_search_dict(ngs),w),
@@ -577,8 +567,8 @@ ngram_search_alloc_all_rc(ngram_search_t *ngs, int32 w)
             hmm = thmm;
 
             hmm->info.rc_id = i;
-            hmm->ciphone = dict_last_phone(ps_search_dict(ngs),w);
-            hmm_init(ngs->hmmctx, &hmm->hmm, FALSE, rssid->ssid[i], hmm->ciphone);
+            hmm->ciphone = ciphone;
+            hmm_init(ngs->hmmctx, &hmm->hmm, FALSE, rssid->ssid[i], tmatid);
             E_DEBUG(3,("allocated rc_id %d ssid %d ciphone %d lc %d word %s\n",
                        i, rssid->ssid[i], hmm->ciphone,
                        dict_second_last_phone(ps_search_dict(ngs),w),
@@ -663,7 +653,8 @@ ngram_compute_seg_score(ngram_search_t *ngs, bptbl_t *be, float32 lwf,
         *out_lscr = ngram_tg_score(ngs->lmset,
                                    be->real_wid,
                                    pbe->real_wid,
-                                   pbe->prev_real_wid, &n_used)>>SENSCR_SHIFT;
+                                   prev_real_wid(ngs->bp_table, pbe),
+                                   &n_used)>>SENSCR_SHIFT;
         *out_lscr = *out_lscr * lwf;
     }
     *out_ascr = be->score - start_score - *out_lscr;
@@ -704,7 +695,7 @@ dump_bptable(ngram_search_t *ngs)
     int i;
     E_INFO("Backpointer table (%d entries):\n", ngs->bpidx);
     for (i = 0; i < ngs->bpidx; ++i) {
-        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp\n", /* %-3d history %08x\n", */
+        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
                     i, dict_wordstr(ps_search_dict(ngs), ngs->bp_table[i].wid),
                     ngs->bp_table[i].bp == -1 ? 0 : 
                     ngs->bp_table[ngs->bp_table[i].bp].frame + 1,
@@ -838,7 +829,8 @@ ngram_search_bp2itor(ps_seg_t *seg, int bp)
             seg->lscr = ngram_tg_score(ngs->lmset,
                                        be->real_wid,
                                        pbe->real_wid,
-                                       pbe->prev_real_wid, &seg->lback)>>SENSCR_SHIFT;
+                                       prev_real_wid(ngs->bp_table, pbe),
+                                       &seg->lback)>>SENSCR_SHIFT;
             seg->lscr = (int32)(seg->lscr * seg->lwf);
         }
         seg->ascr = be->score - start_score - seg->lscr;
@@ -1072,9 +1064,8 @@ find_end_node(ngram_search_t *ngs, ps_lattice_t *dag, float32 lwf)
     bestbp = NO_BP;
     for (bp = ngs->bp_table_idx[ef]; bp < ngs->bp_table_idx[ef + 1]; ++bp) {
         int32 n_used, l_scr, wid, prev_wid;
-        
         wid = ngs->bp_table[bp].real_wid;
-        prev_wid = ngs->bp_table[bp].prev_real_wid;
+        prev_wid = prev_real_wid(ngs->bp_table, ngs->bp_table + bp);
         l_scr = ngram_tg_score(ngs->lmset, ps_search_finish_wid(ngs),
                                wid, prev_wid, &n_used) >>SENSCR_SHIFT;
         l_scr = l_scr * lwf;

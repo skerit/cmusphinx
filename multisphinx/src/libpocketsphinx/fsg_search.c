@@ -117,18 +117,23 @@ fsg_search_init(cmd_ln_t *config,
     /* Get search pruning parameters */
     fsgs->beam_factor = 1.0f;
     fsgs->beam = fsgs->beam_orig
-        = (int32) logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-beam"));
+        = (int32) logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-beam"))
+        >> SENSCR_SHIFT;
     fsgs->pbeam = fsgs->pbeam_orig
-        = (int32) logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-pbeam"));
+        = (int32) logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-pbeam"))
+        >> SENSCR_SHIFT;
     fsgs->wbeam = fsgs->wbeam_orig
-        = (int32) logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-wbeam"));
+        = (int32) logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-wbeam"))
+        >> SENSCR_SHIFT;
 
     /* LM related weights/penalties */
     fsgs->lw = cmd_ln_float32_r(config, "-lw");
     fsgs->pip = (int32) (logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-pip"))
-                           * fsgs->lw);
+                           * fsgs->lw)
+        >> SENSCR_SHIFT;
     fsgs->wip = (int32) (logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-wip"))
-                           * fsgs->lw);
+                           * fsgs->lw)
+        >> SENSCR_SHIFT;
 
     /* Best path search (and confidence annotation)? */
     if (cmd_ln_boolean_r(config, "-bestpath"))
@@ -758,7 +763,7 @@ fsg_search_null_prop(fsg_search_t *fsgs)
                 continue;
             newscore =
                 fsg_hist_entry_score(hist_entry) +
-                fsg_link_logs2prob(l);
+                (fsg_link_logs2prob(l) >> SENSCR_SHIFT);
 
             if (newscore >= thresh) {
                 fsg_history_entry_add(fsgs->history, l,
@@ -1061,6 +1066,9 @@ fsg_search_find_exit(fsg_search_t *fsgs, int frame_idx, int final, int32 *out_sc
 
         fl = fsg_hist_entry_fsglink(hist_entry);
         score = fsg_hist_entry_score(hist_entry);
+        
+        if (fl == NULL)
+	    break;
 
         if (score BETTER_THAN bestscore) {
             /* Only enforce the final state constraint if this is a final hypothesis. */
@@ -1667,10 +1675,12 @@ fsg_search_lattice(ps_search_t *search)
 
         silpen = (int32)(logmath_log(fsg->lmath,
                                      cmd_ln_float32_r(ps_search_config(fsgs), "-silprob"))
-                         * fsg->lw);
+                         * fsg->lw)
+            >> SENSCR_SHIFT;
         fillpen = (int32)(logmath_log(fsg->lmath,
                                       cmd_ln_float32_r(ps_search_config(fsgs), "-fillprob"))
-                          * fsg->lw);
+                          * fsg->lw)
+            >> SENSCR_SHIFT;
         ps_lattice_bypass_fillers(dag, silpen, fillpen);
     }
     search->dag = dag;

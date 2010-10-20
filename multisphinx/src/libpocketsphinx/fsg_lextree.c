@@ -349,6 +349,7 @@ psubtree_add_trans(fsg_lextree_t *lextree,
     int32 wid;                  /* FSG (not dictionary!!) word ID */
     int32 dictwid;              /* Dictionary (not FSG!!) word ID */
     int32 ssid;                 /* Senone Sequence ID */
+    int32 tmatid;
     gnode_t *gn;
     fsg_pnode_t *pnode, *pred, *head;
     int32 n_ci, p, lc, rc;
@@ -386,6 +387,7 @@ psubtree_add_trans(fsg_lextree_t *lextree,
             for (i = 0; lclist[i] >= 0; i++) {
                 lc = lclist[i];
                 ssid = dict2pid_lrdiph_rc(lextree->d2p, ci, lc, silcipid);
+                tmatid = bin_mdef_pid2tmatid(lextree->mdef, dict_first_phone(lextree->dict, dictwid));
                 /* Check if this ssid already allocated for some other context */
                 for (gn = lc_pnodelist; gn; gn = gnode_next(gn)) {
                     pnode = (fsg_pnode_t *) gnode_ptr(gn);
@@ -403,7 +405,8 @@ psubtree_add_trans(fsg_lextree_t *lextree,
                     pnode->ctx = lextree->ctx;
                     pnode->next.fsglink = fsglink;
                     pnode->logs2prob =
-                        fsg_link_logs2prob(fsglink) + lextree->wip + lextree->pip;
+                        (fsg_link_logs2prob(fsglink) >> SENSCR_SHIFT)
+                        + lextree->wip + lextree->pip;
                     pnode->ci_ext = dict_first_phone(lextree->dict, dictwid);
                     pnode->ppos = 0;
                     pnode->leaf = TRUE;
@@ -414,7 +417,7 @@ psubtree_add_trans(fsg_lextree_t *lextree,
                     root = pnode;
                     ++n_lc_alloc;
 
-                    hmm_init(lextree->ctx, &pnode->hmm, FALSE, ssid, pnode->ci_ext);
+                    hmm_init(lextree->ctx, &pnode->hmm, FALSE, ssid, tmatid);
 
                     lc_pnodelist =
                         glist_add_ptr(lc_pnodelist, (void *) pnode);
@@ -425,11 +428,13 @@ psubtree_add_trans(fsg_lextree_t *lextree,
         }
         else {                  /* Filler word; no context modelled */
             ssid = bin_mdef_pid2ssid(lextree->mdef, ci); /* probably the same... */
+            tmatid = bin_mdef_pid2tmatid(lextree->mdef, ci);
 
             pnode = (fsg_pnode_t *) ckd_calloc(1, sizeof(fsg_pnode_t));
             pnode->ctx = lextree->ctx;
             pnode->next.fsglink = fsglink;
-            pnode->logs2prob = fsg_link_logs2prob(fsglink) + lextree->wip + lextree->pip;
+            pnode->logs2prob = (fsg_link_logs2prob(fsglink) >> SENSCR_SHIFT)
+                + lextree->wip + lextree->pip;
             pnode->ci_ext = silcipid;   /* Presents SIL as context to neighbors */
             pnode->ppos = 0;
             pnode->leaf = TRUE;
@@ -440,7 +445,7 @@ psubtree_add_trans(fsg_lextree_t *lextree,
             root = pnode;
             ++n_int_alloc;
 
-            hmm_init(lextree->ctx, &pnode->hmm, FALSE, ssid, pnode->ci_ext);
+            hmm_init(lextree->ctx, &pnode->hmm, FALSE, ssid, tmatid);
         }
     }
     else {                      /* Multi-phone word */
@@ -487,6 +492,7 @@ psubtree_add_trans(fsg_lextree_t *lextree,
                 for (i = 0; lclist[i] >= 0; i++) {
                     lc = lclist[i];
                     ssid = dict2pid_ldiph_lc(lextree->d2p, ci, rc, lc);
+                    tmatid = bin_mdef_pid2tmatid(lextree->mdef, dict_first_phone(lextree->dict, dictwid));
                     /* Compression is not done by d2p, so we do it
                      * here.  This might be slow, but it might not
                      * be... we'll see. */
@@ -504,7 +510,7 @@ psubtree_add_trans(fsg_lextree_t *lextree,
                                                        (fsg_pnode_t));
                         pnode->ctx = lextree->ctx;
 	                /* This bit is tricky! For now we'll put the prob in the final link only */
-                        /* pnode->logs2prob = fsg_link_logs2prob(fsglink)
+                        /* pnode->logs2prob = (fsg_link_logs2prob(fsglink) >> SENSCR_SHIFT)
                            + lextree->wip + lextree->pip; */
                         pnode->logs2prob = lextree->wip + lextree->pip;
                         pnode->ci_ext = dict_first_phone(lextree->dict, dictwid);
@@ -516,7 +522,7 @@ psubtree_add_trans(fsg_lextree_t *lextree,
                         root = pnode;
                         ++n_lc_alloc;
 
-                        hmm_init(lextree->ctx, &pnode->hmm, FALSE, ssid, pnode->ci_ext);
+                        hmm_init(lextree->ctx, &pnode->hmm, FALSE, ssid, tmatid);
 
                         lc_pnodelist =
                             glist_add_ptr(lc_pnodelist, (void *) pnode);
@@ -534,6 +540,7 @@ psubtree_add_trans(fsg_lextree_t *lextree,
                 fsg_pnode_t    *pnodeyoungest;
 
                 ssid = dict2pid_internal(lextree->d2p, dictwid, p);
+                tmatid = bin_mdef_pid2tmatid(lextree->mdef, dict_pron (lextree->dict, dictwid, p));
 	        /* First check if we already have this ssid in our tree */
 		pnode = pred->next.succ;
 		pnodeyoungest = pnode; /* The youngest sibling */
@@ -568,7 +575,7 @@ psubtree_add_trans(fsg_lextree_t *lextree,
                 head = pnode;
                 ++n_int_alloc;
 
-                hmm_init(lextree->ctx, &pnode->hmm, FALSE, ssid, pnode->ci_ext);
+                hmm_init(lextree->ctx, &pnode->hmm, FALSE, ssid, tmatid);
 
                 pred = pnode;
             }
@@ -579,6 +586,7 @@ psubtree_add_trans(fsg_lextree_t *lextree,
                        n_ci * sizeof(fsg_pnode_t *));
                 lc = dict_pron(lextree->dict, dictwid, p-1);
                 rssid = dict2pid_rssid(lextree->d2p, ci, lc);
+                tmatid = bin_mdef_pid2tmatid(lextree->mdef, dict_pron (lextree->dict, dictwid, p));
 
                 for (i = 0; rclist[i] >= 0; i++) {
                     rc = rclist[i];
@@ -595,7 +603,8 @@ psubtree_add_trans(fsg_lextree_t *lextree,
                         pnode->ctx = lextree->ctx;
 			/* We are plugging the word prob here. Ugly */
                         /* pnode->logs2prob = lextree->pip; */
-                        pnode->logs2prob = fsg_link_logs2prob(fsglink) + lextree->pip;
+                        pnode->logs2prob = (fsg_link_logs2prob(fsglink) >> SENSCR_SHIFT)
+                            + lextree->pip;
                         pnode->ci_ext = dict_pron(lextree->dict, dictwid, p);
                         pnode->ppos = p;
                         pnode->leaf = TRUE;
@@ -606,7 +615,7 @@ psubtree_add_trans(fsg_lextree_t *lextree,
                         head = pnode;
                         ++n_rc_alloc;
 
-                        hmm_init(lextree->ctx, &pnode->hmm, FALSE, ssid, pnode->ci_ext);
+                        hmm_init(lextree->ctx, &pnode->hmm, FALSE, ssid, tmatid);
 
                         rc_pnodelist =
                             glist_add_ptr(rc_pnodelist, (void *) pnode);
