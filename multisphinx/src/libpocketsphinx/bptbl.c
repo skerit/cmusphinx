@@ -125,19 +125,16 @@ bptbl_reset(bptbl_t *bptbl)
 void
 dump_bptable(bptbl_t *bptbl, int start, int end)
 {
-    int i, j, sf, ef;
+    int i, j;
 
     if (end == -1)
         end = bptbl->n_ent;
     E_INFO("Backpointer table (%d entries from %d to %d):\n",
            bptbl->n_ent, start, end);
     for (j = i = start; i < end; ++i) {
-        int bpidx = i;
         if (bptbl->ent[i].valid == FALSE)
             continue;
         ++j;
-        if (i >= bptbl->ef_idx[0])
-            bpidx += bptbl->active_delta;
         E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
                     i, dict_wordstr(bptbl->d2p->dict, bptbl->ent[i].wid),
                     bp_sf(bptbl, i),
@@ -146,12 +143,11 @@ dump_bptable(bptbl_t *bptbl, int start, int end)
                     bptbl->ent[i].bp);
     }
     E_INFO("%d valid entries\n", j);
-    sf = bptbl_ent(bptbl, start)->frame;
-    ef = bptbl_ent(bptbl, end-1)->frame;
-    if (sf < bptbl->active_fr)
-        sf = bptbl->active_fr;
-    E_INFO("End frame index from %d to %d:\n", sf, ef);
-    for (i = sf; i <= ef; ++i) {
+    if (bptbl_ef_idx(bptbl, start) < bptbl->active_fr)
+        start = bptbl_ef_idx(bptbl, bptbl->active_fr);
+    E_INFO("End frame index from %d to %d:\n",
+           bptbl->ent[start].frame, bptbl->ent[end-1].frame);
+    for (i = bptbl->ent[start].frame; i <= bptbl->ent[end-1].frame; ++i) {
         E_INFO_NOFN("%d: %d\n", i, bptbl_ef_idx(bptbl, i));
         assert(bptbl_ef_idx(bptbl, i) >= bptbl_ef_idx(bptbl, i-1));
     }
@@ -171,8 +167,8 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
     int i, j, n_active_fr, last_gc_fr;
 
     /* Invalidate all backpointer entries between sf and ef. */
-    E_INFO("Garbage collecting from %d to %d (%d to %d):\n",
-           bptbl_ef_idx(bptbl, sf), bptbl_ef_idx(bptbl, ef), sf, ef);
+    E_DEBUG(2,("Garbage collecting from %d to %d (%d to %d):\n",
+               bptbl_ef_idx(bptbl, sf), bptbl_ef_idx(bptbl, ef), sf, ef));
     /* Assert things that ensure these entries are all in the active
      * region (i.e. we can unconditionally translate their indices by
      * active_delta). */
@@ -181,26 +177,25 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
     assert(sf >= bptbl->active_fr);
     for (i = bptbl_ef_idx(bptbl, sf);
          i < bptbl_ef_idx(bptbl, ef); ++i) {
-        bptbl->ent[i - bptbl->active_delta].valid = FALSE;
+        bptbl->ent[i].valid = FALSE;
     }
 
     /* Now re-activate all ones backwards reachable from the search graph. */
-    E_INFO("Finding coaccessible frames from backpointers from %d to %d\n",
-               bptbl_ef_idx(bptbl, ef), bptbl_ef_idx(bptbl, cf));
+    E_DEBUG(2,("Finding coaccessible frames from backpointers from %d to %d\n",
+               bptbl_ef_idx(bptbl, ef), bptbl_ef_idx(bptbl, cf)));
     /* Collect coaccessible frames from these backpointers */
     bitvec_clear_all(bptbl->valid_fr, cf - bptbl->active_fr);
     n_active_fr = 0;
     for (i = bptbl_ef_idx(bptbl, ef);
          i < bptbl_ef_idx(bptbl, cf); ++i) {
-        int32 bp = bptbl->ent[i - bptbl->active_delta].bp;
-        int frame;
-        /* Don't mark anything outside the active region. */
-        if (bp == NO_BP || bp < bptbl->ef_idx[0])
-            continue;
-        frame = bptbl->ent[bp - bptbl->active_delta].frame;
-        if (bitvec_is_clear(bptbl->valid_fr, frame - bptbl->active_fr)) {
-            bitvec_set(bptbl->valid_fr, frame - bptbl->active_fr);
-            ++n_active_fr;
+        int32 bp = bptbl->ent[i].bp;
+        if (bp != NO_BP) {
+            int frame = bptbl->ent[bp].frame;
+            if (frame >= bptbl->active_fr
+                && bitvec_is_clear(bptbl->valid_fr, frame - bptbl->active_fr)) {
+                bitvec_set(bptbl->valid_fr, frame - bptbl->active_fr);
+                ++n_active_fr;
+            }
         }
     }
     /* Track the last frame with outgoing backpointers for gc */
@@ -216,34 +211,33 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
                  * lattice generation algorithm) */
                 for (j = bptbl_ef_idx(bptbl, i);
                      j < bptbl_ef_idx(bptbl, i + 1); ++j) {
-                    int32 bp = bptbl->ent[j - bptbl->active_delta].bp;
-                    int frame;
-                    bptbl->ent[j - bptbl->active_delta].valid = TRUE;
-
-                    if (bp == NO_BP || bp < bptbl->ef_idx[0])
-                        continue;
-                    frame = bptbl->ent[bp - bptbl->active_delta].frame;
-                    if (bitvec_is_clear(bptbl->valid_fr,
-                                        frame - bptbl->active_fr)) {
-                        bitvec_set(bptbl->valid_fr,
-                                   frame - bptbl->active_fr);
-                        ++n_active_fr;
+                    int32 bp = bptbl->ent[j].bp;
+                    bptbl->ent[j].valid = TRUE;
+                    if (bp != NO_BP) {
+                        int frame = bptbl->ent[bp].frame;
+                        if (frame >= bptbl->active_fr
+                            && bitvec_is_clear(bptbl->valid_fr,
+                                               frame - bptbl->active_fr)) {
+                            bitvec_set(bptbl->valid_fr,
+                                       frame - bptbl->active_fr);
+                            ++n_active_fr;
+                        }
+                        if (frame > next_gc_fr)
+                            next_gc_fr = frame;
                     }
-                    if (frame > next_gc_fr)
-                        next_gc_fr = frame;
                 }
             }
         }
-        E_INFOCONT("last_gc_fr %d => %d\n", last_gc_fr, next_gc_fr);
+        E_DEBUG(3,("last_gc_fr %d => %d\n", last_gc_fr, next_gc_fr));
         last_gc_fr = next_gc_fr;
     }
-    E_INFO("Removed");
+    E_DEBUG(2,("Removed"));
     for (i = bptbl_ef_idx(bptbl, sf);
          i < bptbl_ef_idx(bptbl, ef); ++i) {
-        if (bptbl->ent[i - bptbl->active_delta].valid == FALSE)
-            E_INFOCONT(" %d", i);
+        if (bptbl->ent[i].valid == FALSE)
+            E_DEBUGCONT(2,(" %d", i));
     }
-    E_INFOCONT("\n");
+    E_DEBUGCONT(2,("\n"));
 }
 
 /**
@@ -438,16 +432,6 @@ bptbl_update_active_fr(bptbl_t *bptbl, int active_fr)
     if (delta == 0)
         return;
     assert(delta > 0);
-    E_INFO("Moving %d bp_t from %d to %d\n",
-           bptbl->n_ent - bptbl->ef_idx[0],
-           bptbl->ef_idx[0] - bptbl->active_delta,
-           bptbl->first_invert_bp);
-    memmove(bptbl->ent + bptbl->ef_idx[0] - bptbl->active_delta,
-            bptbl->ent + bptbl->first_invert_bp,
-            sizeof(*bptbl->ent) * (bptbl->n_ent - bptbl->ef_idx[0]));
-    E_INFO("Updating active_delta from %d to %d\n",
-           bptbl->active_delta, delta);
-    bptbl->active_delta += delta;
     E_DEBUG(3,("moving %d ef_idx from %d (%d - %d)\n",
                bptbl->n_frame - active_fr,
                delta, active_fr, bptbl->active_fr));
@@ -525,12 +509,10 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
         E_INFO("Retired bps from 0 to %d Empty %d to %d Active %d to %d\n",
                bptbl->first_invert_bp - 1, bptbl->first_invert_bp,
                bptbl->ef_idx[0] - 1, bptbl->ef_idx[0], bptbl->n_ent);
-#if 0
         assert(bptbl->ent[bptbl->first_invert_bp - 1].valid == TRUE);
         assert(bptbl->ent[bptbl->first_invert_bp].valid == FALSE);
         assert(bptbl->ent[bptbl->ef_idx[0] - 1].valid == FALSE);
         assert(bptbl->ent[bptbl->ef_idx[0]].valid == TRUE);
-#endif
     }
     return bptbl->n_ent;
 }

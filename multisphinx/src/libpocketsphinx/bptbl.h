@@ -176,20 +176,12 @@ int32 bptbl_ef_idx(bptbl_t *bptbl, int frame_idx);
 /**
  * Obtain a pointer to the backpointer with a given index.
  */
-#define bptbl_ent(bpt, bp) (((bp) == NO_BP)                             \
-                            ? NULL                                      \
-                            : ((bp) >= (bpt)->ef_idx[0])                \
-                            ? ((bpt)->ent + bp - (bpt)->active_delta)   \
-                            : ((bpt)->ent + bp))
+#define bptbl_ent(bpt, bp) (((bp) == NO_BP) ? NULL : (bpt)->ent + bp)
 
 /**
  * Get the index for a given backpointer.
  */
-#define bptbl_idx(bpt, bpe) (((bpe) == NULL)                            \
-                             ? NO_BP                                    \
-                             : ((bp) >= (bpt)->ef_idx[0])               \
-                             ? ((bpe) + (bpt)->active_delta - (bpt)->ent) \
-                             : ((bpe) - (bpt)->ent))
+#define bptbl_idx(bpt, bpe) (((bpe) == NULL) ? NO_BP : ((bpe) - (bpt)->ent))
 
 /**
  * Get the number of word exits in a given frame.
