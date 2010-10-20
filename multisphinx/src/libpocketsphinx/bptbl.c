@@ -71,20 +71,14 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
     garray_reserve(bptbl->ent, n_alloc / 2);
     bptbl->retired = garray_init(0, sizeof(bp_t));
     garray_reserve(bptbl->retired, n_alloc / 2);
-
     bptbl->permute = garray_init(0, sizeof(bpidx_t));
     garray_reserve(bptbl->permute, n_frame_alloc);
     bptbl->ef_idx = garray_init(0, sizeof(bpidx_t));
     garray_reserve(bptbl->ef_idx, n_frame_alloc);
     bptbl->n_frame_alloc = n_frame_alloc;
     bptbl->valid_fr = bitvec_alloc(bptbl->n_frame_alloc);
-
-    bptbl->bscore_stack_size = n_alloc * 20;
-    bptbl->bscore_stack = ckd_calloc(bptbl->bscore_stack_size,
-                                     sizeof(*bptbl->bscore_stack));
-    E_INFO("Allocated %d KiB for right context scores\n",
-           bptbl->bscore_stack_size * sizeof(*bptbl->bscore_stack) / 1024);
-
+    bptbl->rc = garray_init(0, sizeof(int32));
+    garray_reserve(bptbl->rc, n_alloc * 20); /* 20 = guess at average number of rcs/word */
 
     return bptbl;
 }
@@ -109,7 +103,7 @@ bptbl_free(bptbl_t *bptbl)
     garray_free(bptbl->retired);
     garray_free(bptbl->permute);
     garray_free(bptbl->ef_idx);
-    ckd_free(bptbl->bscore_stack);
+    garray_free(bptbl->rc);
     bitvec_free(bptbl->valid_fr);
     ckd_free(bptbl);
     return 0;
@@ -123,11 +117,11 @@ bptbl_reset(bptbl_t *bptbl)
     garray_reset(bptbl->retired);
     garray_reset(bptbl->permute);
     garray_reset(bptbl->ef_idx);
+    garray_reset(bptbl->rc);
     bptbl->first_invert_bp = 0;
     bptbl->dest_s_idx = 0;
     bptbl->n_frame = 0;
-    bptbl->bss_head = 0;
-    bptbl->active_fr = 0;
+    bptbl->active_fr = 0; /* FIXME: No longer actually needed. */
     bptbl->oldest_bp = NO_BP;
 }
 
@@ -302,9 +296,7 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
                     bp_t *src1_ent = garray_ptr(bptbl->ent, bp_t, src + 1);
                     assert(bptbl->dest_s_idx + rcsize <= src1_ent->s_idx);
                 }
-                memmove(bptbl->bscore_stack + bptbl->dest_s_idx,
-                        bptbl->bscore_stack + src_ent->s_idx,
-                        rcsize * sizeof(*bptbl->bscore_stack));
+                garray_move(bptbl->rc, bptbl->dest_s_idx, src_ent->s_idx, rcsize);
             }
             *dest_ent = *src_ent;
             dest_ent->s_idx = bptbl->dest_s_idx;
@@ -335,14 +327,12 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
                 bp_t *src1_ent = garray_ptr(bptbl->ent, bp_t, src + 1);
                 assert(bptbl->dest_s_idx + rcsize <= src1_ent->s_idx);
             }
-            memmove(bptbl->bscore_stack + active_dest_s_idx,
-                    bptbl->bscore_stack + src_ent->s_idx,
-                    rcsize * sizeof(*bptbl->bscore_stack));
+            garray_move(bptbl->rc, active_dest_s_idx, src_ent->s_idx, rcsize);
             src_ent->s_idx = active_dest_s_idx;
             active_dest_s_idx += rcsize;
             ++src;
         }
-        bptbl->bss_head = active_dest_s_idx;
+        garray_pop_from(bptbl->rc, active_dest_s_idx);
     }
     return dest;
 }
@@ -467,7 +457,7 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     }
     E_DEBUG(2,("GC from frame %d to %d\n", prev_active_fr, active_fr));
     /* Expand the permutation table if necessary. */
-    garray_expand(bptbl->permute, bptbl_ef_idx(bptbl, active_fr) - bptbl_active_idx(bptbl));
+    garray_expand_to(bptbl->permute, bptbl_ef_idx(bptbl, active_fr));
     garray_set_base(bptbl->permute, bptbl_active_idx(bptbl));
     /* Mark, compact, snap pointers. */
     n_retired = bptbl_mark(bptbl, active_fr, frame_idx);
@@ -522,7 +512,7 @@ bptbl_finalize(bptbl_t *bptbl)
     if (bptbl_end_idx(bptbl) == bptbl_active_idx(bptbl))
         return 0;
     /* Expand the permutation table if necessary (probably). */
-    garray_expand(bptbl->permute, bptbl_end_idx(bptbl) - bptbl_active_idx(bptbl));
+    garray_expand_to(bptbl->permute, bptbl_end_idx(bptbl));
     garray_set_base(bptbl->permute, bptbl_active_idx(bptbl));
     /* Mark and GC everything from the last frame. */
     n_retired = bptbl_mark(bptbl, bptbl->n_frame - 1, bptbl->n_frame);
@@ -692,6 +682,19 @@ bptbl_ef_count(bptbl_t *bptbl, int frame_idx)
         - bptbl_ef_idx(bptbl, frame_idx);
 }
 
+void
+bptbl_set_rcscore(bptbl_t *bptbl, bp_t *bpe, int rc, int32 score)
+{
+    garray_ent(bptbl->rc, int32, bpe->s_idx + rc) = score;
+}
+
+int32 *
+bptbl_rcscores(bptbl_t *bptbl, bp_t *bpe)
+{
+    return garray_ptr(bptbl->rc, int32, bpe->s_idx);
+}
+
+
 static int
 bptbl_rcsize(bptbl_t *bptbl, bp_t *be)
 {
@@ -713,6 +716,7 @@ bp_t *
 bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
 {
     int32 i, rcsize, *bss;
+    size_t bss_head;
     bp_t be, *bpe;
 
     /* This might happen if recognition fails. */
@@ -721,25 +725,13 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
         return NULL;
     }
 
-    /* Expand the bss table if necessary. */
-    if (bptbl->bss_head >= bptbl->bscore_stack_size
-        - bin_mdef_n_ciphone(bptbl->d2p->mdef)) {
-        bptbl->bscore_stack_size *= 2;
-        bptbl->bscore_stack = ckd_realloc(bptbl->bscore_stack,
-                                          bptbl->bscore_stack_size
-                                          * sizeof(*bptbl->bscore_stack));
-        E_INFO("Resized score stack to %d entries (%d KiB)\n",
-               bptbl->bscore_stack_size,
-               bptbl->bscore_stack_size * sizeof(*bptbl->bscore_stack) / 1024);
-    }
-
     /* Append a new backpointer. */
     memset(&be, 0, sizeof(be));
     be.wid = w;
     be.frame = bptbl->n_frame - 1;
     be.bp = path;
     be.score = score;
-    be.s_idx = bptbl->bss_head;
+    be.s_idx = garray_next_idx(bptbl->rc);
     be.valid = TRUE;
     be.last_phone = dict_last_phone(bptbl->d2p->dict, w);
     bpe = garray_append(bptbl->ent, &be);
@@ -750,10 +742,13 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
     /* Get diphone ID for final phone and number of ssids corresponding to it. */
     rcsize = bptbl_rcsize(bptbl, bpe);
     /* Allocate some space on the bptbl->bscore_stack for all of these triphones. */
-    for (i = rcsize, bss = bptbl->bscore_stack + bptbl->bss_head; i > 0; --i, bss++)
-        *bss = WORST_SCORE;
-    bptbl->bscore_stack[bptbl->bss_head + rc] = score;
-    bptbl->bss_head += rcsize;
+    /* Expand the bss table if necessary. */
+    bss_head = garray_next_idx(bptbl->rc);
+    garray_expand_to(bptbl->rc, bss_head + rcsize);
+    bss = garray_ptr(bptbl->rc, int32, bss_head);
+    for (i = 0; i < rcsize; ++i)
+        *bss++ = WORST_SCORE;
+    garray_ent(bptbl->rc, int32, bss_head + rc) = score;
 
     E_DEBUG(3,("Entered bp %d sf %d ef %d active_fr %d\n", bptbl_end_idx(bptbl) - 1,
                bptbl_sf(bptbl, bptbl_end_idx(bptbl) - 1),

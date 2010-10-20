@@ -114,6 +114,11 @@ void *garray_append(garray_t *gar, void *ent);
 size_t garray_pop(garray_t *gar, size_t n_ent);
 
 /**
+ * Remove elements from an absolute index to the end of the array.
+ */
+size_t garray_pop_from(garray_t *gar, size_t first_idx);
+
+/**
  * Remove elements from the start of the array.
  */
 size_t garray_shift(garray_t *gar, size_t n_ent);
@@ -155,6 +160,11 @@ void garray_clear(garray_t *gar, size_t start, size_t n_ent);
  * Copy a subsection of the array to another array.
  */
 garray_t *garray_slice(garray_t *gar, size_t start, size_t n_ent);
+
+/**
+ * Move a subsection of the array to another position.
+ */
+size_t garray_move(garray_t *gar, size_t dest, size_t src, size_t n_ent);
 
 /**
  * Get a pointer to an element in the array.

@@ -561,7 +561,7 @@ fwdflat_search_save_bp(fwdflat_search_t *ffs, int frame_idx,
         /* But do keep track of scores for all right contexts, since
          * we need them to determine the starting path scores for any
          * successors of this word exit. */
-        ffs->bptbl->bscore_stack[bpe->s_idx + rc] = score;
+        bptbl_set_rcscore(ffs->bptbl, bpe, rc, score);
     }
     else {
         bp_t *bpe = bptbl_enter(ffs->bptbl, w, path, score, rc);
@@ -722,7 +722,7 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
 
         /* Get the mapping from right context phone ID to index in the
          * right context table and the bptbl->bscore_stack. */
-        rcss = ffs->bptbl->bscore_stack + ent->s_idx;
+        rcss = bptbl_rcscores(ffs->bptbl, ent);
         if (ent->last2_phone == -1)
             rssid = NULL;
         else

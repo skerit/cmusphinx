@@ -86,10 +86,7 @@ typedef struct bptbl_s {
 
     garray_t *retired;   /**< Retired backpointer entries. */
     garray_t *ent;       /**< Active backpointer entries. */
-
-    int32 *bscore_stack;     /**< Array containing right context scores for word exits. */
-    int32 bss_head;          /**< First free BScoreStack entry */
-    int32 bscore_stack_size; /**< Number of entries allocated in bscore_stack. */
+    garray_t *rc;        /**< Right context scores for word exits. */
 
     int32 n_frame;       /**< Number of frames searched. */
     /**
@@ -244,6 +241,16 @@ bpidx_t bptbl_idx(bptbl_t *bptbl, bp_t *bpe);
  * Get the number of word exits in a given frame.
  */
 int bptbl_ef_count(bptbl_t *bptbl, int frame_idx);
+
+/**
+ * Set a right context score for a given backpointer entry.
+ */
+void bptbl_set_rcscore(bptbl_t *bptbl, bp_t *bpe, int rc, int32 score);
+
+/**
+ * Get the array of right context scores for a backpointer entry.
+ */
+int32 *bptbl_rcscores(bptbl_t *bptbl, bp_t *bpe);
 
 /**
  * Update language model state for a backpointer table entry.

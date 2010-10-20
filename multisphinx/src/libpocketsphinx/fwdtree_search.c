@@ -1534,7 +1534,7 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
         /* Array of HMM scores corresponding to all the possible right
          * context expansions of the final phone.  It's likely that a
          * lot of these are going to be missing, actually. */
-        rcss = &(fts->bptbl->bscore_stack[bpe->s_idx]);
+        rcss = bptbl_rcscores(fts->bptbl, bpe);
         if (bpe->last2_phone == -1) {
             /* No right context expansion. */
             for (rc = 0; rc < bin_mdef_n_ciphone(ps_search_acmod(fts)->mdef); ++rc) {
@@ -1911,25 +1911,28 @@ fwdtree_search_exit_score(fwdtree_search_t *fts, bp_t *pbe, int rcphone)
     E_DEBUG(99,("fwdtree_search_exit_score(%d,%d)\n", bptbl_idx(fts->bptbl, pbe), rcphone));
     assert(pbe->valid);
     if (pbe->last2_phone == -1) {
+        int32 *bss = bptbl_rcscores(fts->bptbl, pbe);
         /* No right context for single phone predecessor words. */
         E_DEBUG(99,("last2_phone = %d s_idx = %d bscore = %d\n", -1,
-                    pbe->s_idx, fts->bptbl->bscore_stack[pbe->s_idx]));
-        assert(fts->bptbl->bscore_stack[pbe->s_idx] != WORST_SCORE);
-        return fts->bptbl->bscore_stack[pbe->s_idx];
+                    pbe->s_idx, bss[0]));
+        assert(bss[0] != WORST_SCORE);
+        return bss[0];
     }
     else {
         xwdssid_t *rssid;
+        int32 *bss;
         /* Find the index for the last diphone of the previous word +
          * the first phone of the current word. */
         rssid = dict2pid_rssid(ps_search_dict2pid(fts),
                                pbe->last_phone, pbe->last2_phone);
+        bss = bptbl_rcscores(fts->bptbl, pbe);
         E_DEBUG(99,("last2_phone = %d s_idx = %d rc = %d n_rc = %d bscore = %d\n",
                     pbe->last2_phone, pbe->s_idx, rssid->cimap[rcphone],
                     rssid->n_ssid,
-                    fts->bptbl->bscore_stack[pbe->s_idx + rssid->cimap[rcphone]]));
+                    bss[rssid->cimap[rcphone]]));
         /* This may be WORST_SCORE, which means that there was no exit
          * with rcphone as right context. */
-        return fts->bptbl->bscore_stack[pbe->s_idx + rssid->cimap[rcphone]];
+        return bss[rssid->cimap[rcphone]];
     }
 }
 
@@ -1968,7 +1971,7 @@ fwdtree_search_save_bp(fwdtree_search_t *fts, int frame_idx,
         /* But do keep track of scores for all right contexts, since
          * we need them to determine the starting path scores for any
          * successors of this word exit. */
-        fts->bptbl->bscore_stack[bpe->s_idx + rc] = score;
+        bptbl_set_rcscore(fts->bptbl, bpe, rc, score);
     }
     else {
         bp_t *bpe = bptbl_enter(fts->bptbl, w, path, score, rc);

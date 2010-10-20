@@ -160,6 +160,15 @@ garray_pop(garray_t *gar, size_t n_ent)
     return gar->n_ent;
 }
 
+size_t
+garray_pop_from(garray_t *gar, size_t first_idx)
+{
+    if (first_idx >= gar->n_ent + gar->base_idx)
+        return gar->n_ent + gar->base_idx;
+    return garray_pop(gar, gar->n_ent + gar->base_idx - first_idx)
+        + gar->base_idx;
+}
+
 void
 garray_reset(garray_t *gar)
 {
@@ -187,6 +196,17 @@ garray_shift_from(garray_t *gar, size_t first_idx)
     return garray_shift(gar, first_idx - gar->base_idx);
 }
 
+size_t
+garray_move(garray_t *gar, size_t dest, size_t src, size_t n_ent)
+{
+    if ((src - gar->base_idx) + n_ent > gar->n_ent)
+        return 0;
+    if ((dest - gar->base_idx) + n_ent > gar->n_ent)
+        return 0;
+    memmove(garray_void(gar, dest),
+            garray_void(gar, src), n_ent * gar->ent_size);
+    return n_ent;
+}
 
 void
 garray_clear(garray_t *gar, size_t start, size_t n_ent)
