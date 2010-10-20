@@ -277,6 +277,8 @@ struct ngram_search_s {
     int32 bss_head;          /* First free BScoreStack entry */
     int32 bscore_stack_size;
 
+    int32 oldest_bp; /**< Oldest bptable entry active in decoding graph. */
+
     int32 n_frame_alloc; /**< Number of frames allocated in bp_table_idx and friends. */
     int32 n_frame;       /**< Number of frames actually present. */
     int32 *bp_table_idx; /* First BPTable entry for each frame */
