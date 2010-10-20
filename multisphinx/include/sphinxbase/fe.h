@@ -410,7 +410,7 @@ int fe_process_frame(fe_t *fe, int16 const *spch,
  *
  *  int16 *bigbuf, *p;
  *  mfcc_t **cepstra;
- *  int32 nsamps;
+ *  size_t nsamps;
  *  int32 nframes = 5;
  *
  *  cepstra = (mfcc_t **)

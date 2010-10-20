@@ -12,6 +12,7 @@ libpocketsphinx_la_SOURCES =			\
 	bptbl.c					\
 	dict.c					\
 	dict2pid.c				\
+	featbuf.c				\
 	fwdtree_search.c			\
 	fwdflat_search.c			\
 	hmm.c					\
@@ -35,6 +36,7 @@ noinst_HEADERS =				\
 	bin_mdef.h				\
 	dict.h					\
 	dict2pid.h				\
+	featbuf.h				\
 	fwdtree_search.h			\
 	fwdflat_search.h			\
 	hmm.h					\

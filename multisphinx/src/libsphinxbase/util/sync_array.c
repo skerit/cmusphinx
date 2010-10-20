@@ -81,6 +81,7 @@ sync_array_retain(sync_array_t *sa)
 {
     sbmtx_lock(sa->mtx);
     if (sa->refcount == 255) {
+        E_INFO("Failed to retain sync_array %p, refcount has reached 255\n", sa);
         sbmtx_unlock(sa->mtx);
         return NULL;
     }
@@ -119,6 +120,12 @@ sync_array_free(sync_array_t *sa)
     garray_free(sa->count);
     sbmtx_free(sa->mtx);
     return 0;
+}
+
+size_t
+sync_array_next_idx(sync_array_t *sa)
+{
+    return garray_next_idx(sa->data);
 }
 
 int
@@ -176,7 +183,7 @@ sync_array_append(sync_array_t *sa, void *ent)
 
     sbmtx_lock(sa->mtx);
     /* Not allowed to append to a finalized array. */
-    if (garray_next_idx(sa->data) == sa->final_next_idx) {
+    if (garray_next_idx(sa->data) >= sa->final_next_idx) {
         sbmtx_unlock(sa->mtx);
         return -1;
     }
@@ -202,6 +209,27 @@ sync_array_finalize(sync_array_t *sa)
     sbmtx_unlock(sa->mtx);
 
     return sa->final_next_idx;
+}
+
+int
+sync_array_force_quit(sync_array_t *sa)
+{
+    sbmtx_lock(sa->mtx);
+    /* Guaranteed to make everything fail. */
+    sa->final_next_idx = 0;
+    sbmtx_unlock(sa->mtx);
+    return 0;
+}
+
+int
+sync_array_reset(sync_array_t *sa)
+{
+    sbmtx_lock(sa->mtx);
+    garray_reset(sa->data);
+    garray_reset(sa->count);
+    sa->final_next_idx = (size_t)-1;
+    sbmtx_unlock(sa->mtx);
+    return 0;
 }
 
 size_t

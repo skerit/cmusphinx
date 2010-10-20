@@ -67,7 +67,7 @@ typedef struct sync_array_s sync_array_t;
  *
  * @param n_ent Initial number of elements.
  * @param ent_size Size of each element.
- * @return Newly initialized array.
+ * @return Newly initialized array, or NULL on failure.
  */
 sync_array_t *sync_array_init(size_t n_ent, size_t ent_size);
 
@@ -78,8 +78,12 @@ sync_array_t *sync_array_init(size_t n_ent, size_t ent_size);
  * properly this function must be called once for each consumer
  * thread.
  *
+ * It is possible for this to fail. In particular, only 254 consumer
+ * threads are allowed.  In this case it returns NULL.
+ *
  * @param sa Array.
- * @return Pointer to array, with reference count increased.
+ * @return Pointer to array, with reference count increased, or NULL
+ *         on failure.
  */
 sync_array_t *sync_array_retain(sync_array_t *sa);
 
@@ -96,6 +100,16 @@ sync_array_t *sync_array_retain(sync_array_t *sa);
  * @return New reference count.
  */
 int sync_array_free(sync_array_t *sa);
+
+/**
+ * Get the index of the next element to become available.
+ *
+ * This is the same as the number of elements currently in the array.
+ *
+ * @param sa Array.
+ * @return Next element index.
+ */
+size_t sync_array_next_idx(sync_array_t *sa);
 
 /**
  * Wait for a given element (or any successors) to become available.
@@ -152,6 +166,33 @@ int sync_array_append(sync_array_t *sa, void *ent);
  * @return Final number of elements in the array.
  */
 size_t sync_array_finalize(sync_array_t *sa);
+
+/**
+ * Forcibly finalize an array.
+ *
+ * After forcibly finalizing an array, it is no longer possible to add
+ * or wait for any elements.  Any consumers waiting will be resumed,
+ * with sync_array_wait() returning a timeout (even if an infinite
+ * wait was requested), and subsequent calls to sync_array_wait() will
+ * return an error.  It is, of course, up to those consumers to exit
+ * cleanly.
+ *
+ * @param sa Array.
+ * @return 0, or <0 on failure (which is not allowed to happen)
+ */
+int sync_array_force_quit(sync_array_t *sa);
+
+/**
+ * Reset an array.
+ *
+ * This empties the array (i.e. it sets the next index to zero) and
+ * unfinalizes it.  It is the responsibility of the caller to notify
+ * any consumers of this fact.
+ *
+ * @param sa Array.
+ * @return 0, or <0 on failure (which is not allowed to happen)
+ */
+int sync_array_reset(sync_array_t *sa);
 
 /**
  * Release elements in an array.

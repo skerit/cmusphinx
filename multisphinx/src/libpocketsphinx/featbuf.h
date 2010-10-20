@@ -113,12 +113,20 @@ int featbuf_next(featbuf_t *fb);
  * the data processing functions below is a Bad Idea, but that should
  * be obvious.
  *
+ * For reasons of thread safety it is not possible to return a pointer
+ * to the actual frame data.  To avoid memory allocation the caller
+ * must allocate sufficient space for a single frame of dynamic
+ * feature data.  This can be accomplished with feat_array_alloc().
+ * The pointer to pass here is the first stream of the given frame,
+ * e.g. if you have allocated mfcc ***x, pass x[frame][0].
+ *
  * @param fb Feature buffer.
  * @param fidx Index of frame requested.
  * @param timeout Maximum time to wait, in nanoseconds, or -1 to wait forever.
- * @return NULL, or a pointer to the frame in question.
+ * @param out_frame Memory region to which the requested frame will be copied.
+ * @return 0, or <0 for failure
  */
-mfcc_t **featbuf_wait(featbuf_t *fb, int fidx, int timeout);
+int featbuf_wait(featbuf_t *fb, int fidx, int timeout, mfcc_t *out_frame);
 
 /**
  * Relinquish interest in a series of frames.
@@ -170,7 +178,7 @@ int featbuf_end_utt(featbuf_t *fb, int timeout);
  * featbuf_wait().
  *
  * @param fb Feature buffer.
- * @return 0, or <0 on error (but that is unlikely)
+ * @return 0, or <0 on error (in which case you have Problems)
  */
 int featbuf_abort_utt(featbuf_t *fb);
 
