@@ -168,10 +168,6 @@
       ARG_INT32,                                                                                \
       "0",                                                                                      \
       "Nodes ignored in lattice construction if they persist for fewer than N frames" },        \
-{ "-fwdflatefwid",                                                                              \
-      ARG_INT32,                                                                                \
-      "4",                                                                     	                \
-      "Minimum number of end frames for a word to be searched in fwdflat search" },             \
 { "-fwdflatsfwin",                                                                              \
       ARG_INT32,                                                                                \
       "25",                                                                    	                \

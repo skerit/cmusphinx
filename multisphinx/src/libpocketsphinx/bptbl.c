@@ -134,6 +134,7 @@ bptbl_dump(bptbl_t *bptbl)
 {
     int i;
 
+    sbmtx_lock(bptbl->mtx);
     E_INFO("Retired backpointers (%d entries, oldest active %d):\n",
            bptbl_retired_idx(bptbl), bptbl->oldest_bp);
     for (i = 0; i < bptbl_retired_idx(bptbl); ++i) {
@@ -161,6 +162,7 @@ bptbl_dump(bptbl_t *bptbl)
                         ent->score,
                         ent->bp);
     }
+    sbmtx_unlock(bptbl->mtx);
 }
 
 /**
@@ -481,16 +483,16 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
                 bptbl_ef_idx(bptbl, next_active_fr),
                 bptbl_ef_idx(bptbl, next_active_fr));
     bptbl_update_active(bptbl, next_active_fr);
-    E_INFO("Retired %d bps: now %d retired, %d active\n", n_retired,
-           bptbl_retired_idx(bptbl),
-           bptbl_end_idx(bptbl) - bptbl_active_idx(bptbl));
-    E_INFO("First active sf %d output frame %d window %d\n",
+    E_DEBUG(2,("Retired %d bps: now %d retired, %d active\n", n_retired,
+               bptbl_retired_idx(bptbl),
+               bptbl_end_idx(bptbl) - bptbl_active_idx(bptbl)));
+    E_DEBUG(2,("First active sf %d output frame %d window %d\n",
            bptbl->oldest_bp == NO_BP
            ? 0 : garray_ent(bptbl->retired, bp_t, bptbl->oldest_bp).frame + 1,
            frame_idx,
            frame_idx -
            (bptbl->oldest_bp == NO_BP
-            ? 0 : garray_ent(bptbl->retired, bp_t, bptbl->oldest_bp).frame + 1));
+            ? 0 : garray_ent(bptbl->retired, bp_t, bptbl->oldest_bp).frame + 1)));
     sbevent_signal(bptbl->evt);
 }
 
@@ -621,16 +623,17 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
     bpidx_t base_idx;
     bp_t *ent;
 
+    return 0;
     sbmtx_lock(bptbl->mtx);
     if (first_idx > bptbl_retired_idx(bptbl)) {
-        E_INFO("%d outside retired, releasing up to %d\n",
-               first_idx, bptbl_retired_idx(bptbl));
+        E_DEBUG(2,("%d outside retired, releasing up to %d\n",
+                   first_idx, bptbl_retired_idx(bptbl)));
         first_idx = bptbl_retired_idx(bptbl);
     }
 
     base_idx = garray_base(bptbl->retired);
-    E_INFO("Releasing bptrs from %d to %d\n",
-           base_idx, first_idx);
+    E_DEBUG(2,("Releasing bptrs from %d to %d\n",
+               base_idx, first_idx));
     if (first_idx < base_idx) {
         sbmtx_unlock(bptbl->mtx);
         return 0;
@@ -660,12 +663,11 @@ bptbl_find_exit(bptbl_t *bptbl, int32 wid)
      * happens to be.  So take the last entry and scan backwards to
      * find the extents of its frame. */
     if (bptbl_active_idx(bptbl) == bptbl_end_idx(bptbl)) {
-        bp_t *first_retired = garray_ptr(bptbl->retired, bp_t, 0);
+        bp_t *first_retired = garray_ptr(bptbl->retired, bp_t,
+                                         garray_base(bptbl->retired));
         /* Final, so it's in retired. */
-        start = garray_ptr(bptbl->retired, bp_t,
-                           bptbl_retired_idx(bptbl) - 1);
-        end = garray_ptr(bptbl->retired, bp_t,
-                         bptbl_retired_idx(bptbl));
+        start = end = garray_ptr(bptbl->retired, bp_t,
+                                 bptbl_retired_idx(bptbl) - 1);
         ef = start->frame;
         while (start >= first_retired && start->frame == ef)
             --start;
@@ -673,8 +675,8 @@ bptbl_find_exit(bptbl_t *bptbl, int32 wid)
     else {
         bp_t *first_ent = garray_ptr(bptbl->ent, bp_t, garray_base(bptbl->ent));
         /* Not final, so it's in ent. */
-        start = garray_ptr(bptbl->ent, bp_t, garray_next_idx(bptbl->ent) - 1);
-        end = garray_ptr(bptbl->ent, bp_t, garray_next_idx(bptbl->ent));
+        start = end = garray_ptr(bptbl->ent, bp_t,
+                                 garray_next_idx(bptbl->ent) - 1);
         ef = start->frame;
         /* FIXME: When bptbl->ent is circular this will no longer work. */
         while (start >= first_ent && start->frame == ef)
@@ -685,10 +687,9 @@ bptbl_find_exit(bptbl_t *bptbl, int32 wid)
         E_WARN("No exits in final frame %d, using frame %d instead\n",
                bptbl->n_frame - 1, ef);
     }
-    E_INFO("Last frame %d has %d entries\n", ef, end - start);
-    best_score = start->score;
+    best_score = WORST_SCORE;
     best = NULL;
-    while (start < end) {
+    while (start <= end) {
         if (start->score BETTER_THAN best_score
             && (wid == BAD_S3WID || start->wid == wid)) {
             best = start;
@@ -1083,4 +1084,3 @@ bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
 
     return (ps_seg_t *)itor;
 }
-

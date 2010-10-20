@@ -233,10 +233,10 @@ typedef struct fwdflat_search_s {
      */
     bptbl_t *input_bptbl;
     fwdflat_arc_buffer_t *input_arcs;
-    uint8 *input_words;       /**< Count of exits for arcs in window. */
-    bpidx_t next_idx;   /**< Next incoming bptbl idx to scan for arcs. */
+    bitvec_t *input_words; /**< Active words in window. */
+    bpidx_t next_idx;     /**< Next incoming bptbl idx to scan for arcs. */
 
-    int16 min_ef_width, max_sf_win;
+    int max_sf_win;       /**< Window size for word entries. */
 
     /**
      * First HMMs for multiple-phone words.

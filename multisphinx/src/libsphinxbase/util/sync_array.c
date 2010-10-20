@@ -112,7 +112,6 @@ sync_array_free(sync_array_t *sa)
         return refcount;
     }		
     sbmtx_unlock(sa->mtx);
-    /* printf("Freeing sync array\n"); */
     E_INFO("Maximum allocation %d items (%d KiB)\n",
            garray_alloc_size(sa->data),
            garray_alloc_size(sa->data) * (garray_ent_size(sa->data) + 1) / 1024);

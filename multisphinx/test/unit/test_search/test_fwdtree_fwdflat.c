@@ -30,6 +30,9 @@ main(int argc, char *argv[])
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
 			     "-lm", TESTDATADIR "/hub4.5000.DMP",
 			     "-dict", TESTDATADIR "/hub4.5000.dic",
+			     "-fwdflatefwid", "3",
+			     "-maxwpf", "50",
+			     "-latsize", "512",
 			     NULL);
 	ps_init_defaults(config);
 	fb = featbuf_init(config);

@@ -216,10 +216,9 @@ ps_init(cmd_ln_t *config)
 
     ps->fwdtree = fwdtree_search_init(config, ps->acmod, dict, d2p);
     ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-                                      ((fwdtree_search_t *)ps->fwdtree)->bptbl);
+      ((fwdtree_search_t *)ps->fwdtree)->bptbl);
 
     /* Release pointers to things now owned by the searches. */
-    /* acmod_free(acmod2); */ /* WTF */
     dict_free(dict);
     dict2pid_free(d2p);
 
@@ -264,7 +263,7 @@ ps_free(ps_decoder_t *ps)
 
     featbuf_shutdown(ps->fb);
     ps_search_free(ps->fwdtree);
-    ps_search_free(ps->fwdflat);
+    /*ps_search_free(ps->fwdflat); */
     featbuf_free(ps->fb);
     logmath_free(ps->lmath);
     cmd_ln_free_r(ps->config);
@@ -394,7 +393,7 @@ ps_end_utt(ps_decoder_t *ps)
     /* Mark the end of the utterance and wait for it to complete. */
     rv = featbuf_end_utt(ps->fb, -1);
     ptmr_stop(&ps->perf);
-
+    ps->n_frame += ps->acmod->output_frame;
     /* Log a backtrace if requested. */
     if (cmd_ln_boolean_r(ps->config, "-backtrace")) {
         char const *uttid, *hyp;

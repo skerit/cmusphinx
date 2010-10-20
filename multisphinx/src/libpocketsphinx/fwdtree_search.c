@@ -1670,7 +1670,7 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
 
     if ((frame_idx = acmod_wait(acmod, -1)) == -1)
         return 0;
-    E_INFO("Searching frame %d\n", frame_idx);
+    E_DEBUG(2,("Searching frame %d\n", frame_idx));
     /* Activate our HMMs for the current frame if need be. */
     if (!acmod->compallsen)
         compute_sen_active(fts, frame_idx);
@@ -1778,7 +1778,6 @@ fwdtree_search_finish(ps_search_t *base)
                fts->st.n_lastphn_cand_utt, fts->st.n_lastphn_cand_utt / (cf + 1));
     }
 
-    /* Mark the current utterance as done. */
     return 0;
 }
 
