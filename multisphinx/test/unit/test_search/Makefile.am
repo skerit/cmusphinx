@@ -1,5 +1,6 @@
 check_PROGRAMS = \
 	test_bptbl \
+	test_acmod_copy \
 	test_arc_buffer \
 	test_fwdtree \
 	test_fwdflat \

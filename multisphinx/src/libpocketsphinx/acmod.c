@@ -353,7 +353,8 @@ acmod_copy(acmod_t *other)
     acmod->mgau = ps_mgau_copy(other->mgau);
 
     /* FIXME: Not sure what exactly to do about MLLR. */
-    acmod->mllr = ps_mllr_retain(other->mllr);
+    if (other->mllr)
+        acmod->mllr = ps_mllr_retain(other->mllr);
 
     /* The MFCC buffer needs to be at least as large as the dynamic
      * feature window.  */

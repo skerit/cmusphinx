@@ -1051,6 +1051,7 @@ s2_semi_mgau_copy(ps_mgau_t *other)
     s->n_feat = s->g->n_feat;
     s->n_density = s->g->n_density;
     s->s = sendump_retain(others->s);
+    s->n_sen = others->n_sen;
     s->ds_ratio = others->ds_ratio;
     s->max_topn = others->max_topn;
 
