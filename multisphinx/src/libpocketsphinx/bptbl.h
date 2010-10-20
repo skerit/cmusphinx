@@ -79,7 +79,7 @@ typedef struct bp_s {
  */
 typedef struct bptbl_s {
     bp_t *ent;       /* Forward pass lattice */
-    dict_t *dict;    /* Dictionary */
+    dict2pid_t *d2p; /* Tied state mapping. */
     int32 n_ent;             /* First free BPTable entry */
     int32 n_alloc;
     int32 window_sf;      /**< Start of elastic window of end-sorted arcs */
@@ -107,7 +107,7 @@ typedef struct bptbl_seg_s {
 } bptbl_seg_t;
 
 
-bptbl_t *bptbl_init(dict_t *dict, int n_alloc, int n_frame_alloc);
+bptbl_t *bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc);
 
 void bptbl_free(bptbl_t *bpt);
 
@@ -119,5 +119,16 @@ void dump_bptable(bptbl_t *bptbl);
  * @return the current backpointer index.
  */
 int bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx);
+
+/**
+ * Add a backpointer to the table.
+ */
+bp_t *bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx,
+                  int32 path, int32 score, int rc);
+
+/**
+ * Cache trigram predecessors for a backpointer table entry.
+ */
+void bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp);
 
 #endif /* __BPTBL_H__ */

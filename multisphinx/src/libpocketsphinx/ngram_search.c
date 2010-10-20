@@ -167,7 +167,7 @@ ngram_search_init(cmd_ln_t *config,
     ngs->last_ltrans = ckd_calloc(dict_size(dict),
                                   sizeof(*ngs->last_ltrans));
 
-    ngs->bptbl = bptbl_init(dict, cmd_ln_int32_r(config, "-latsize"), 256);
+    ngs->bptbl = bptbl_init(d2p, cmd_ln_int32_r(config, "-latsize"), 256);
 
     /* Allocate active word list array */
     ngs->active_word_list = ckd_calloc_2d(2, dict_size(dict),
@@ -303,35 +303,6 @@ ngram_search_free(ps_search_t *search)
     ckd_free(ngs);
 }
 
-/**
- * Find trigram predecessors for a backpointer table entry.
- */
-static void
-cache_bptable_paths(ngram_search_t *ngs, int32 bp)
-{
-    int32 w, prev_bp;
-    bp_t *be;
-
-    assert(bp != NO_BP);
-
-    be = &(ngs->bptbl->ent[bp]);
-    prev_bp = bp;
-    w = be->wid;
-
-    while (dict_filler_word(ps_search_dict(ngs), w)) {
-        prev_bp = ngs->bptbl->ent[prev_bp].bp;
-        if (prev_bp == NO_BP)
-            return;
-        w = ngs->bptbl->ent[prev_bp].wid;
-    }
-
-    be->real_wid = dict_basewid(ps_search_dict(ngs), w);
-
-    prev_bp = ngs->bptbl->ent[prev_bp].bp;
-    be->prev_real_wid =
-        (prev_bp != NO_BP) ? ngs->bptbl->ent[prev_bp].real_wid : -1;
-}
-
 void
 ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
                      int32 w, int32 score, int32 path, int32 rc)
@@ -346,7 +317,7 @@ ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
         if (ngs->bptbl->ent[_bp_].score WORSE_THAN score) {
             if (ngs->bptbl->ent[_bp_].bp != path) {
                 ngs->bptbl->ent[_bp_].bp = path;
-                cache_bptable_paths(ngs, _bp_);
+                bptbl_fake_lmstate(ngs->bptbl, _bp_);
             }
             ngs->bptbl->ent[_bp_].score = score;
         }
@@ -356,64 +327,7 @@ ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
         ngs->bptbl->bscore_stack[ngs->bptbl->ent[_bp_].s_idx + rc] = score;
     }
     else {
-        int32 i, rcsize, *bss;
-        bp_t *be;
-
-        /* This might happen if recognition fails. */
-        if (ngs->bptbl->n_ent == NO_BP) {
-            E_ERROR("No entries in backpointer table!");
-            return;
-        }
-
-        /* Expand the backpointer tables if necessary. */
-        if (ngs->bptbl->n_ent >= ngs->bptbl->n_alloc) {
-            ngs->bptbl->n_alloc *= 2;
-            ngs->bptbl->ent = ckd_realloc(ngs->bptbl->ent,
-                                        ngs->bptbl->n_alloc
-                                        * sizeof(*ngs->bptbl->ent));
-            E_INFO("Resized backpointer table to %d entries\n", ngs->bptbl->n_alloc);
-        }
-        if (ngs->bptbl->bss_head >= ngs->bptbl->bscore_stack_size
-            - bin_mdef_n_ciphone(ps_search_acmod(ngs)->mdef)) {
-            ngs->bptbl->bscore_stack_size *= 2;
-            ngs->bptbl->bscore_stack = ckd_realloc(ngs->bptbl->bscore_stack,
-                                            ngs->bptbl->bscore_stack_size
-                                            * sizeof(*ngs->bptbl->bscore_stack));
-            E_INFO("Resized score stack to %d entries\n", ngs->bptbl->bscore_stack_size);
-        }
-
-        ngs->bptbl->word_idx[w] = ngs->bptbl->n_ent;
-        be = &(ngs->bptbl->ent[ngs->bptbl->n_ent]);
-        be->wid = w;
-        be->frame = frame_idx;
-        be->bp = path;
-        be->score = score;
-        be->s_idx = ngs->bptbl->bss_head;
-        be->valid = TRUE;
-
-        /* DICT2PID */
-        /* Get diphone ID for final phone and number of ssids corresponding to it. */
-        be->last_phone = dict_last_phone(ps_search_dict(ngs),w);
-        if (dict_is_single_phone(ps_search_dict(ngs), w)) {
-            be->last2_phone = -1;
-            rcsize = 1;
-        }
-        else {
-            be->last2_phone = dict_second_last_phone(ps_search_dict(ngs),w);
-            rcsize = dict2pid_rssid(ps_search_dict2pid(ngs),
-                                    be->last_phone, be->last2_phone)->n_ssid;
-        }
-        /* Allocate some space on the bptbl->bscore_stack for all of these triphones. */
-        for (i = rcsize, bss = ngs->bptbl->bscore_stack + ngs->bptbl->bss_head; i > 0; --i, bss++)
-            *bss = WORST_SCORE;
-        ngs->bptbl->bscore_stack[ngs->bptbl->bss_head + rc] = score;
-        cache_bptable_paths(ngs, ngs->bptbl->n_ent);
-        E_DEBUG(2,("Entered bp %d sf %d ef %d window_sf %d\n", ngs->bptbl->n_ent,
-                   bp_sf(ngs->bptbl, ngs->bptbl->n_ent), frame_idx, ngs->bptbl->window_sf));
-        assert(bp_sf(ngs->bptbl, ngs->bptbl->n_ent) >= ngs->bptbl->window_sf);
-
-        ngs->bptbl->n_ent++;
-        ngs->bptbl->bss_head += rcsize;
+        bptbl_enter(ngs->bptbl, w, frame_idx, path, score, rc);
     }
 }
 

@@ -52,16 +52,16 @@
 #include "ngram_search.h"
 
 bptbl_t *
-bptbl_init(dict_t *dict, int n_alloc, int n_frame_alloc)
+bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
 {
     bptbl_t *bptbl = ckd_calloc(1, sizeof(*bptbl));
 
-    bptbl->dict = dict_retain(dict);
+    bptbl->d2p = dict2pid_retain(d2p);
     bptbl->n_alloc = n_alloc;
     bptbl->n_frame_alloc = n_frame_alloc;
 
     bptbl->ent = ckd_calloc(bptbl->n_alloc, sizeof(*bptbl->ent));
-    bptbl->word_idx = ckd_calloc(dict_size(dict),
+    bptbl->word_idx = ckd_calloc(dict_size(d2p->dict),
                                  sizeof(*bptbl->word_idx));
     bptbl->bscore_stack_size = bptbl->n_alloc * 20;
     bptbl->bscore_stack = ckd_calloc(bptbl->bscore_stack_size,
@@ -80,7 +80,7 @@ bptbl_free(bptbl_t *bptbl)
 {
     if (bptbl == NULL)
         return;
-    dict_free(bptbl->dict);
+    dict2pid_free(bptbl->d2p);
     ckd_free(bptbl->word_idx);
     ckd_free(bptbl->ent);
     ckd_free(bptbl->bscore_stack);
@@ -97,7 +97,7 @@ dump_bptable(bptbl_t *bptbl)
     E_INFO("Backpointer table (%d entries):\n", bptbl->n_ent);
     for (i = 0; i < bptbl->n_ent; ++i) {
         E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
-                    i, dict_wordstr(bptbl->dict, bptbl->ent[i].wid),
+                    i, dict_wordstr(bptbl->d2p->dict, bptbl->ent[i].wid),
                     bptbl->ent[i].bp == -1 ? 0 : 
                     bptbl->ent[bptbl->ent[i].bp].frame + 1,
                     bptbl->ent[i].frame,
@@ -127,6 +127,97 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     return bptbl->n_ent;
 }
 
+bp_t *
+bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx, int32 path,
+            int32 score, int rc)
+{
+    int32 i, rcsize, *bss;
+    bp_t *be;
+
+    /* This might happen if recognition fails. */
+    if (bptbl->n_ent == NO_BP) {
+        E_ERROR("No entries in backpointer table!");
+        return NULL;
+    }
+
+    /* Expand the backpointer tables if necessary. */
+    if (bptbl->n_ent >= bptbl->n_alloc) {
+        bptbl->n_alloc *= 2;
+        bptbl->ent = ckd_realloc(bptbl->ent,
+                                 bptbl->n_alloc
+                                 * sizeof(*bptbl->ent));
+        E_INFO("Resized backpointer table to %d entries\n", bptbl->n_alloc);
+    }
+    if (bptbl->bss_head >= bptbl->bscore_stack_size
+        - bin_mdef_n_ciphone(bptbl->d2p->mdef)) {
+        bptbl->bscore_stack_size *= 2;
+        bptbl->bscore_stack = ckd_realloc(bptbl->bscore_stack,
+                                          bptbl->bscore_stack_size
+                                          * sizeof(*bptbl->bscore_stack));
+        E_INFO("Resized score stack to %d entries\n", bptbl->bscore_stack_size);
+    }
+
+    bptbl->word_idx[w] = bptbl->n_ent;
+    be = &(bptbl->ent[bptbl->n_ent]);
+    be->wid = w;
+    be->frame = frame_idx;
+    be->bp = path;
+    be->score = score;
+    be->s_idx = bptbl->bss_head;
+    be->valid = TRUE;
+    bptbl_fake_lmstate(bptbl, bptbl->n_ent);
+
+    /* DICT2PID */
+    /* Get diphone ID for final phone and number of ssids corresponding to it. */
+    be->last_phone = dict_last_phone(bptbl->d2p->dict,w);
+    if (dict_is_single_phone(bptbl->d2p->dict, w)) {
+        be->last2_phone = -1;
+        rcsize = 1;
+    }
+    else {
+        be->last2_phone = dict_second_last_phone(bptbl->d2p->dict, w);
+        rcsize = dict2pid_rssid(bptbl->d2p, be->last_phone, be->last2_phone)->n_ssid;
+    }
+    /* Allocate some space on the bptbl->bscore_stack for all of these triphones. */
+    for (i = rcsize, bss = bptbl->bscore_stack + bptbl->bss_head; i > 0; --i, bss++)
+        *bss = WORST_SCORE;
+    bptbl->bscore_stack[bptbl->bss_head + rc] = score;
+    E_DEBUG(2,("Entered bp %d sf %d ef %d window_sf %d\n", bptbl->n_ent,
+               bp_sf(bptbl, bptbl->n_ent), frame_idx, bptbl->window_sf));
+    assert(bp_sf(bptbl, bptbl->n_ent) >= bptbl->window_sf);
+
+    bptbl->n_ent++;
+    bptbl->bss_head += rcsize;
+
+    return be;
+}
+
+void
+bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp)
+{
+    int32 w, prev_bp;
+    bp_t *be;
+
+    assert(bp != NO_BP);
+
+    be = &(bptbl->ent[bp]);
+    prev_bp = bp;
+    w = be->wid;
+
+    while (dict_filler_word(bptbl->d2p->dict, w)) {
+        prev_bp = bptbl->ent[prev_bp].bp;
+        if (prev_bp == NO_BP)
+            return;
+        w = bptbl->ent[prev_bp].wid;
+    }
+
+    be->real_wid = dict_basewid(bptbl->d2p->dict, w);
+
+    prev_bp = bptbl->ent[prev_bp].bp;
+    be->prev_real_wid =
+        (prev_bp != NO_BP) ? bptbl->ent[prev_bp].real_wid : -1;
+}
+
 void
 bptable_gc(bptbl_t *bpt, int oldest_bp, int frame_idx)
 {
@@ -135,7 +226,7 @@ bptable_gc(bptbl_t *bpt, int oldest_bp, int frame_idx)
     E_INFO("Before sorting (%d : %d)\n", bpt->first_unsorted, oldest_bp);
     for (i = bpt->first_unsorted; i < oldest_bp; ++i) {
         E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
-                    i, dict_wordstr(bpt->dict, bpt->ent[i].wid),
+                    i, dict_wordstr(bpt->d2p->dict, bpt->ent[i].wid),
                     bp_sf(bpt, i),
                     bpt->ent[i].frame,
                     bpt->ent[i].score,
@@ -176,7 +267,7 @@ bptable_gc(bptbl_t *bpt, int oldest_bp, int frame_idx)
     E_INFO("After sorting (%d : %d)\n", old_first_unsorted, oldest_bp);
     for (i = old_first_unsorted; i < oldest_bp; ++i) {
         E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
-                    i, dict_wordstr(bpt->dict, bpt->ent[i].wid),
+                    i, dict_wordstr(bpt->d2p->dict, bpt->ent[i].wid),
                     bp_sf(bpt, i),
                     bpt->ent[i].frame,
                     bpt->ent[i].score,
