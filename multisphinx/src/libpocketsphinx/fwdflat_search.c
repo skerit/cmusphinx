@@ -60,9 +60,9 @@
 #endif
 
 static int fwdflat_search_start(ps_search_t *base);
-static int fwdflat_search_step(ps_search_t *base);
+static int fwdflat_search_decode(ps_search_t *base);
 static int fwdflat_search_finish(ps_search_t *base);
-static void fwdflat_search_free(ps_search_t *base);
+static int fwdflat_search_free(ps_search_t *base);
 static char const *fwdflat_search_hyp(ps_search_t *base, int32 *out_score);
 static int32 fwdflat_search_prob(ps_search_t *base);
 static ps_seg_t *fwdflat_search_seg_iter(ps_search_t *base, int32 *out_score);
@@ -70,6 +70,7 @@ static ps_seg_t *fwdflat_search_seg_iter(ps_search_t *base, int32 *out_score);
 static ps_searchfuncs_t fwdflat_funcs = {
     /* name: */   "fwdflat",
     /* free: */   fwdflat_search_free,
+    /* decode: */ fwdflat_search_decode,
     /* hyp: */      fwdflat_search_hyp,
     /* prob: */     fwdflat_search_prob,
     /* seg_iter: */ fwdflat_search_seg_iter,
@@ -242,7 +243,7 @@ destroy_fwdflat_chan(fwdflat_search_t *ffs)
     }
 }
 
-static void
+static int
 fwdflat_search_free(ps_search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
@@ -259,6 +260,8 @@ fwdflat_search_free(ps_search_t *base)
     bitvec_free(ffs->word_active);
     bptbl_free(ffs->bptbl);
     ckd_free_2d(ffs->active_word_list);
+
+    return 0;
 }
 
 static internal_node_t *
@@ -897,25 +900,19 @@ fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
 }
 
 static int
-fwdflat_search_step(ps_search_t *base)
+fwdflat_search_decode_2ndpass(fwdflat_search_t *ffs, acmod_t *acmod)
 {
-    fwdflat_search_t *ffs = (fwdflat_search_t *)base;
-    acmod_t *acmod = ps_search_acmod(ffs);
-    int frame_idx, nfr, k;
+    int next_sf; /**< First frame pointed to by active bps. */
+    int nfr, k;
+    bpidx_t oldest_bp;
 
-    frame_idx = acmod_frame(acmod);
-    
-    if (ffs->input_bptbl) {
-        int next_sf; /**< First frame pointed to by active bps. */
-        /* next_sf is the first starting frame that is still active.  The
-         * bptbl code tracks this for us in the form of the oldest
-         * backpointer referenced by the active part of the bptbl. */
-        if (ffs->input_bptbl->oldest_bp == NO_BP)
-            /* Can't do anything yet, everything is active. */
-            next_sf = 0;
-        else 
-            next_sf = bptbl_ent(ffs->input_bptbl,
-                                ffs->input_bptbl->oldest_bp)->frame + 1;
+    fwdflat_search_start(ps_search_base(ffs));
+
+    /* Wait for things to get retired from the input bptbl. */
+    while (bptbl_wait(ffs->input_bptbl, -1) == 0) {
+        /* next_sf is the first starting frame that is still
+         * referenced by active backpointers. */
+        next_sf = bptbl_active_sf(ffs->input_bptbl);
         /* Extend the arc buffer the appropriate number of frames. */
         if (fwdflat_arc_buffer_extend(ffs->input_arcs, next_sf) > 0) {
             E_INFO("oldest_bp %d next_idx %d\n",
@@ -930,49 +927,56 @@ fwdflat_search_step(ps_search_t *base)
                    ffs->input_bptbl->oldest_bp, ffs->next_idx);
             bptbl_release(ffs->input_bptbl, ffs->input_bptbl->oldest_bp);
         }
+    }
 
-        /* Now pull things from the arc buffer - everything above this
-         * line will be done in a separate thread in the near
-         * future. */
-        /* FIXME */
-        /* if (acmod_available(acmod) <= 0)
-           return 0; */
-        /* We do something different depending on whether the input
-         * bptbl has been finalized or not.  If it has, we just run
-         * out the clock, otherwise we only search forward as far as
-         * the arc buffer goes. */
-        nfr = 0;
-        /* FIXME: rewrite this.. */
-        while (0) {
-            int end_win = frame_idx + ffs->max_sf_win;
-            if (ffs->input_bptbl->active_fr < ffs->input_bptbl->n_frame /* not final */
-                && fwdflat_arc_buffer_iter(ffs->input_arcs, end_win - 1) == NULL)
-                break;
-            if (end_win > ffs->input_bptbl->n_frame)
-                end_win = ffs->input_bptbl->n_frame;
-            E_INFO("Searching frame %d window end %d\n",
-                   frame_idx, end_win);
-            fwdflat_search_expand_arcs(ffs, frame_idx, end_win);
-            if ((k = fwdflat_search_one_frame(ffs, frame_idx)) <= 0)
-                break;
-            frame_idx += k;
-            nfr += k;
-        }
-        /* Do this in one batch. */
-        fwdflat_arc_buffer_release(ffs->input_arcs, frame_idx);
-        return nfr;
+    /* We do something different depending on whether the input
+     * bptbl has been finalized or not.  If it has, we just run
+     * out the clock, otherwise we only search forward as far as
+     * the arc buffer goes. */
+    nfr = 0;
+    /* FIXME: rewrite this.. */
+#if 0
+    while (0) {
+        int end_win = frame_idx + ffs->max_sf_win;
+        if (ffs->input_bptbl->active_fr < ffs->input_bptbl->n_frame /* not final */
+            && fwdflat_arc_buffer_iter(ffs->input_arcs, end_win - 1) == NULL)
+            break;
+        if (end_win > ffs->input_bptbl->n_frame)
+            end_win = ffs->input_bptbl->n_frame;
+        E_INFO("Searching frame %d window end %d\n",
+               frame_idx, end_win);
+        fwdflat_search_expand_arcs(ffs, frame_idx, end_win);
+        if ((k = fwdflat_search_one_frame(ffs, frame_idx)) <= 0)
+            break;
+        frame_idx += k;
+        nfr += k;
     }
-    else {
-        nfr = 0;
-        E_INFO("Searching frame %d\n", frame_idx);
-        /* Wait for next frame to be available. */
-        while ((k = fwdflat_search_one_frame(ffs, frame_idx)) > 0) {
-            nfr += k;
-        }
-        if (k < 0)
-            return k;
-        return nfr;
+    /* Do this in one batch. */
+    fwdflat_arc_buffer_release(ffs->input_arcs, frame_idx);
+#endif
+
+    fwdflat_search_finish(ps_search_base(ffs));
+    return nfr;
+}
+
+static int
+fwdflat_search_decode(ps_search_t *base)
+{
+    fwdflat_search_t *ffs = (fwdflat_search_t *)base;
+    acmod_t *acmod = ps_search_acmod(ffs);
+    int nfr, k;
+    
+    if (ffs->input_bptbl)
+        return fwdflat_search_decode_2ndpass(ffs, acmod);
+
+    fwdflat_search_start(base);
+    while ((k = fwdflat_search_one_frame(ffs, acmod_frame(acmod))) > 0) {
+        nfr += k;
     }
+    fwdflat_search_finish(base);
+    if (k < 0)
+        return k;
+    return nfr;
 }
 
 static int

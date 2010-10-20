@@ -53,8 +53,7 @@ main(int argc, char *argv[])
 	/* Garbage collect some things. */
 	fi = bptbl_push_frame(bptbl, 5);
 	bptbl_dump(bptbl);
-	next_sf = bptbl_ent(bptbl,
-			    bptbl->oldest_bp)->frame + 1;
+	next_sf = bptbl_active_sf(bptbl);
 	E_INFO("next_sf %d\n", next_sf);
 	fwdflat_arc_buffer_extend(arcs, next_sf);
 	i = fwdflat_arc_buffer_add_bps(arcs, bptbl,

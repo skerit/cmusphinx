@@ -80,6 +80,8 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
     bptbl->rc = garray_init(0, sizeof(int32));
     garray_reserve(bptbl->rc, n_alloc * 20); /* 20 = guess at average number of rcs/word */
 
+    bptbl->evt = sbevent_init(FALSE);
+    bptbl->mtx = sbmtx_init();
     return bptbl;
 }
 
@@ -105,6 +107,8 @@ bptbl_free(bptbl_t *bptbl)
     garray_free(bptbl->ef_idx);
     garray_free(bptbl->rc);
     bitvec_free(bptbl->valid_fr);
+    sbevent_free(bptbl->evt);
+    sbmtx_free(bptbl->mtx);
     ckd_free(bptbl);
     return 0;
 }
@@ -114,10 +118,12 @@ bptbl_reset(bptbl_t *bptbl)
 {
     bitvec_clear_all(bptbl->valid_fr, bptbl->n_frame_alloc);
     garray_reset(bptbl->ent);
-    garray_reset(bptbl->retired);
     garray_reset(bptbl->permute);
     garray_reset(bptbl->ef_idx);
+    sbmtx_lock(bptbl->mtx);
+    garray_reset(bptbl->retired);
     garray_reset(bptbl->rc);
+    sbmtx_unlock(bptbl->mtx);
     bptbl->dest_s_idx = 0;
     bptbl->n_frame = 0;
     bptbl->oldest_bp = NO_BP;
@@ -277,6 +283,8 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
     /* bss index for active frames (we don't want to track this in bptbl). */
     int active_dest_s_idx;
 
+    /* Protect this from other retire/release calls. */
+    sbmtx_lock(bptbl->mtx);
     /* First available backpointer index in retired. */
     dest = bptbl_retired_idx(bptbl);
     /* Expand retired if necessary. */
@@ -334,6 +342,7 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
         }
         garray_pop_from(bptbl->rc, active_dest_s_idx);
     }
+    sbmtx_unlock(bptbl->mtx);
     return dest;
 }
 
@@ -359,6 +368,8 @@ bptbl_remap(bptbl_t *bptbl, int first_retired_bp,
     int last_retired_bp;
     int i;
 
+    /* Need to protect bptbl->retired and bptbl->rc */
+    sbmtx_lock(bptbl->mtx);
     last_retired_bp = bptbl_retired_idx(bptbl);
     E_DEBUG(2,("remapping %d:%d from %d to %d and %d to %d\n",
                first_retired_bp, last_remapped_bp,
@@ -380,6 +391,8 @@ bptbl_remap(bptbl_t *bptbl, int first_retired_bp,
             assert(bptbl_sf(bptbl, i) <= bpe->frame);
         }
     }
+    sbmtx_unlock(bptbl->mtx);
+
     /* Now remap backpointers in still-active bps (which point to the
      * newly retired ones) */
     bptbl->oldest_bp = last_retired_bp - 1;
@@ -478,6 +491,7 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
            frame_idx -
            (bptbl->oldest_bp == NO_BP
             ? 0 : garray_ent(bptbl->retired, bp_t, bptbl->oldest_bp).frame + 1));
+    sbevent_signal(bptbl->evt);
 }
 
 int
@@ -528,7 +542,10 @@ bptbl_commit(bptbl_t *bptbl)
                     bp_t *src1_ent = bptbl_ent(bptbl, src + 1);
                     assert(dest_s_idx + rcsize <= src1_ent->s_idx);
                 }
+                /* Indices don't change but we still need to protect rc. */
+                sbmtx_lock(bptbl->mtx);
                 garray_move(bptbl->rc, dest_s_idx, src_ent->s_idx, rcsize);
+                sbmtx_unlock(bptbl->mtx);
             }
             *dest_ent = *src_ent;
             dest_ent->s_idx = dest_s_idx;
@@ -541,7 +558,9 @@ bptbl_commit(bptbl_t *bptbl)
                 eidx - bptbl_ef_idx(bptbl, frame_idx)));
 
     /* Truncate active arrays. */
+    sbmtx_lock(bptbl->mtx);
     garray_pop_from(bptbl->rc, dest_s_idx);
+    sbmtx_unlock(bptbl->mtx);
     garray_pop_from(bptbl->ent, dest);
 
     return dest - src;
@@ -591,6 +610,7 @@ bptbl_finalize(bptbl_t *bptbl)
            garray_alloc_size(bptbl->rc) * sizeof(int32) / 1024);
     E_INFO("Allocated %d permutation entries and %d end frame entries\n",
            garray_alloc_size(bptbl->permute), garray_alloc_size(bptbl->ef_idx));
+    sbevent_signal(bptbl->evt);
     return n_retired;
 }
 
@@ -600,6 +620,7 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
     bpidx_t base_idx;
     bp_t *ent;
 
+    sbmtx_lock(bptbl->mtx);
     if (first_idx > bptbl_retired_idx(bptbl)) {
         E_INFO("%d outside retired, releasing up to %d\n",
                first_idx, bptbl_retired_idx(bptbl));
@@ -609,8 +630,10 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
     base_idx = garray_base(bptbl->retired);
     E_INFO("Releasing bptrs from %d to %d\n",
            base_idx, first_idx);
-    if (first_idx < base_idx)
+    if (first_idx < base_idx) {
+        sbmtx_unlock(bptbl->mtx);
         return 0;
+    }
 
     ent = bptbl_ent(bptbl, first_idx);
     garray_shift_from(bptbl->rc, ent->s_idx);
@@ -618,6 +641,7 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
     garray_shift_from(bptbl->retired, first_idx);
     garray_set_base(bptbl->retired, first_idx);
 
+    sbmtx_unlock(bptbl->mtx);
     return first_idx - base_idx;
 }
 
@@ -728,6 +752,26 @@ bptbl_frame_idx(bptbl_t *bptbl)
     return bptbl->n_frame;
 }
 
+int
+bptbl_active_sf(bptbl_t *bptbl)
+{
+    if (bptbl->oldest_bp == NO_BP)
+        return 0;
+    else
+        return bptbl_ent(bptbl, bptbl->oldest_bp)->frame + 1;
+}
+
+int
+bptbl_wait(bptbl_t *bptbl, int timeout)
+{
+    int s = (timeout == -1) ? -1 : 0;
+    int rc;
+
+    if ((rc = sbevent_wait(bptbl->evt, s, timeout)) < 0)
+        return rc;
+    return 0;
+}
+
 bpidx_t
 bptbl_idx(bptbl_t *bptbl, bp_t *bpe)
 {
@@ -770,9 +814,13 @@ bptbl_ef_count(bptbl_t *bptbl, int frame_idx)
 void
 bptbl_set_rcscore(bptbl_t *bptbl, bp_t *bpe, int rc, int32 score)
 {
+    sbmtx_lock(bptbl->mtx);
     garray_ent(bptbl->rc, int32, bpe->s_idx + rc) = score;
+    sbmtx_unlock(bptbl->mtx);
 }
 
+/* FIXME: Ugh, potentially awful locking issues here, we should copy
+ * these instead... */
 int32 *
 bptbl_rcscores(bptbl_t *bptbl, bp_t *bpe)
 {
@@ -828,12 +876,18 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
     rcsize = bptbl_rcsize(bptbl, bpe);
     /* Allocate some space on the bptbl->bscore_stack for all of these triphones. */
     /* Expand the bss table if necessary. */
-    bss_head = garray_next_idx(bptbl->rc);
+    bss_head = be.s_idx;
+    /* NOTE: We assume only one thread ever adds to the rc table (and
+     * therefore garray_next_idx() stays the same) - we just need to
+     * protect pointer acceses to it so memory doesn't get moved
+     * around underneath us when another thread releases elements. */
+    sbmtx_lock(bptbl->mtx);
     garray_expand_to(bptbl->rc, bss_head + rcsize);
     bss = garray_ptr(bptbl->rc, int32, bss_head);
       for (i = 0; i < rcsize; ++i)
         *bss++ = WORST_SCORE;
     garray_ent(bptbl->rc, int32, bss_head + rc) = score;
+    sbmtx_unlock(bptbl->mtx);
 
     E_DEBUG(3,("Entered bp %d sf %d ef %d s_idx %d active_fr %d\n",
                bptbl_end_idx(bptbl) - 1,

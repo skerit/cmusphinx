@@ -3,10 +3,28 @@
 #include <time.h>
 
 #include <sphinxbase/strfuncs.h>
+#include <sphinxbase/sbthread.h>
 
 #include "pocketsphinx_internal.h"
 #include "bptbl.h"
 #include "test_macros.h"
+
+static int
+waiter(sbthread_t *th)
+{
+	bptbl_t *bptbl = sbthread_arg(th);
+
+	printf("Waiting thread started\n");
+	while (bptbl_wait(bptbl, -1) == 0) {
+		printf("Woken up with active_sf = %d\n",
+		       bptbl_active_sf(bptbl));
+		if (bptbl_active_frame(bptbl)
+		    == bptbl_frame_idx(bptbl))
+			break;
+	}
+	printf("Waiting thread exiting\n");
+	return 0;
+}
 
 int
 main(int argc, char *argv[])
@@ -14,6 +32,7 @@ main(int argc, char *argv[])
 	bin_mdef_t *mdef;
 	dict2pid_t *d2p;
 	dict_t *dict;
+	sbthread_t *thr;
 	cmd_ln_t *config;
 	ps_seg_t *seg;
 	bptbl_t *bptbl;
@@ -34,6 +53,8 @@ main(int argc, char *argv[])
 	d2p = dict2pid_build(mdef, dict);
 
 	bptbl = bptbl_init(d2p, 10, 10);
+	thr = sbthread_start(NULL, waiter, bptbl);
+	sleep(2);
 
 	/* Enter a few bps starting at frame zero. */
 	fi = bptbl_push_frame(bptbl, NO_BP);
@@ -168,6 +189,8 @@ main(int argc, char *argv[])
 	dict2pid_free(d2p);
 	dict_free(dict);
 	bin_mdef_free(mdef);
+	sbthread_wait(thr);
+	sbthread_free(thr);
 
 	return 0;
 }

@@ -49,6 +49,7 @@
 #include <sphinxbase/listelem_alloc.h>
 #include <sphinxbase/err.h>
 #include <sphinxbase/garray.h>
+#include <sphinxbase/sbthread.h>
 
 /* Local headers. */
 #include "pocketsphinx_internal.h"
@@ -87,6 +88,9 @@ typedef struct bptbl_s {
     garray_t *retired;   /**< Retired backpointer entries. */
     garray_t *ent;       /**< Active backpointer entries. */
     garray_t *rc;        /**< Right context scores for word exits. */
+    sbevent_t *evt;      /**< Event signalling newly retired entries. */
+    sbmtx_t *mtx;        /**< Mutex protecting retired entries (used
+                              to synchronize release operations) */
 
     int32 n_frame;       /**< Number of frames searched. */
     /**
@@ -102,7 +106,7 @@ typedef struct bptbl_s {
      * with starting frames before active_fr, and thus all
      * backpointers before active_fr can be retired, existing active
      * backpointers will still have starting frames before active_fr.
-     * However, no active backpointer has a starting frame before
+     * However, no active backpointer has a starting frame before this.
      */
     int32 oldest_bp;
     int32 dest_s_idx;        /**< bscorestack index corresponding to
@@ -227,6 +231,26 @@ bpidx_t bptbl_end_idx(bptbl_t *bptbl);
 bpidx_t bptbl_retired_idx(bptbl_t *bptbl);
 
 /**
+ * Obtain the index of the first active start frame.
+ *
+ * Although no new backpointers will be generated with starting frames
+ * before bptbl_active_fr(), and thus all backpointers before
+ * bptbl_active_fr() are retired, existing active backpointers will
+ * still have starting frames before bptbl_active_fr().  However, no
+ * active backpointer has a starting frame before this one.
+ */
+int bptbl_active_sf(bptbl_t *bptbl);
+
+/**
+ * Wait for new backpointers to be retired.
+ *
+ * This function should be called from a consumer thread.
+ *
+ * Returns 0 on success or <0 on timeout or error.
+ */
+int bptbl_wait(bptbl_t *bptbl, int timeout);
+
+/**
  * Obtain a pointer to the backpointer with a given index.
  */
 bp_t *bptbl_ent(bptbl_t *bptbl, bpidx_t bpidx);
@@ -278,8 +302,7 @@ void bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp);
  * regardless of word ID)
  * @return Newly allocated hypothesis string (free with ckd_free()).
  */
-char *
-bptbl_hyp(bptbl_t *bptbl, int32 *out_score, int32 finish_wid);
+char *bptbl_hyp(bptbl_t *bptbl, int32 *out_score, int32 finish_wid);
 
 /**
  * Construct a segmentation iterator from the best path in bptbl.
