@@ -227,7 +227,7 @@ build_fwdflat_wordlist(ngram_search_t *ngs)
     memset(ngs->frm_wordlist, 0, ngs->n_frame_alloc * sizeof(*ngs->frm_wordlist));
 
     /* Scan the backpointer table for all active words and record
-     * their exit frames. */
+     * their start frames. */
     for (i = 0, bp = ngs->bp_table; i < ngs->bpidx; i++, bp++) {
         sf = (bp->bp < 0) ? 0 : ngs->bp_table[bp->bp].frame + 1;
         ef = bp->frame;
@@ -286,6 +286,7 @@ build_fwdflat_wordlist(ngram_search_t *ngs)
     for (f = 0; f < ngs->n_frame; f++) {
         for (node = ngs->frm_wordlist[f]; node; node = node->next) {
             if (!bitvec_is_set(ngs->word_active, node->wid)) {
+                /* ??? */
                 bitvec_set(ngs->word_active, node->wid);
                 ngs->fwdflat_wordlist[nwd++] = node->wid;
             }
