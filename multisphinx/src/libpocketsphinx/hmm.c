@@ -178,31 +178,18 @@ hmm_dump(hmm_t * hmm,
 
 
 void
-hmm_clear_scores(hmm_t * h)
-{
-    int32 i;
-
-    hmm_in_score(h) = WORST_SCORE;
-    for (i = 1; i < hmm_n_emit_state(h); i++)
-        hmm_score(h, i) = WORST_SCORE;
-    hmm_out_score(h) = WORST_SCORE;
-
-    h->bestscore = WORST_SCORE;
-}
-
-void
 hmm_clear(hmm_t * h)
 {
     int32 i;
 
     hmm_in_score(h) = WORST_SCORE;
-    hmm_in_history(h) = -1;
+    hmm_in_history(h) = INT_MAX;
     for (i = 1; i < hmm_n_emit_state(h); i++) {
         hmm_score(h, i) = WORST_SCORE;
-        hmm_history(h, i) = -1;
+        hmm_history(h, i) = INT_MAX;
     }
     hmm_out_score(h) = WORST_SCORE;
-    hmm_out_history(h) = -1;
+    hmm_out_history(h) = INT_MAX;
 
     h->bestscore = WORST_SCORE;
     h->frame = -1;

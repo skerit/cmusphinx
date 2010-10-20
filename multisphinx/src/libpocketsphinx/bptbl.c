@@ -598,12 +598,12 @@ bptbl_finalize(bptbl_t *bptbl)
      * about that).  Do the same thing for bptbl_active_frame. */
     garray_reset_to(bptbl->ent, bptbl_end_idx(bptbl));
     garray_reset_to(bptbl->ef_idx, bptbl->n_frame);
-    E_INFO("Retired %d bps: now %d retired, %d active, first_active_sf %d\n",
-           n_retired,
-           bptbl_retired_idx(bptbl),
-           bptbl_end_idx(bptbl) - bptbl_active_idx(bptbl),
-           bptbl->oldest_bp == NO_BP
-           ? 0 : garray_ent(bptbl->retired, bp_t, bptbl->oldest_bp).frame + 1);
+    E_DEBUG(2,("Retired %d bps: now %d retired, %d active, first_active_sf %d\n",
+               n_retired,
+               bptbl_retired_idx(bptbl),
+               bptbl_end_idx(bptbl) - bptbl_active_idx(bptbl),
+               bptbl->oldest_bp == NO_BP
+               ? 0 : garray_ent(bptbl->retired, bp_t, bptbl->oldest_bp).frame + 1));
     E_INFO("Allocated %d active and %d retired entries (%d + %d KiB)\n",
            garray_alloc_size(bptbl->ent),
            garray_alloc_size(bptbl->retired),

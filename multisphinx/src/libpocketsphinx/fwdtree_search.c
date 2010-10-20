@@ -705,8 +705,71 @@ update_oldest_bp(fwdtree_search_t *fts, hmm_t *hmm)
 
 /*
  * Mark the active senones for all senones belonging to channels that are active in the
- * current frame.
+ * current frame, and update the oldest backpointer entry.
  */
+#define MPX_BITVEC_SET(a,h,i)                                   \
+    if (hmm_mpx_ssid(h,i) != BAD_SSID) {                        \
+        bitvec_set((a)->senone_active_vec, hmm_mpx_senid(h,i)); \
+        if (hmm_history(h,i) < fts->oldest_bp)                  \
+            fts->oldest_bp = hmm_history(h,i);                  \
+    }
+
+static void
+fwdtree_activate_mpx_hmm(fwdtree_search_t *fts, hmm_t *hmm)
+{
+    acmod_t *acmod = ps_search_acmod(fts);
+    int i;
+
+    switch (hmm_n_emit_state(hmm)) {
+    case 5:
+        MPX_BITVEC_SET(acmod, hmm, 4);
+        MPX_BITVEC_SET(acmod, hmm, 3);
+    case 3:
+        MPX_BITVEC_SET(acmod, hmm, 2);
+        MPX_BITVEC_SET(acmod, hmm, 1);
+        MPX_BITVEC_SET(acmod, hmm, 0);
+        break;
+    default:
+        for (i = 0; i < hmm_n_emit_state(hmm); ++i) {
+            MPX_BITVEC_SET(acmod, hmm, i);
+        }
+    }
+    if (hmm_out_score(hmm) BETTER_THAN WORST_SCORE)
+        if (hmm_out_history(hmm) < fts->oldest_bp)
+            fts->oldest_bp = hmm_out_history(hmm);
+}
+
+#define NONMPX_BITVEC_SET(a,h,i)                                        \
+    bitvec_set((a)->senone_active_vec,                                  \
+               hmm_nonmpx_senid(h,i));                                  \
+    if (hmm_history(h,i) < fts->oldest_bp)                              \
+        fts->oldest_bp = hmm_history(h,i);                              \
+
+static void
+fwdtree_activate_hmm(fwdtree_search_t *fts, hmm_t *hmm)
+{
+    acmod_t *acmod = ps_search_acmod(fts);
+    int i;
+
+    switch (hmm_n_emit_state(hmm)) {
+    case 5:
+        NONMPX_BITVEC_SET(acmod, hmm, 4);
+        NONMPX_BITVEC_SET(acmod, hmm, 3);
+    case 3:
+        NONMPX_BITVEC_SET(acmod, hmm, 2);
+        NONMPX_BITVEC_SET(acmod, hmm, 1);
+        NONMPX_BITVEC_SET(acmod, hmm, 0);
+        break;
+    default:
+        for (i = 0; i < hmm_n_emit_state(hmm); ++i) {
+            NONMPX_BITVEC_SET(acmod, hmm, i);
+        }
+    }
+    if (hmm_out_score(hmm) BETTER_THAN WORST_SCORE)
+        if (hmm_out_history(hmm) < fts->oldest_bp)
+            fts->oldest_bp = hmm_out_history(hmm);
+}
+
 static void
 compute_sen_active(fwdtree_search_t *fts, int frame_idx)
 {
@@ -719,19 +782,15 @@ compute_sen_active(fwdtree_search_t *fts, int frame_idx)
 
     /* Flag active senones for root channels */
     for (i = fts->n_root_chan, rhmm = fts->root_chan; i > 0; --i, rhmm++) {
-        if (hmm_frame(&rhmm->hmm) == frame_idx) {
-            acmod_activate_hmm(ps_search_acmod(fts), &rhmm->hmm);
-            update_oldest_bp(fts, &rhmm->hmm);
-        }
+        if (hmm_frame(&rhmm->hmm) == frame_idx)
+            fwdtree_activate_mpx_hmm(fts, &rhmm->hmm);
     }
 
     /* Flag active senones for nonroot channels in HMM tree */
     i = fts->n_active_chan[frame_idx & 0x1];
     acl = fts->active_chan_list[frame_idx & 0x1];
-    for (hmm = *(acl++); i > 0; --i, hmm = *(acl++)) {
-        acmod_activate_hmm(ps_search_acmod(fts), &hmm->hmm);
-        update_oldest_bp(fts, &hmm->hmm);
-    }
+    for (hmm = *(acl++); i > 0; --i, hmm = *(acl++))
+        fwdtree_activate_hmm(fts, &hmm->hmm);
 
     /* Flag active senones for individual word channels */
     /* These are the only ones that can actually generate new backpointers. */
@@ -739,7 +798,7 @@ compute_sen_active(fwdtree_search_t *fts, int frame_idx)
     awl = fts->active_word_list[frame_idx & 0x1];
     for (w = *(awl++); i > 0; --i, w = *(awl++)) {
         for (hmm = fts->word_chan[w]; hmm; hmm = hmm->next) {
-            acmod_activate_hmm(ps_search_acmod(fts), &hmm->hmm);
+            fwdtree_activate_hmm(fts, &hmm->hmm);
             update_oldest_bp(fts, &hmm->hmm);
         }
     }
@@ -748,7 +807,7 @@ compute_sen_active(fwdtree_search_t *fts, int frame_idx)
         rhmm = (root_node_t *) fts->word_chan[w];
 
         if (hmm_frame(&rhmm->hmm) == frame_idx) {
-            acmod_activate_hmm(ps_search_acmod(fts), &rhmm->hmm);
+            fwdtree_activate_mpx_hmm(fts, &rhmm->hmm);
             update_oldest_bp(fts, &rhmm->hmm);
         }
     }
@@ -1043,7 +1102,7 @@ prune_nonroot_chan(fwdtree_search_t *fts, int frame_idx)
             }
         }
         else if (hmm_frame(&hmm->hmm) != nf) {
-            hmm_clear_scores(&hmm->hmm);
+            hmm_clear(&hmm->hmm);
         }
     }
     fts->n_active_chan[nf & 0x1] = nacl - fts->active_chan_list[nf & 0x1];
@@ -1317,7 +1376,7 @@ prune_word_chan(fwdtree_search_t *fts, int frame_idx)
                 if (rhmm->ciphone == ps_search_acmod(fts)->mdef->sil
                     && too_old_too_cold(fts, hmm_out_history(&rhmm->hmm),
                                         frame_idx))
-                    hmm_clear_scores(&rhmm->hmm);
+                    hmm_clear(&rhmm->hmm);
             }
         }
     }
@@ -1648,7 +1707,7 @@ deactivate_channels(fwdtree_search_t *fts, int frame_idx)
     /* Clear score[] of pruned root channels */
     for (i = fts->n_root_chan, rhmm = fts->root_chan; i > 0; --i, rhmm++) {
         if (hmm_frame(&rhmm->hmm) == frame_idx) {
-            hmm_clear_scores(&rhmm->hmm);
+            hmm_clear(&rhmm->hmm);
         }
     }
     /* Clear score[] of pruned single-phone channels */
@@ -1656,7 +1715,7 @@ deactivate_channels(fwdtree_search_t *fts, int frame_idx)
         int32 w = fts->single_phone_wid[i];
         rhmm = (root_node_t *) fts->word_chan[w];
         if (hmm_frame(&rhmm->hmm) == frame_idx) {
-            hmm_clear_scores(&rhmm->hmm);
+            hmm_clear(&rhmm->hmm);
         }
     }
 }

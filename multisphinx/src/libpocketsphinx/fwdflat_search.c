@@ -647,7 +647,7 @@ fwdflat_prune_chan(fwdflat_search_t *ffs, int frame_idx)
                 }
                 /* Zero out inactive HMMs. */
                 else if (hmm_frame(&hmm->hmm) != nf) {
-                    hmm_clear_scores(&hmm->hmm);
+                    hmm_clear(&hmm->hmm);
                 }
             }
         }
@@ -778,7 +778,7 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
     for (w = *(awl++); i > 0; --i, w = *(awl++)) {
         rhmm = (first_node_t *) ffs->word_chan[w];
         if (hmm_frame(&rhmm->hmm) == cf) {
-            hmm_clear_scores(&rhmm->hmm);
+            hmm_clear(&rhmm->hmm);
         }
     }
 }
