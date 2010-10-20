@@ -301,8 +301,6 @@ typedef struct fwdtree_search_s {
     int32 wbeam;
     int32 lpbeam;
     int32 lponlybeam;
-    int32 fwdflatbeam;
-    int32 fwdflatwbeam;
     int32 fillpen;
     int32 silpen;
     int32 wip;

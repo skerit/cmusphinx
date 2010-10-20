@@ -48,34 +48,117 @@
 #include "ngram_search.h"
 
 /**
- * Initialize N-Gram search for fwdflat decoding.
+ * Phone HMM data type.
+ *
+ * Not the first HMM for words, which multiplex HMMs based on
+ * different left contexts.  This structure is used both in the
+ * dynamic HMM tree structure and in the per-word last-phone right
+ * context fanout.
  */
-void ngram_fwdflat_init(ngram_search_t *ngs);
+typedef struct internal_node_s {
+    hmm_t hmm;                  /**< Basic HMM structure.  This *must*
+                                   be first in the structure because
+                                   internal_node_t and first_node_t are
+                                   sometimes used interchangeably */
+    struct internal_node_s *next;/**< first descendant of this channel; or, in the
+				   case of the last phone of a word, the next
+				   alternative right context channel */
+    struct internal_node_s *alt;	/**< sibling; i.e., next descendant of parent HMM */
+
+    int32    ciphone;		/**< ciphone for this node */
+    union {
+	int32 penult_phn_wid;	/**< list of words whose last phone follows this one;
+				   this field indicates the first of the list; the
+				   rest must be built up in a separate array.  Used
+				   only within HMM tree.  -1 if none */
+	int32 rc_id;		/**< right-context id for last phone of words */
+    } info;
+} internal_node_t;
 
 /**
- * Release memory associated with fwdflat decoding.
+ * Lexical tree node data type for the first phone (first) of each word HMM.
+ *
+ * Each state may have a different parent static HMM.  Most fields are
+ * similar to those in internal_node_t.
  */
-void ngram_fwdflat_deinit(ngram_search_t *ngs);
+typedef struct first_node_s {
+    hmm_t hmm;                  /**< Basic HMM structure.  This *must* be first in
+                                   the structure because internal_node_t and first_node_t are
+                                   sometimes used interchangeably. */
+    internal_node_t *next;	/**< first descendant of this channel */
+
+    int16    ciphone;		/**< first ciphone of this node; all words firsted at this
+				   node begin with this ciphone */
+    int16    ci2phone;		/**< second ciphone of this node; one first HMM for each
+                                   unique right context */
+} first_node_t;
 
 /**
- * Rebuild search structures for updated language models.
+ * Word loop-based forward search.
  */
-int ngram_fwdflat_reinit(ngram_search_t *ngs);
+typedef struct fwdflat_search_s {
+    ps_search_t base;
+    ngram_model_t *lmset;
+    hmm_context_t *hmmctx;
+
+    listelem_alloc_t *chan_alloc;      /**< For internal_node_t */
+    listelem_alloc_t *root_chan_alloc; /**< For first_node_t */
+
+    int32 *fwdflat_wordlist;    /**< List of active word IDs for utterance. */
+    bitvec_t *expand_word_flag;
+    int32 *expand_word_list;
+    int32 n_expand_words;
+
+    /**
+     * Backpointer table (temporary storage for active word arcs).
+     */
+    bptbl_t *bptbl;
+    int32 oldest_bp; /**< Oldest bptable entry active in decoding graph. */
+
+    /**
+     * First HMMs for multiple-phone words.
+     */
+    first_node_t **word_chan;
+    first_node_t *rhmm_1ph;   /**< First HMMs for single-phone words */
+    bitvec_t *word_active;    /**< array of active flags for all words. */
+    int32 n_1ph_words;        /**< Number single phone words in dict (total) */
+
+    /**
+     * Array of active multi-phone words for current and next frame.
+     *
+     * Similarly to active_chan_list, active_word_list[f mod 2] = list
+     * of word ids for which active channels exist in word_chan in
+     * frame f.
+     *
+     * Statically allocated single-phone words are always active and
+     * should not appear in this list.
+     */
+    int32 **active_word_list;
+    int32 n_active_word[2]; /**< Number entries in active_word_list */
+
+    int32 best_score; /**< Best Viterbi path score. */
+    int32 renormalized; /**< renormalized? (FIXME: allow multiple renorms) */
+
+    ngram_search_stats_t st; /**< Various statistics for profiling. */
+
+    /* A children's treasury of beam widths. */
+    int32 fwdflatbeam;
+    int32 fwdflatwbeam;
+    int32 fillpen;
+    int32 silpen;
+    int32 pip;
+    int32 min_ef_width;
+    int32 max_sf_win;
+
+    /** Are we done? */
+    int done;
+} fwdflat_search_t;
 
 /**
- * Start fwdflat decoding for an utterance.
+ * Initialize fwdflat search.
  */
-void ngram_fwdflat_start(ngram_search_t *ngs);
-
-/**
- * Search one frame forward in an utterance.
- */
-int ngram_fwdflat_search(ngram_search_t *ngs, int frame_idx);
-
-/**
- * Finish fwdflat decoding for an utterance.
- */
-void ngram_fwdflat_finish(ngram_search_t *ngs);
+ps_search_t *fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
+                                 dict_t *dict, dict2pid_t *d2p);
 
 
 #endif /* __NGRAM_SEARCH_FWDFLAT_H__ */

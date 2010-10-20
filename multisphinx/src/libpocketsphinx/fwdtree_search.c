@@ -82,7 +82,7 @@ static ps_searchfuncs_t fwdtree_funcs = {
     /* seg_iter: */ fwdtree_search_seg_iter,
 };
 
-void fwdtree_search_free_all_rc(fwdtree_search_t *fts, int32 w);
+static void fwdtree_search_free_all_rc(fwdtree_search_t *fts, int32 w);
 static void fwdtree_search_save_bp(fwdtree_search_t *fts, int frame_idx,
                                    int32 w, int32 score, int32 path, int32 rc);
 static void fwdtree_search_alloc_all_rc(fwdtree_search_t *fts, int32 w);
@@ -139,8 +139,6 @@ fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
     /* Allocate a billion different tables for stuff. */
     fts->word_chan = ckd_calloc(dict_size(dict),
                                 sizeof(*fts->word_chan));
-    fts->zeroPermTab = ckd_calloc(bin_mdef_n_ciphone(acmod->mdef),
-                                  sizeof(*fts->zeroPermTab));
     fts->word_active = bitvec_alloc(dict_size(dict));
     fts->last_ltrans = ckd_calloc(dict_size(dict),
                                   sizeof(*fts->last_ltrans));
@@ -236,8 +234,6 @@ fwdtree_search_calc_beams(fwdtree_search_t *fts)
     fts->pbeam = logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-pbeam"));
     fts->lpbeam = logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-lpbeam"));
     fts->lponlybeam = logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-lponlybeam"));
-    fts->fwdflatbeam = logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-fwdflatbeam"));
-    fts->fwdflatwbeam = logmath_log(acmod->lmath, cmd_ln_float64_r(config, "-fwdflatwbeam"));
 
     /* Absolute pruning parameters. */
     fts->maxwpf = cmd_ln_int32_r(config, "-maxwpf");
@@ -623,7 +619,6 @@ fwdtree_search_free(ps_search_t *base)
     ngram_model_free(fts->lmset);
 
     ckd_free(fts->word_chan);
-    ckd_free(fts->zeroPermTab);
     bitvec_free(fts->word_active);
     bptbl_free(fts->bptbl);
     ckd_free_2d(fts->active_word_list);
@@ -646,12 +641,18 @@ fwdtree_search_reinit(ps_search_t *base, dict_t *dict, dict2pid_t *d2p)
         ckd_free(fts->word_active);
         ckd_free(fts->last_ltrans);
         ckd_free_2d(fts->active_word_list);
+        ckd_free(fts->lastphn_cand);
+        ckd_free(fts->word_chan);
         fts->bptbl->word_idx = ckd_calloc(base->n_words, sizeof(*fts->bptbl->word_idx));
         fts->word_active = bitvec_alloc(base->n_words);
         fts->last_ltrans = ckd_calloc(base->n_words, sizeof(*fts->last_ltrans));
         fts->active_word_list
             = ckd_calloc_2d(2, base->n_words,
                             sizeof(**fts->active_word_list));
+        fts->lastphn_cand = ckd_calloc(ps_search_n_words(fts),
+                                       sizeof(*fts->lastphn_cand));
+        fts->word_chan = ckd_calloc(ps_search_n_words(fts),
+                                    sizeof(*fts->word_chan));
     }
     /* Free old dict2pid, dict */
     ps_search_base_reinit(base, dict, d2p);
@@ -664,13 +665,7 @@ fwdtree_search_reinit(ps_search_t *base, dict_t *dict, dict2pid_t *d2p)
     reinit_search_tree(fts);
     /* Free the search tree. */
     deinit_search_tree(fts);
-    /* Reallocate thifts that depend on the number of words. */
-    ckd_free(fts->lastphn_cand);
-    fts->lastphn_cand = ckd_calloc(ps_search_n_words(fts),
-                                   sizeof(*fts->lastphn_cand));
-    ckd_free(fts->word_chan);
-    fts->word_chan = ckd_calloc(ps_search_n_words(fts),
-                                sizeof(*fts->word_chan));
+
     /* Rebuild the search tree. */
     init_search_tree(fts);
     create_search_tree(fts);
@@ -1919,7 +1914,7 @@ fwdtree_search_exit_score(fwdtree_search_t *fts, bp_t *pbe, int rcphone)
     }
 }
 
-void
+static void
 fwdtree_search_free_all_rc(fwdtree_search_t *fts, int32 w)
 {
     nonroot_node_t *hmm, *thmm;
