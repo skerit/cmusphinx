@@ -14,6 +14,7 @@ main(int argc, char *argv[])
 	bptbl_t *bptbl;
 	bp_t *bp;
 	int fi;
+	int i;
 
 	/* Get the API to initialize a bunch of stuff for us (but not the search). */
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
@@ -105,6 +106,11 @@ main(int argc, char *argv[])
 	fi = bptbl_push_frame(bptbl, 5);
 	TEST_ASSERT(fi == 6);
 	dump_bptable(bptbl);
+
+	/* Now add a bunch of stuff to see what happens. */
+	for (i = 0; i < 6; ++i) {
+		bp = bptbl_enter(bptbl, 42, 5, 6 + i, 0);
+	}
 
 	bptbl_free(bptbl);
 	ps_free(ps);

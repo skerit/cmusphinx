@@ -602,9 +602,9 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
     }
 
     /* Expand the backpointer tables if necessary. */
-    if (bptbl->n_ent >= bptbl->n_ent_alloc) {
+    if (bptbl->n_ent - bptbl->ef_idx[0] >= bptbl->n_ent_alloc) {
         bptbl->n_ent_alloc *= 2;
-        assert(bptbl->n_ent < bptbl->n_ent_alloc);
+        assert(bptbl->n_ent + bptbl->ef_idx[0] < bptbl->n_ent_alloc);
         bptbl->ent = ckd_realloc(bptbl->ent,
                                  bptbl->n_ent_alloc
                                  * sizeof(*bptbl->ent));
