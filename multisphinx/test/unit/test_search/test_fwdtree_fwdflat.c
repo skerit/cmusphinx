@@ -46,13 +46,13 @@ main(int argc, char *argv[])
 		E_FATAL("Failed to read mfc file\n");
 	ps_search_start(fwdtree);
 	ps_search_start(fwdflat);
-	for (i = 20; i < 200; ++i) {
+	/* Turn this on for now so that we can pass arbitrary frames to fwdflat. */
+	acmod_set_grow(acmod, TRUE);
+	for (i = 0; i < 200; ++i) {
 		acmod_process_feat(acmod, feat[i]);
-		while (acmod->n_feat_frame > 0) {
-			ps_search_step(fwdtree, acmod->output_frame);
-			ps_search_step(fwdflat, acmod->output_frame);
-			acmod_advance(acmod);
-		}
+		ps_search_step(fwdtree, acmod->output_frame);
+		ps_search_step(fwdflat, acmod->output_frame);
+		acmod_advance(acmod);
 	}
 	ps_search_finish(fwdtree);
 	hyp = ps_search_hyp(fwdtree, &score);
