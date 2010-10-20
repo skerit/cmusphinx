@@ -39,7 +39,7 @@ main(int argc, char *argv[])
 	cmd_ln_set_str_r(config, "-lm", TESTDATADIR "/hub4.5000.DMP");
 	fwdtree = fwdtree_search_init(config, acmod, ps->dict, ps->d2p);
 	fwdflat = fwdflat_search_init(config, acmod2, ps->dict, ps->d2p,
-				      NULL); //((fwdtree_search_t *)fwdtree)->bptbl);
+				      ((fwdtree_search_t *)fwdtree)->bptbl);
 
 	nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
 			      ".mfc", 0, -1, NULL, -1);
@@ -63,6 +63,13 @@ main(int argc, char *argv[])
 	hyp = ps_search_hyp(fwdtree, &score);
 	printf("fwdtree: %s (%d)\n", hyp, score);
 
+	while (fffr < 200) {
+		fffr += acmod_process_feat(acmod2, feat[fffr]);
+		if ((nfr = ps_search_step(fwdflat)) <= 0)
+			break;
+		E_INFO("i %d fffr %d fwdflat nfr %d\n",
+		       i, fffr, nfr);
+	}
 	ps_search_finish(fwdflat);
 	hyp = ps_search_hyp(fwdflat, &score);
 	printf("fwdflat: %s (%d)\n", hyp, score);

@@ -928,7 +928,7 @@ fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
 {
     fwdflat_arc_t *arc_start, *arc_end, *arc;
 
-    E_INFO("Expanding arcs from %d to %d\n", sf, ef);
+    //E_INFO("Expanding arcs from %d to %d\n", sf, ef);
     arc_start = fwdflat_arc_buffer_iter(ffs->input_arcs, sf);
     arc_end = fwdflat_arc_buffer_iter(ffs->input_arcs, ef);
     memset(ffs->input_words, 0, ps_search_n_words(ffs) * sizeof(*ffs->input_words));
@@ -936,7 +936,7 @@ fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
          arc = fwdflat_arc_next(ffs->input_arcs, arc)) {
         ++ffs->input_words[arc->wid];
     }
-    fwdflat_dump_active_words(ffs);
+    //fwdflat_dump_active_words(ffs);
     return 0;
 }
 
@@ -945,7 +945,7 @@ fwdflat_search_step(ps_search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
     acmod_t *acmod = ps_search_acmod(ffs);
-    int frame_idx, nfr;
+    int frame_idx, nfr, k;
 
     if ((nfr = acmod_available(acmod)) <= 0)
         return nfr;
@@ -979,19 +979,21 @@ fwdflat_search_step(ps_search_t *base)
          * future.
          */
         E_INFO("Looking for arcs in frame %d\n", frame_idx + ffs->max_sf_win - 1);
-        if (fwdflat_arc_buffer_iter(ffs->input_arcs,
-                                    frame_idx + ffs->max_sf_win - 1) != NULL) {
+        nfr = 0;
+        while (fwdflat_arc_buffer_iter(ffs->input_arcs,
+                                       frame_idx + ffs->max_sf_win - 1) != NULL) {
             fwdflat_search_expand_arcs(ffs, frame_idx, frame_idx + ffs->max_sf_win);
             E_INFO("Searching frame %d\n", frame_idx);
-            return fwdflat_search_one_frame(ffs);
+            if ((k = fwdflat_search_one_frame(ffs)) <= 0)
+                break;
+            frame_idx += k;
+            nfr += k;
         }
-        else
-            return 0;
+        return nfr;
     }
     else {
-        int nfr, k;
-
         nfr = 0;
+        E_INFO("Searching frame %d\n", frame_idx);
         while ((k = fwdflat_search_one_frame(ffs)) > 0) {
             nfr += k;
         }
@@ -1006,7 +1008,7 @@ fwdflat_search_finish(ps_search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
     acmod_t *acmod = ps_search_acmod(ffs);
-    int32 cf, next_sf, frame_idx, narc;
+    int32 cf, next_sf, frame_idx, narc, k;
     
     bitvec_clear_all(ffs->word_active, ps_search_n_words(ffs));
 
@@ -1030,23 +1032,25 @@ fwdflat_search_finish(ps_search_t *base)
                                           0, ffs->input_bptbl->first_invert_bp);
         fwdflat_arc_buffer_commit(ffs->input_arcs);
         E_INFO("narc %d\n", narc);
-        E_INFO("Final input bptbl:\n");
-        bptbl_dump(ffs->input_bptbl);
-        E_INFO("Final arc buffer:\n");
-        fwdflat_arc_buffer_dump(ffs->input_arcs);
+        //E_INFO("Final input bptbl:\n");
+        //bptbl_dump(ffs->input_bptbl);
+        //E_INFO("Final arc buffer:\n");
+        //fwdflat_arc_buffer_dump(ffs->input_arcs);
         /* Step through all remaining frames. */
         E_INFO("Looking for arcs in frame %d\n", frame_idx + ffs->max_sf_win - 1);
         while (fwdflat_arc_buffer_iter(ffs->input_arcs,
                                        frame_idx + ffs->max_sf_win - 1) != NULL) {
             fwdflat_search_expand_arcs(ffs, frame_idx, frame_idx + ffs->max_sf_win);
             E_INFO("Searching frame %d\n", frame_idx);
-            fwdflat_search_one_frame(ffs);
-            ++frame_idx;
+            if ((k = fwdflat_search_one_frame(ffs)) <= 0)
+                break;
+            frame_idx += k;
         }
         while (frame_idx < cf) {
             E_INFO("Searching frame %d\n", frame_idx);
-            fwdflat_search_one_frame(ffs);
-            ++frame_idx;
+            if ((k = fwdflat_search_one_frame(ffs)) <= 0)
+                break;
+            frame_idx += k;
         }
     }
 
