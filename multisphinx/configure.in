@@ -1,0 +1,109 @@
+AC_INIT(multisphinx, 0.0)
+AC_CONFIG_HEADERS([include/config.h include/sphinx_config.h])
+AM_INIT_AUTOMAKE([no-define])
+AC_CONFIG_MACRO_DIR([m4])
+
+CFLAGS=${CFLAGS:--g -O2 -Wall}
+
+AC_CANONICAL_HOST
+AC_PROG_CC
+AM_PROG_LIBTOOL
+AM_PROG_LEX
+AC_PROG_YACC
+AC_C_BIGENDIAN
+AC_CHECK_TYPES(long long)
+AC_CHECK_SIZEOF(long long)
+AC_CHECK_FUNCS([popen perror snprintf])
+AC_CHECK_HEADER(errno.h)
+AC_CHECK_FUNCS(dup2)
+AC_CHECK_LIB(m, log)
+AC_CHECK_LIB(pthread, pthread_create)
+AM_ICONV
+
+dnl
+dnl Check for pkgconfig
+dnl
+AC_CHECK_PROG(HAVE_PKGCONFIG, pkg-config, yes, no)
+
+dnl
+dnl Check for Doxygen, and build dox if present
+dnl
+AC_CHECK_PROG(HAVE_DOXYGEN, doxygen, yes, no)
+AM_CONDITIONAL(BUILD_DOXYGEN, test "x$HAVE_DOXYGEN" = "xyes")
+
+dnl
+dnl Enable debugging
+dnl
+AC_ARG_ENABLE(debug,
+	AS_HELP_STRING([--enable-debug],
+			[Enable debugging output]),
+	AC_DEFINE(SPHINX_DEBUG, [],
+	          [Enable debugging output]))
+
+dnl
+dnl Check for Python, and build python module if present
+dnl
+use_python=true
+PYTHON=python
+AC_ARG_WITH(python,
+	AS_HELP_STRING([--without-python],
+		       [Disable Python extension]),[
+if test x$withval = xno; then
+   use_python=false
+   PYTHON=bogus
+elif test x$withval = xyes; then
+   # No specific python binary was given, so check for it in PATH
+   use_python=true
+   PYTHON=python
+else
+   # A python was given, assume it is in the user's PATH or is fully qualified
+   use_python=true
+   PYTHON="$withval"
+   PYTHON_CONFIG="$withval"-config
+fi
+])
+if test "x$use_python" = xtrue -a "x$PYTHON" = xpython; then
+   AC_PATH_PROG(PYTHON, python, bogus)
+   AC_PATH_PROG(PYTHON_CONFIG, python-config, bogus)
+fi
+if test "x$use_python" = xtrue -a "x$PYTHON" != xbogus -a "x$PYTHON_CONFIG" != xbogus; then
+    PYTHON_INCLUDES=`"$PYTHON_CONFIG" --includes` 
+    CPPFLAGS="$CPPFLAGS $PYTHON_INCLUDES"
+    AC_CHECK_HEADER(Python.h,use_python=true,use_python=false)
+else
+    use_python=false
+    PYTHON=bogus
+fi
+if test "x$use_python" != xtrue ; then
+    AC_WARN([Disabling python since development headers were not found])
+fi
+AM_CONDITIONAL(BUILD_PYTHON, test "x$use_python" = "xtrue")
+AC_SUBST(PYTHON)
+
+dnl
+dnl Check for Cython, and rebuild python module if present
+dnl
+if test "x$PYTHON" != "xbogus"; then
+   AC_CHECK_PROG(HAVE_CYTHON, cython, yes, no)
+fi
+AM_CONDITIONAL(BUILD_CYTHON, test "x$HAVE_CYTHON" = "xyes")
+
+
+AC_OUTPUT([
+multisphinx.pc
+Makefile
+include/Makefile
+include/sphinxbase/Makefile
+python/Makefile
+python/setup.py
+src/Makefile
+src/libsphinxbase/Makefile
+src/libsphinxbase/util/Makefile
+src/libsphinxbase/feat/Makefile
+src/libsphinxbase/fe/Makefile
+src/libsphinxbase/lm/Makefile
+src/libpocketsphinx/Makefile
+src/programs/Makefile
+doc/Makefile
+doc/doxyfile
+])
