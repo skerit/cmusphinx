@@ -638,14 +638,14 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
 
     sbmtx_lock(bptbl->mtx);
     if (first_idx > bptbl_retired_idx(bptbl)) {
-        E_INFO("%d outside retired, releasing up to %d\n",
-               first_idx, bptbl_retired_idx(bptbl));
+        E_DEBUG(2, ("%d outside retired, releasing up to %d\n",
+                    first_idx, bptbl_retired_idx(bptbl)));
         first_idx = bptbl_retired_idx(bptbl);
     }
 
     base_idx = garray_base(bptbl->retired);
-    E_INFO("Releasing bptrs from %d to %d\n",
-           base_idx, first_idx);
+    E_DEBUG(2, ("Releasing bptrs from %d to %d\n",
+                base_idx, first_idx));
     if (first_idx < base_idx) {
         sbmtx_unlock(bptbl->mtx);
         return 0;

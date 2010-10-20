@@ -172,6 +172,7 @@ ngram_model_set_init(cmd_ln_t *config,
     }
     /* Allocate the history mapping table. */
     model->maphist = ckd_calloc(n - 1, sizeof(*model->maphist));
+    model->mtx = sbmtx_init();
 
     /* Now build the word-ID mapping and merged vocabulary. */
     build_widmap(base, lmath, n);
@@ -691,6 +692,7 @@ ngram_model_set_score(ngram_model_t *base, int32 wid,
     if (n_hist > base->n - 1)
         n_hist = base->n - 1;
 
+    sbmtx_lock(set->mtx);
     /* Interpolate if there is no current. */
     if (set->cur == -1) {
         score = base->log_zero;
@@ -723,6 +725,7 @@ ngram_model_set_score(ngram_model_t *base, int32 wid,
         score = ngram_ng_score(set->lms[set->cur],
                                mapwid, set->maphist, n_hist, n_used);
     }
+    sbmtx_unlock(set->mtx);
 
     return score;
 }
@@ -847,6 +850,7 @@ ngram_model_set_free(ngram_model_t *base)
     ckd_free(set->names);
     ckd_free(set->lweights);
     ckd_free(set->maphist);
+    sbmtx_free(set->mtx);
     ckd_free_2d((void **)set->widmap);
 }
 
