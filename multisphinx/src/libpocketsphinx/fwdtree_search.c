@@ -95,7 +95,6 @@ static void create_search_tree(fwdtree_search_t *fts);
 static void reinit_search_subtree(fwdtree_search_t *fts, nonroot_node_t * hmm);
 static void reinit_search_tree(fwdtree_search_t *fts);
 static void deinit_search_tree(fwdtree_search_t *fts);
-static int32 update_oldest_bp(fwdtree_search_t *fts, hmm_t *hmm);
 static void deactivate_channels(fwdtree_search_t *fts, int frame_idx);
 static void word_transition(fwdtree_search_t *fts, int frame_idx);
 static void prune_channels(fwdtree_search_t *fts, int frame_idx);
@@ -694,22 +693,6 @@ fwdtree_search_start(ps_search_t *base)
     return 0;
 }
 
-static int32
-update_oldest_bp(fwdtree_search_t *fts, hmm_t *hmm)
-{
-    int j;
-
-    for (j = 0; j < hmm->n_emit_state; ++j)
-        if (hmm_score(hmm, j) BETTER_THAN WORST_SCORE)
-            if (hmm_history(hmm, j) < fts->oldest_bp)
-                fts->oldest_bp = hmm_history(hmm, j);
-    if (hmm_out_score(hmm) BETTER_THAN WORST_SCORE)
-        if (hmm_out_history(hmm) < fts->oldest_bp)
-            fts->oldest_bp = hmm_out_history(hmm);
-
-    return fts->oldest_bp;
-}
-
 /*
  * Mark the active senones for all senones belonging to channels that are active in the
  * current frame, and update the oldest backpointer entry.
@@ -804,19 +787,15 @@ compute_sen_active(fwdtree_search_t *fts, int frame_idx)
     i = fts->n_active_word[frame_idx & 0x1];
     awl = fts->active_word_list[frame_idx & 0x1];
     for (w = *(awl++); i > 0; --i, w = *(awl++)) {
-        for (hmm = fts->word_chan[w]; hmm; hmm = hmm->next) {
+        for (hmm = fts->word_chan[w]; hmm; hmm = hmm->next)
             fwdtree_activate_hmm(fts, &hmm->hmm);
-            update_oldest_bp(fts, &hmm->hmm);
-        }
     }
     for (i = 0; i < fts->n_1ph_words; i++) {
         w = fts->single_phone_wid[i];
         rhmm = (root_node_t *) fts->word_chan[w];
 
-        if (hmm_frame(&rhmm->hmm) == frame_idx) {
+        if (hmm_frame(&rhmm->hmm) == frame_idx)
             fwdtree_activate_mpx_hmm(fts, &rhmm->hmm);
-            update_oldest_bp(fts, &rhmm->hmm);
-        }
     }
 }
 
