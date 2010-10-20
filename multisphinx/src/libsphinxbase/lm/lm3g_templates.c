@@ -167,6 +167,7 @@ lm3g_tg_score(NGRAM_MODEL_TYPE *model, int32 lw1,
     if ((base->n < 3) || (lw1 < 0) || (lw2 < 0))
         return (lm3g_bg_score(model, lw2, lw3, n_used));
 
+    sbmtx_lock(model->lm3g.tginfo_mtx);
     prev_tginfo = NULL;
     for (tginfo = model->lm3g.tginfo[lw2]; tginfo; tginfo = tginfo->next) {
         if (tginfo->w1 == lw1)
@@ -197,6 +198,7 @@ lm3g_tg_score(NGRAM_MODEL_TYPE *model, int32 lw1,
     else {
         score = tginfo->bowt + lm3g_bg_score(model, lw2, lw3, n_used);
     }
+    sbmtx_unlock(model->lm3g.tginfo_mtx);
 
     return (score);
 }

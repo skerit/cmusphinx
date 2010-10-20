@@ -290,6 +290,7 @@ ngram_model_dmp_read(cmd_ln_t *config,
     E_INFO("%8d = LM.bigrams(+trailer) read\n", n_bigram);
 
     /* read trigrams */
+    model->lm3g.tginfo_mtx = sbmtx_init();
     if (n_trigram > 0) {
         if (do_mmap) {
             model->lm3g.trigrams = (trigram_t *) (map_base + offset);
@@ -942,6 +943,7 @@ ngram_model_dmp_free(ngram_model_t *base)
     }
 
     lm3g_tginfo_free(base, &model->lm3g);
+    sbmtx_free(model->lm3g.tginfo_mtx);
 }
 
 static ngram_funcs_t ngram_model_dmp_funcs = {

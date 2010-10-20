@@ -45,6 +45,7 @@
 #define __NGRAM_MODEL_LM3G_H__
 
 #include "sphinxbase/listelem_alloc.h"
+#include "sphinxbase/sbthread.h"
 
 #include "ngram_model_internal.h"
 
@@ -154,6 +155,7 @@ typedef struct lm3g_model_s {
                             trigram for bigram segment (i>>LOG_BG_SEG_SZ) */
     tginfo_t **tginfo;   /**< tginfo[lw2] is head of linked list of trigram information for
                             some cached subset of bigrams (*,lw2). */
+    sbmtx_t *tginfo_mtx; /**< Prevent concurrent access to tginfo. */
     listelem_alloc_t *le; /**< List element allocator for tginfo. */
 } lm3g_model_t;
 

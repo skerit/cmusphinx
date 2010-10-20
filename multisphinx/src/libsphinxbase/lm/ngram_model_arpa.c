@@ -502,6 +502,7 @@ ngram_model_arpa_read(cmd_ln_t *config,
     if (n_trigram > 0)
         model->lm3g.trigrams =
             ckd_calloc(n_trigram, sizeof(trigram_t));
+    model->lm3g.tginfo_mtx = sbmtx_init();
 
     if (n_trigram > 0) {
         model->lm3g.tseg_base =
@@ -640,6 +641,7 @@ ngram_model_arpa_free(ngram_model_t *base)
     ckd_free(model->lm3g.bo_wt2);
     ckd_free(model->lm3g.prob3);
     lm3g_tginfo_free(base, &model->lm3g);
+    sbmtx_free(model->lm3g.tginfo_mtx);
     ckd_free(model->lm3g.tseg_base);
 }
 

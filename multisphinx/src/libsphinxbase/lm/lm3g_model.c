@@ -53,10 +53,10 @@
 void
 lm3g_tginfo_free(ngram_model_t *base, lm3g_model_t *lm3g)
 {
-	if (lm3g->tginfo == NULL)
-		return;
-        listelem_alloc_free(lm3g->le);
-        ckd_free(lm3g->tginfo);
+    if (lm3g->tginfo == NULL)
+        return;
+    listelem_alloc_free(lm3g->le);
+    ckd_free(lm3g->tginfo);
 }
 
 void
@@ -64,9 +64,11 @@ lm3g_tginfo_reset(ngram_model_t *base, lm3g_model_t *lm3g)
 {
     if (lm3g->tginfo == NULL)
         return;
+    sbmtx_lock(lm3g->tginfo_mtx);
     listelem_alloc_free(lm3g->le);
     memset(lm3g->tginfo, 0, base->n_counts[0] * sizeof(tginfo_t *));
     lm3g->le = listelem_alloc_init(sizeof(tginfo_t));
+    sbmtx_unlock(lm3g->tginfo_mtx);
 }
 
 void
