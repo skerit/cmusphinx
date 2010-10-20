@@ -37,4 +37,5 @@ sphinxbaseinclude_HEADERS =			\
 	profile.h				\
 	sbthread.h				\
 	sphinxbase_export.h			\
-	strfuncs.h
+	strfuncs.h				\
+	sync_array.h

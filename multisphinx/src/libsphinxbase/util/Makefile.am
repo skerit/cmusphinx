@@ -23,6 +23,7 @@ libsphinxutil_la_SOURCES = \
         profile.c \
 	sbthread.c \
         strfuncs.c \
+	sync_array.c \
 	utf8.c
 
 INCLUDES = -I$(top_srcdir)/include \

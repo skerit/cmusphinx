@@ -125,21 +125,22 @@ mfcc_t **featbuf_wait(featbuf_t *fb, int fidx, int timeout);
  *
  * Once all consumers (defined as all objects retaining a reference to
  * @a fb) release a frame, it will no longer be available to any of
- * them.  This also releases all preceding frames.
+ * them.
  *
- * This can be thought of as the "up" operation for a frame index,
- * where the featbuf has an implicit "down" pending which removes
- * frames from circulation once they are upped enough times.
+ * This can be thought of as the "up" operation for frames, where the
+ * featbuf has an implicit "down" pending which removes frames from
+ * circulation once they are upped enough times.
  *
  * Calling this with a non-zero timeout on the same thread which calls
  * the data processing functions below is a Bad Idea, but that should
  * be obvious.
  *
  * @param fb Feature buffer.
- * @param fidx Index of frame to be released.
+ * @param sidx Index of first frame to be released.
+ * @param eidx One past index of last frame to be released.
  * @return 0, or <0 on error (but that is unlikely)
  */
-int featbuf_release(featbuf_t *fb, int fidx);
+int featbuf_release(featbuf_t *fb, int sidx, int eidx);
 
 /**
  * Start processing for an utterance.
