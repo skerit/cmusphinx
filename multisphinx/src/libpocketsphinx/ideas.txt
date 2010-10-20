@@ -131,3 +131,5 @@ can just use a freelist to allocate new backpointers as needed.
 
 ---
 
+ngram_search_exit_score gets called A LOT.  Not sure what to do about
+that.

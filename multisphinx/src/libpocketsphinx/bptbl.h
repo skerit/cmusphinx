@@ -105,6 +105,10 @@ typedef struct bptbl_s {
      */
     int32 active_delta;
 
+    int32 dest_s_idx;        /**< bscorestack index corresponding to
+                              * first_invert_bp (which is invalid by
+                              * definition) */
+
     /* FIXME: These two are a bit wasteful as they index everything though it's not necessary. */
     int32 *permute;      /**< Current permutation of entries (used for gc/sorting). */
     int16 *orig_sf;      /**< Start frame for each backpointer (used for sorting). */

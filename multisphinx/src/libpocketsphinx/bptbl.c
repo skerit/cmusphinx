@@ -51,6 +51,14 @@
 /* Local headers. */
 #include "ngram_search.h"
 
+#define MOVE_BSCORE
+static int bptbl_rcsize(bptbl_t *bptbl, bp_t *be);
+
+#undef E_DEBUG
+#define E_DEBUG(level,x) E_INFO x
+#undef E_DEBUGCONT
+#define E_DEBUGCONT(level,x) E_INFOCONT x
+
 bptbl_t *
 bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
 {
@@ -104,6 +112,7 @@ bptbl_reset(bptbl_t *bptbl)
     }
     bitvec_clear_all(bptbl->valid_fr, bptbl->n_active_alloc);
     bptbl->first_invert_bp = 0;
+    bptbl->dest_s_idx = 0;
     bptbl->active_delta = 0;
     bptbl->n_frame = 0;
     bptbl->n_ent = 0;
@@ -156,8 +165,8 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
     int i, j, n_active_fr, last_gc_fr;
 
     /* Invalidate all backpointer entries between sf and ef. */
-    E_INFO("Garbage collecting from %d to %d (%d to %d):\n",
-           bptbl_ef_idx(bptbl, sf), bptbl_ef_idx(bptbl, ef), sf, ef);
+    E_DEBUG(2,("Garbage collecting from %d to %d (%d to %d):\n",
+               bptbl_ef_idx(bptbl, sf), bptbl_ef_idx(bptbl, ef), sf, ef));
     /* Assert things that ensure these entries are all in the active
      * region (i.e. we can unconditionally translate their indices by
      * active_delta). */
@@ -170,8 +179,8 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
     }
 
     /* Now re-activate all ones backwards reachable from the search graph. */
-    E_INFO("Finding coaccessible frames from backpointers from %d to %d\n",
-           bptbl_ef_idx(bptbl, ef), bptbl_ef_idx(bptbl, cf));
+    E_DEBUG(2,("Finding coaccessible frames from backpointers from %d to %d\n",
+               bptbl_ef_idx(bptbl, ef), bptbl_ef_idx(bptbl, cf)));
     /* Collect coaccessible frames from these backpointers */
     bitvec_clear_all(bptbl->valid_fr, cf - bptbl->active_fr);
     n_active_fr = 0;
@@ -241,6 +250,8 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
 {
     int src, dest, ef;
     int sidx = bptbl->first_invert_bp;
+    /* bss index for active frames (we don't want to track this in bptbl) */
+    int active_dest_s_idx;
 
     ef = bptbl->ent[sidx].frame;
     E_DEBUG(2,("compacting from %d to %d (%d to %d)\n",
@@ -253,12 +264,36 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
             ++ef;
         }
         if (bptbl->ent[src].valid) {
+            int rcsize = bptbl_rcsize(bptbl, bptbl->ent + src);
             if (dest != src) {
+                E_DEBUG(4,("permute %d => %d\n", src, dest));
+#ifdef MOVE_BSCORE
+                if (bptbl->ent[src].s_idx != bptbl->dest_s_idx) {
+                    E_DEBUG(4,("Moving %d rc scores from %d to %d for bptr %d\n",
+                               rcsize, bptbl->ent[src].s_idx, bptbl->dest_s_idx, dest));
+                    assert(bptbl->ent[src].s_idx > bptbl->dest_s_idx);
+                    if (src < bptbl->n_ent - 1)
+                        assert(bptbl->dest_s_idx + rcsize <= bptbl->ent[src + 1].s_idx);
+                    memmove(bptbl->bscore_stack + bptbl->dest_s_idx,
+                            bptbl->bscore_stack + bptbl->ent[src].s_idx,
+                            rcsize * sizeof(*bptbl->bscore_stack));
+                    if (bptbl->dest_s_idx == 8568) {
+                        int k;
+                        E_INFO_NOFN("bscore:");
+                        for (k = 0; k < rcsize; ++k)
+                            E_INFOCONT(" %d", bptbl->bscore_stack[bptbl->dest_s_idx + k]);
+                        E_INFOCONT("\n");
+                    }
+                }
+#endif /* MOVE_BSCORE */
                 bptbl->ent[dest] = bptbl->ent[src];
+#ifdef MOVE_BSCORE
+                bptbl->ent[dest].s_idx = bptbl->dest_s_idx;
+#endif /* MOVE_BSCORE */
                 bptbl->ent[src].valid = FALSE;
             }
-            E_DEBUG(4,("permute %d => %d\n", src, dest));
             bptbl->permute[src] = dest;
+            bptbl->dest_s_idx += rcsize;
             ++dest;
         }
         else {
@@ -266,6 +301,29 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
             bptbl->permute[src] = -1;
         }
     }
+#ifdef MOVE_BSCORE
+    /* We can keep compacting the bscore_stack since it is indirected. */
+    if (src < bptbl->n_ent
+        && dest != src
+        && bptbl->ent[src].s_idx != bptbl->dest_s_idx) {
+        /* Leave dest_s_idx where it is for future compaction. */
+        active_dest_s_idx = bptbl->dest_s_idx;
+        while (src < bptbl->n_ent) {
+            int rcsize = bptbl_rcsize(bptbl, bptbl->ent + src);
+            E_DEBUG(4,("Moving %d rc scores from %d to %d for bptr %d\n",
+                       rcsize, bptbl->ent[src].s_idx, active_dest_s_idx, src));
+            if (src < bptbl->n_ent - 1)
+                assert(active_dest_s_idx + rcsize <= bptbl->ent[src + 1].s_idx);
+            memmove(bptbl->bscore_stack + active_dest_s_idx,
+                    bptbl->bscore_stack + bptbl->ent[src].s_idx,
+                    rcsize * sizeof(*bptbl->bscore_stack));
+            bptbl->ent[src].s_idx = active_dest_s_idx;
+            active_dest_s_idx += rcsize;
+            ++src;
+        }
+        bptbl->bss_head = active_dest_s_idx;
+    }
+#endif /* MOVE_BSCORE */
     if (eidx == bptbl->n_ent)
         bptbl->n_ent = dest;
     return dest;
@@ -296,6 +354,10 @@ bptbl_forward_sort(bptbl_t *bptbl, int sidx, int eidx)
         bptbl->permute[i] = i;
         bptbl->orig_sf[i] = bp_sf(bptbl, i);
     }
+
+    /* Luckily we don't need to move anything around in bscorestack
+     * aside from compressing it, since it's indirected through the
+     * bptbl entries. */
 
     /* Crawl from sidx to eidx inserting and updating the permutation
      * table as necessary. */
@@ -440,7 +502,7 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     bptbl->ef_idx[frame_idx - bptbl->active_fr] = bptbl->n_ent;
     bptbl->n_frame = frame_idx + 1;
     bptbl_gc(bptbl, oldest_bp, frame_idx);
-    if (bptbl->first_invert_bp > 0) {
+    if (bptbl->first_invert_bp > 0 && bptbl->ef_idx[0] > bptbl->first_invert_bp) {
         E_INFO("Retired bps from 0 to %d Empty %d to %d Active %d to %d\n",
                bptbl->first_invert_bp - 1, bptbl->first_invert_bp,
                bptbl->ef_idx[0] - 1, bptbl->ef_idx[0], bptbl->n_ent);
@@ -462,6 +524,23 @@ bptbl_ef_idx(bptbl_t *bptbl, int frame_idx)
     else {
         return bptbl->ef_idx[frame_idx - bptbl->active_fr];
     }
+}
+
+static int
+bptbl_rcsize(bptbl_t *bptbl, bp_t *be)
+{
+    int rcsize;
+
+    if (dict_is_single_phone(bptbl->d2p->dict, be->wid)) {
+        be->last2_phone = -1;
+        rcsize = 1;
+    }
+    else {
+        be->last2_phone = dict_second_last_phone(bptbl->d2p->dict, be->wid);
+        rcsize = dict2pid_rssid(bptbl->d2p, be->last_phone, be->last2_phone)->n_ssid;
+    }
+
+    return rcsize;
 }
 
 bp_t *
@@ -508,19 +587,12 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx, int32 path,
     be->score = score;
     be->s_idx = bptbl->bss_head;
     be->valid = TRUE;
+    be->last_phone = dict_last_phone(bptbl->d2p->dict,w);
     bptbl_fake_lmstate(bptbl, bptbl->n_ent);
 
     /* DICT2PID */
     /* Get diphone ID for final phone and number of ssids corresponding to it. */
-    be->last_phone = dict_last_phone(bptbl->d2p->dict,w);
-    if (dict_is_single_phone(bptbl->d2p->dict, w)) {
-        be->last2_phone = -1;
-        rcsize = 1;
-    }
-    else {
-        be->last2_phone = dict_second_last_phone(bptbl->d2p->dict, w);
-        rcsize = dict2pid_rssid(bptbl->d2p, be->last_phone, be->last2_phone)->n_ssid;
-    }
+    rcsize = bptbl_rcsize(bptbl, be);
     /* Allocate some space on the bptbl->bscore_stack for all of these triphones. */
     for (i = rcsize, bss = bptbl->bscore_stack + bptbl->bss_head; i > 0; --i, bss++)
         *bss = WORST_SCORE;
