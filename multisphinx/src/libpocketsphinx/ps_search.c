@@ -116,11 +116,12 @@ ps_search_stop(ps_search_t *search)
 char const *
 ps_search_hyp(ps_search_t *search, int32 *out_score)
 {
-    return NULL;
+    /* Search module has to be responsible for locking here... */
+    return (*search->vt->hyp)(search, out_score);
 }
 
 ps_seg_t *
 ps_search_seg_iter(ps_search_t *search, int32 *out_score)
 {
-    return NULL;
+    return (*search->vt->seg_iter)(search, out_score);
 }
