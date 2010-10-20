@@ -37,3 +37,5 @@ include/stamp-h2
 python/build
 *.la
 python/pymod-build-stamp
+python/setup.py
+test/unit/testfuncs.sh
