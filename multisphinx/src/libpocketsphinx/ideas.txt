@@ -237,3 +237,12 @@ In this scheme bptbl would work similarly to arc_buffer in that there
 will be a "mark" operation (currently bptbl_push_frame()) and a
 "commit" operation - in this case rather than sorting, the commit
 operation would do pruning.
+
+Okay, this is done.
+
+------
+
+Now we need to figure out how to enforce a hard limit on the size of
+the backpointer table.  The duration modeling thing can be done after
+this - for the moment we just want to have a parameter to tune (though
+we will do the duration modeling, have no doubt about that)
