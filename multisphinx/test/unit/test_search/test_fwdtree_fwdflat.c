@@ -22,7 +22,7 @@ main(int argc, char *argv[])
 	int nfr, i;
 	char const *hyp;
 	int32 score;
-	int ftfr, fffr;
+	int fffr;
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
@@ -34,11 +34,12 @@ main(int argc, char *argv[])
 	/* Get the API to initialize a bunch of stuff for us (but not the search). */
 	ps = ps_init(config);
 	acmod = ps->acmod;
+	acmod2 = acmod_copy(acmod);
+
 	cmd_ln_set_str_r(config, "-lm", TESTDATADIR "/hub4.5000.DMP");
 	fwdtree = fwdtree_search_init(config, acmod, ps->dict, ps->d2p);
-	acmod2 = acmod_copy(acmod);
 	fwdflat = fwdflat_search_init(config, acmod2, ps->dict, ps->d2p,
-				      ((fwdtree_search_t *)fwdtree)->bptbl);
+				      NULL); //((fwdtree_search_t *)fwdtree)->bptbl);
 
 	nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
 			      ".mfc", 0, -1, NULL, -1);
@@ -48,27 +49,28 @@ main(int argc, char *argv[])
 		E_FATAL("Failed to read mfc file\n");
 	ps_search_start(fwdtree);
 	ps_search_start(fwdflat);
-	ftfr = fffr = 0;
-	while (fffr < 200) {
-		acmod_process_feat(acmod, feat[ftfr]);
-		nfr = ps_search_step(fwdtree, ftfr);
-		ftfr += nfr;
-
-		acmod_process_feat(acmod2, feat[fffr]);
-		nfr = ps_search_step(fwdflat, fffr);
-		fffr += nfr;
-		acmod_advance(acmod);
+	fffr = 0;
+	for (i = 0; i < 200; ++i) {
+		acmod_process_feat(acmod, feat[i]);
+		ps_search_step(fwdtree);
+		fffr += acmod_process_feat(acmod2, feat[fffr]);
+		nfr = ps_search_step(fwdflat);
+		E_INFO("i %d fffr %d fwdflat nfr %d\n",
+		       i, fffr, nfr);
 	}
+
 	ps_search_finish(fwdtree);
 	hyp = ps_search_hyp(fwdtree, &score);
-	printf("hyp: %s (%d)\n", hyp, score);
+	printf("fwdtree: %s (%d)\n", hyp, score);
+
 	ps_search_finish(fwdflat);
 	hyp = ps_search_hyp(fwdflat, &score);
-	printf("hyp: %s (%d)\n", hyp, score);
+	printf("fwdflat: %s (%d)\n", hyp, score);
 
 	acmod_free(acmod2);
 	ps_search_free(fwdtree);
 	ps_search_free(fwdflat);
+	feat_array_free(feat);
 	ps_free(ps);
 
 	return 0;

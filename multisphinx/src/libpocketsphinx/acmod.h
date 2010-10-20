@@ -1,6 +1,6 @@
 /* -*- c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /* ====================================================================
- * Copyright (c) 2008 Carnegie Mellon University.  All rights
+ * Copyright (c) 2008-2010 Carnegie Mellon University.  All rights
  * reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -291,15 +291,32 @@ int acmod_end_utt(acmod_t *acmod);
 int acmod_rewind(acmod_t *acmod);
 
 /**
+ * Get the number of frames of available feature data.
+ *
+ * @return Number of available frames of feature data.
+ */
+int acmod_available(acmod_t *acmod);
+
+/**
  * Advance the frame index.
  *
  * This function moves to the next frame of input data.  Subsequent
  * calls to acmod_score() will return scores for that frame, until the
  * next call to acmod_advance().
  *
- * @return New frame index.
+ * If no new frames of input data are available, it does nothing, and
+ * returns -1.
+ *
+ * @return New frame index, or -1 if no frames are available.
  */
 int acmod_advance(acmod_t *acmod);
+
+/**
+ * Get the current frame index.
+ *
+ * @return Index of current frame to be scored.
+ */
+int acmod_frame(acmod_t *acmod);
 
 /**
  * Set memory allocation policy for utterance processing.
@@ -310,13 +327,6 @@ int acmod_advance(acmod_t *acmod);
  * @return previous allocation policy.
  */
 int acmod_set_grow(acmod_t *acmod, int grow_feat);
-
-/**
- * TODO: Set queue length for utterance processing.
- *
- * This function allows multiple concurrent passes of search to
- * operate on different parts of the utterance.
- */
 
 /**
  * Feed raw audio data to the acoustic model for scoring.

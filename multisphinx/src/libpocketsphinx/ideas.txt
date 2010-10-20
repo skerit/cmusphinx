@@ -17,23 +17,63 @@ fwdflat sliding window
     * Note that this is basically just incremental lattice generation
     * And the same mechanism we'll use for a bunch of other stuff
   - Pipelining requires acmod to be restructured a bit
-    * Because s2_semi_mgau is stateful, remembers last frame's topn
+    * Because s2_semi_mgau is stateful, remembers last frame's topn DONE
   - A couple of options here to think about
-    * Separate acmod_t for each search module
-      + Would need some kind of COW or ability to share components
-      + Probably just add a "clone" function to the acmod_t and mgau_t
-      	- Shares fe_t, feat_t
-	- Separate mfcc and feat buffers
-	- Shares acoustic model parameters
-	- Separate senone score arrays and top-N stuff, etc
-    * Extend mgau_t interface to be aware of frame indices
+    * Separate acmod_t for each search module DONE
+      + Would need some kind of COW or ability to share components DONE
+      + Probably just add a "clone" function to the acmod_t and mgau_t DONE
+      	- Shares fe_t, feat_t DONE
+	- Separate mfcc and feat buffers DONE
+	- Shares acoustic model parameters DONE
+	- Separate senone score arrays and top-N stuff, etc DONE
+    * Extend mgau_t interface to be aware of frame indices NOPE
       + For s2_semi_mgau it would probably just keep a history of top-N
       + There would also have to be an API to release old frames
       + This seems somewhat more involved, especially since logically
         we want to have separate acmods for each search component
       + If we wanted to cache senone scores though it might make sense
 
-Potential idea:
+feature buffering for pipelining
+
+* Current model is "push-pull"
+  - Give audio data in blocks to the acmod, which consumes as much as it can
+  - Pull feature data out of the acmod and push it to the search module, which
+    is assumed to always consume one frame at a time.
+  - Explicit frame indices are passed to search modules, which then
+    pass them to the acmod, which translates them to relative indices
+  - But then we call acmod_advance outside the search modules (!)
+
+* With cloned acmods we don't need to pass explicit frame indices,
+  because the phone lookahead can just get its own and act like any
+  other search module - which begs the question how shoud a search
+  module act?
+
+  - The pulling from the acmod should be done by the search module itself
+  - Application fills the acmod's buffers
+  - Search module drains the acmod's buffers
+    + When search modules run in their own threads, their main loop
+      will poll the acmod for frames and process them if possible
+    + Seems like there might be a potential for deadlock in here...
+
+    + One potential deadlock situation is where the application fills
+      up the acmod buffer, but there are not enough frames of
+      lookahead for the final search pass to produce output
+      - if bptbl and arc buffers are expandable this is okay
+      - the first pass will always accept input	
+
+      - if there is fixed lookahead it needs to be smaller than the
+        acmod buffer (the current setup already does this for other
+        reasons)
+
+* Step 1: move calls to acmod_advance() into the search code
+  + Make a standard way to query available frames in the acmod
+  + search step functions now have the possibility to return zero
+* Step 2: make code that feeds things to the acmod sensitive to the
+  possibility that it might not accept frames (this may already be the
+  case except in tests)
+
+
+Potential idea (no, actually this works)
 
  * Track oldest backpointer in lexicon tree
    - once it passes frame K, no more words can start in that frame

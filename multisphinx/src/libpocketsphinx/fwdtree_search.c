@@ -50,7 +50,6 @@
 
 /* Local headers. */
 #include "fwdtree_search.h"
-#include "phone_loop_search.h"
 
 /* Turn this on to dump channels for debugging */
 #define __CHAN_DUMP__		0
@@ -61,7 +60,7 @@
 #endif
 
 static int fwdtree_search_start(ps_search_t *base);
-static int fwdtree_search_step(ps_search_t *base, int frame_idx);
+static int fwdtree_search_step(ps_search_t *base);
 static int fwdtree_search_finish(ps_search_t *base);
 static int fwdtree_search_reinit(ps_search_t *base, dict_t *dict, dict2pid_t *d2p);
 static void fwdtree_search_free(ps_search_t *base);
@@ -980,14 +979,12 @@ prune_root_chan(fwdtree_search_t *fts, int frame_idx)
     int32 thresh, newphone_thresh, lastphn_thresh, newphone_score;
     nonroot_node_t **nacl;              /* next active list */
     lastphn_cand_t *candp;
-    phone_loop_search_t *pls;
 
     nf = frame_idx + 1;
     thresh = fts->best_score + fts->dynamic_beam;
     newphone_thresh = fts->best_score + fts->pbeam;
     lastphn_thresh = fts->best_score + fts->lpbeam;
     nacl = fts->active_chan_list[nf & 0x1];
-    pls = (phone_loop_search_t *)ps_search_lookahead(fts);
 
     for (i = 0, rhmm = fts->root_chan; i < fts->n_root_chan; i++, rhmm++) {
         E_DEBUG(3,("Root channel %d frame %d score %d thresh %d\n",
@@ -1002,17 +999,13 @@ prune_root_chan(fwdtree_search_t *fts, int frame_idx)
             /* transitions out of this root channel */
             /* transition to all next-level channels in the HMM tree */
             newphone_score = hmm_out_score(&rhmm->hmm) + fts->pip;
-            if (pls != NULL || newphone_score BETTER_THAN newphone_thresh) {
+            if (newphone_score BETTER_THAN newphone_thresh) {
                 for (hmm = rhmm->next; hmm; hmm = hmm->alt) {
-                    int32 pl_newphone_score = newphone_score
-                        + phone_loop_search_score(pls, hmm->ciphone);
-                    if (pl_newphone_score BETTER_THAN newphone_thresh) {
-                        if ((hmm_frame(&hmm->hmm) < frame_idx)
-                            || (pl_newphone_score BETTER_THAN hmm_in_score(&hmm->hmm))) {
-                            hmm_enter(&hmm->hmm, pl_newphone_score,
-                                      hmm_out_history(&rhmm->hmm), nf);
-                            *(nacl++) = hmm;
-                        }
+                    if ((hmm_frame(&hmm->hmm) < frame_idx)
+                        || (newphone_score BETTER_THAN hmm_in_score(&hmm->hmm))) {
+                        hmm_enter(&hmm->hmm, newphone_score,
+                                  hmm_out_history(&rhmm->hmm), nf);
+                        *(nacl++) = hmm;
                     }
                 }
             }
@@ -1022,21 +1015,14 @@ prune_root_chan(fwdtree_search_t *fts, int frame_idx)
              * penultimate phone (the last phones may need multiple right contexts).
              * Remember to remove the temporary newword_penalty.
              */
-            if (pls != NULL || newphone_score BETTER_THAN lastphn_thresh) {
+            if (newphone_score BETTER_THAN lastphn_thresh) {
                 for (w = rhmm->penult_phn_wid; w >= 0;
                      w = fts->homophone_set[w]) {
-                    int32 pl_newphone_score = newphone_score
-                        + phone_loop_search_score
-                        (pls, dict_last_phone(ps_search_dict(fts),w));
-                    E_DEBUG(3, ("wid %d newphone_score %d\n", w, pl_newphone_score));
-                    if (pl_newphone_score BETTER_THAN lastphn_thresh) {
-                        candp = fts->lastphn_cand + fts->n_lastphn_cand;
-                        fts->n_lastphn_cand++;
-                        candp->wid = w;
-                        candp->score =
-                            pl_newphone_score - fts->nwpen;
-                        candp->bp = hmm_out_history(&rhmm->hmm);
-                    }
+                    candp = fts->lastphn_cand + fts->n_lastphn_cand;
+                    fts->n_lastphn_cand++;
+                    candp->wid = w;
+                    candp->score = newphone_score - fts->nwpen;
+                    candp->bp = hmm_out_history(&rhmm->hmm);
                 }
             }
         }
@@ -1056,14 +1042,12 @@ prune_nonroot_chan(fwdtree_search_t *fts, int frame_idx)
     int32 thresh, newphone_thresh, lastphn_thresh, newphone_score;
     nonroot_node_t **acl, **nacl;       /* active list, next active list */
     lastphn_cand_t *candp;
-    phone_loop_search_t *pls;
 
     nf = frame_idx + 1;
 
     thresh = fts->best_score + fts->dynamic_beam;
     newphone_thresh = fts->best_score + fts->pbeam;
     lastphn_thresh = fts->best_score + fts->lpbeam;
-    pls = (phone_loop_search_t *)ps_search_lookahead(fts);
 
     acl = fts->active_chan_list[frame_idx & 0x1];   /* currently active HMMs in tree */
     nacl = fts->active_chan_list[nf & 0x1] + fts->n_active_chan[nf & 0x1];
@@ -1081,19 +1065,16 @@ prune_nonroot_chan(fwdtree_search_t *fts, int frame_idx)
 
             /* transition to all next-level channel in the HMM tree */
             newphone_score = hmm_out_score(&hmm->hmm) + fts->pip;
-            if (pls != NULL || newphone_score BETTER_THAN newphone_thresh) {
+            if (newphone_score BETTER_THAN newphone_thresh) {
                 for (nexthmm = hmm->next; nexthmm; nexthmm = nexthmm->alt) {
-                    int32 pl_newphone_score = newphone_score
-                        + phone_loop_search_score(pls, nexthmm->ciphone);
-                    if ((pl_newphone_score BETTER_THAN newphone_thresh)
-                        && ((hmm_frame(&nexthmm->hmm) < frame_idx)
-                            || (pl_newphone_score
-                                BETTER_THAN hmm_in_score(&nexthmm->hmm)))) {
+                    if (((hmm_frame(&nexthmm->hmm) < frame_idx)
+                         || (newphone_score
+                             BETTER_THAN hmm_in_score(&nexthmm->hmm)))) {
                         if (hmm_frame(&nexthmm->hmm) != nf) {
                             /* Keep this HMM on the active list */
                             *(nacl++) = nexthmm;
                         }
-                        hmm_enter(&nexthmm->hmm, pl_newphone_score,
+                        hmm_enter(&nexthmm->hmm, newphone_score,
                                   hmm_out_history(&hmm->hmm), nf);
                     }
                 }
@@ -1104,20 +1085,15 @@ prune_nonroot_chan(fwdtree_search_t *fts, int frame_idx)
              * penultimate phone (the last phones may need multiple right contexts).
              * Remember to remove the temporary newword_penalty.
              */
-            if (pls != NULL || newphone_score BETTER_THAN lastphn_thresh) {
+            if (newphone_score BETTER_THAN lastphn_thresh) {
                 for (w = hmm->info.penult_phn_wid; w >= 0;
                      w = fts->homophone_set[w]) {
-                    int32 pl_newphone_score = newphone_score
-                        + phone_loop_search_score
-                        (pls, dict_last_phone(ps_search_dict(fts),w));
-                    if (pl_newphone_score BETTER_THAN lastphn_thresh) {
-                        candp = fts->lastphn_cand + fts->n_lastphn_cand;
-                        fts->n_lastphn_cand++;
-                        candp->wid = w;
-                        candp->score =
-                            pl_newphone_score - fts->nwpen;
-                        candp->bp = hmm_out_history(&hmm->hmm);
-                    }
+                    candp = fts->lastphn_cand + fts->n_lastphn_cand;
+                    fts->n_lastphn_cand++;
+                    candp->wid = w;
+                    candp->score =
+                        newphone_score - fts->nwpen;
+                    candp->bp = hmm_out_history(&hmm->hmm);
                 }
             }
         }
@@ -1529,7 +1505,6 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
     bp_t *bpe;
     root_node_t *rhmm;
     struct bestbp_rc_s *bestbp_rc_ptr;
-    phone_loop_search_t *pls;
     dict_t *dict = ps_search_dict(fts);
     dict2pid_t *d2p = ps_search_dict2pid(fts);
 
@@ -1541,7 +1516,6 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
     for (i = bin_mdef_n_ciphone(ps_search_acmod(fts)->mdef) - 1; i >= 0; --i)
         fts->bestbp_rc[i].score = WORST_SCORE;
     k = 0;
-    pls = (phone_loop_search_t *)ps_search_lookahead(fts);
     /* Ugh, this is complicated.  Scan all word exits for this frame
      * (they have already been created by prune_word_chan()). */
     /* BPTBL: Replace this with explicit iteration over the current
@@ -1597,8 +1571,7 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
     for (i = 0, rhmm = fts->root_chan; i < fts->n_root_chan; ++i, ++rhmm) {
         bestbp_rc_ptr = &(fts->bestbp_rc[rhmm->ciphone]);
 
-        newscore = bestbp_rc_ptr->score + fts->nwpen + fts->pip
-            + phone_loop_search_score(pls, rhmm->ciphone);
+        newscore = bestbp_rc_ptr->score + fts->nwpen + fts->pip;
         if (newscore BETTER_THAN thresh) {
             if ((hmm_frame(&rhmm->hmm) < frame_idx)
                 || (newscore BETTER_THAN hmm_in_score(&rhmm->hmm))) {
@@ -1662,8 +1635,7 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
         if (w == dict_startwid(ps_search_dict(fts)))
             continue;
         rhmm = (root_node_t *) fts->word_chan[w];
-        newscore = fts->last_ltrans[w].dscr + fts->pip
-            + phone_loop_search_score(pls, rhmm->ciphone);
+        newscore = fts->last_ltrans[w].dscr + fts->pip;
         if (newscore BETTER_THAN thresh) {
             bpe = bptbl_ent(fts->bptbl, fts->last_ltrans[w].bp);
             if ((hmm_frame(&rhmm->hmm) < frame_idx)
@@ -1690,8 +1662,7 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
         newscore = bestbp_rc_ptr->score + fts->pip;
     }
     else {
-        newscore = bestbp_rc_ptr->score + fts->silpen + fts->pip
-            + phone_loop_search_score(pls, rhmm->ciphone);
+        newscore = bestbp_rc_ptr->score + fts->silpen + fts->pip;
     }
     if (newscore BETTER_THAN thresh) {
         if ((hmm_frame(&rhmm->hmm) < frame_idx)
@@ -1711,8 +1682,7 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
         /* If this was not actually a single-phone word, rhmm will be NULL. */
         if (rhmm == NULL)
             continue;
-        newscore = bestbp_rc_ptr->score + fts->fillpen + fts->pip
-            + phone_loop_search_score(pls, rhmm->ciphone);
+        newscore = bestbp_rc_ptr->score + fts->fillpen + fts->pip;
         if (newscore BETTER_THAN thresh) {
             if ((hmm_frame(&rhmm->hmm) < frame_idx)
                 || (newscore BETTER_THAN hmm_in_score(&rhmm->hmm))) {
@@ -1745,21 +1715,25 @@ deactivate_channels(fwdtree_search_t *fts, int frame_idx)
     }
 }
 
-int
-fwdtree_search_step(ps_search_t *base, int frame_idx)
+static int
+fwdtree_search_one_frame(fwdtree_search_t *fts)
 {
-    fwdtree_search_t *fts = (fwdtree_search_t *)base;
+    acmod_t *acmod = ps_search_acmod(fts);
     int16 const *senscr;
-    int fi;
+    int fi, nfr, frame_idx;
+
+    if ((nfr = acmod_available(acmod)) <= 0)
+        return nfr;
+    frame_idx = acmod_frame(acmod);
 
     /* Activate our HMMs for the current frame if need be. */
-    if (!ps_search_acmod(fts)->compallsen)
+    if (!acmod->compallsen)
         compute_sen_active(fts, frame_idx);
 
     /* Compute GMM scores for the current frame. */
-    if ((senscr = acmod_score(ps_search_acmod(fts), &frame_idx)) == NULL)
+    if ((senscr = acmod_score(acmod, &frame_idx)) == NULL)
         return 0;
-    fts->st.n_senone_active_utt += ps_search_acmod(fts)->n_senone_active;
+    fts->st.n_senone_active_utt += acmod->n_senone_active;
 
     /* Mark backpointer table for current frame. */
     fi = bptbl_push_frame(fts->bptbl, fts->oldest_bp);
@@ -1787,8 +1761,24 @@ fwdtree_search_step(ps_search_t *base, int frame_idx)
     /* Deactivate pruned HMMs. */
     deactivate_channels(fts, frame_idx);
 
+    acmod_advance(acmod);
     /* Return the number of frames processed. */
     return 1;
+}
+
+int
+fwdtree_search_step(ps_search_t *base)
+{
+    fwdtree_search_t *fts = (fwdtree_search_t *)base;
+    int nfr, k;
+
+    nfr = 0;
+    while ((k = fwdtree_search_one_frame(fts)) > 0) {
+        nfr += k;
+    }
+    if (k < 0)
+        return k;
+    return nfr;
 }
 
 int
@@ -1800,7 +1790,7 @@ fwdtree_search_finish(ps_search_t *base)
     nonroot_node_t *hmm, **acl;
 
     /* This is the number of frames processed. */
-    cf = ps_search_acmod(fts)->output_frame;
+    cf = acmod_frame(ps_search_acmod(fts));
     /* Finalize the backpointer table. */
     bptbl_finalize(fts->bptbl);
 

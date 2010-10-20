@@ -26,7 +26,6 @@ libpocketsphinx_la_SOURCES =			\
 	ngram_search.c				\
 	ngram_search_fwdtree.c			\
 	ngram_search_fwdflat.c			\
-	phone_loop_search.c			\
 	ps_alignment.c				\
 	ps_lattice.c				\
 	ps_mllr.c				\
@@ -60,7 +59,6 @@ noinst_HEADERS =				\
 	ngram_search.h				\
 	ngram_search_fwdtree.h			\
 	ngram_search_fwdflat.h			\
-	phone_loop_search.h			\
 	ps_alignment.h				\
 	ps_lattice_internal.h			\
 	posixwin32.h				\

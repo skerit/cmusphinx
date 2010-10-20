@@ -69,7 +69,7 @@ typedef struct ps_searchfuncs_s {
     char const *name;
 
     int (*start)(ps_search_t *search);
-    int (*step)(ps_search_t *search, int frame_idx);
+    int (*step)(ps_search_t *search);
     int (*finish)(ps_search_t *search);
     int (*reinit)(ps_search_t *search, dict_t *dict, dict2pid_t *d2p);
     void (*free)(ps_search_t *search);
@@ -116,7 +116,7 @@ struct ps_search_s {
 
 #define ps_search_name(s) ps_search_base(s)->vt->name
 #define ps_search_start(s) (*(ps_search_base(s)->vt->start))(s)
-#define ps_search_step(s,i) (*(ps_search_base(s)->vt->step))(s,i)
+#define ps_search_step(s) (*(ps_search_base(s)->vt->step))(s)
 #define ps_search_finish(s) (*(ps_search_base(s)->vt->finish))(s)
 #define ps_search_reinit(s,d,d2p) (*(ps_search_base(s)->vt->reinit))(s,d,d2p)
 #define ps_search_free(s) (*(ps_search_base(s)->vt->free))(s)

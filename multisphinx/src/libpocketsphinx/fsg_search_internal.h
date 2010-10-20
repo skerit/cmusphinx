@@ -136,7 +136,7 @@ int fsg_search_start(ps_search_t *search);
 /**
  * Step one frame forward through the Viterbi search.
  */
-int fsg_search_step(ps_search_t *search, int frame_idx);
+int fsg_search_step(ps_search_t *search);
 
 /**
  * Windup and clean the FSG search structure after utterance.

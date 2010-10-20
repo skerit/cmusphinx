@@ -800,20 +800,26 @@ fwdflat_renormalize_scores(ngram_search_t *ngs, int frame_idx, int32 norm)
     ngs->renormalized = TRUE;
 }
 
-int
-ngram_fwdflat_search(ngram_search_t *ngs, int frame_idx)
+static int
+ngram_fwdflat_search_one_frame(ngram_search_t *ngs)
 {
+    acmod_t *acmod = ps_search_acmod(ngs);
     int16 const *senscr;
     int32 nf, i, j;
     int32 *nawl;
+    int frame_idx, nfr;
+
+    if ((nfr = acmod_available(acmod)) <= 0)
+        return nfr;
+    frame_idx = acmod_frame(acmod);
 
     /* Activate our HMMs for the current frame if need be. */
-    if (!ps_search_acmod(ngs)->compallsen)
+    if (!acmod->compallsen)
         compute_fwdflat_sen_active(ngs, frame_idx);
 
     /* Compute GMM scores for the current frame. */
-    senscr = acmod_score(ps_search_acmod(ngs), &frame_idx);
-    ngs->st.n_senone_active_utt += ps_search_acmod(ngs)->n_senone_active;
+    senscr = acmod_score(acmod, &frame_idx);
+    ngs->st.n_senone_active_utt += acmod->n_senone_active;
 
     /* Mark backpointer table for current frame. */
     ngram_search_mark_bptable(ngs, frame_idx);
@@ -854,12 +860,28 @@ ngram_fwdflat_search(ngram_search_t *ngs, int frame_idx)
             j++;
         }
     }
+
+    acmod_advance(acmod);
     if (!ngs->fwdtree)
         ++ngs->n_frame;
     ngs->n_active_word[nf & 0x1] = j;
 
     /* Return the number of frames processed. */
     return 1;
+}
+
+int
+ngram_fwdflat_search(ngram_search_t *ngs, int frame_idx)
+{
+    int nfr, k;
+
+    nfr = 0;
+    while ((k = ngram_fwdflat_search_one_frame(ngs)) > 0) {
+        nfr += k;
+    }
+    if (k < 0)
+        return k;
+    return nfr;
 }
 
 /**
@@ -921,7 +943,7 @@ ngram_fwdflat_finish(ngram_search_t *ngs)
     bitvec_clear_all(ngs->word_active, ps_search_n_words(ngs));
 
     /* This is the number of frames processed. */
-    cf = ps_search_acmod(ngs)->output_frame;
+    cf = acmod_frame(ps_search_acmod(ngs));
     /* Add a mark in the backpointer table for one past the final frame. */
     ngram_search_mark_bptable(ngs, cf);
 

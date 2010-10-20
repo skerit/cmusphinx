@@ -19,7 +19,10 @@
   - Maybe rewrite bptbl and friends to use the new garray_t
     + This would ease the future transition to circular arrays
 
-* Implement semi-shared acoustic models for search passes
+* Implement semi-shared acoustic models for search passes - DONE
+
+* Make fwdflat work properly with arc buffer input
+  - 
 
 * Rewrite lattice generation to be incremental on retired bps
   - No problem with doing this

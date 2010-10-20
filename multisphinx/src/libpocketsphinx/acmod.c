@@ -917,6 +917,8 @@ acmod_rewind(acmod_t *acmod)
 int
 acmod_advance(acmod_t *acmod)
 {
+    if (acmod->n_feat_frame == 0)
+        return -1;
     /* Advance the output pointers. */
     if (++acmod->feat_outidx == acmod->n_feat_alloc)
         acmod->feat_outidx = 0;
@@ -924,6 +926,18 @@ acmod_advance(acmod_t *acmod)
     ++acmod->mgau->frame_idx;
 
     return ++acmod->output_frame;
+}
+
+int
+acmod_available(acmod_t *acmod)
+{
+    return acmod->n_feat_frame;
+}
+
+int
+acmod_frame(acmod_t *acmod)
+{
+    return acmod->output_frame;
 }
 
 int

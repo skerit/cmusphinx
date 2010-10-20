@@ -49,7 +49,6 @@
 #include "cmdln_macro.h"
 #include "pocketsphinx_internal.h"
 #include "ps_lattice_internal.h"
-#include "phone_loop_search.h"
 #include "fsg_search_internal.h"
 #include "ngram_search.h"
 #include "ngram_search_fwdtree.h"
@@ -239,15 +238,6 @@ ps_reinit(ps_decoder_t *ps, cmd_ln_t *config)
         && cmd_ln_boolean_r(ps->config, "-fwdtree"))
         acmod_set_grow(ps->acmod, TRUE);
 
-    if ((ps->pl_window = cmd_ln_int32_r(ps->config, "-pl_window"))) {
-        /* Initialize an auxiliary phone loop search, which will run in
-         * "parallel" with FSG or N-Gram search. */
-        if ((ps->phone_loop = phone_loop_search_init(ps->config,
-                                                     ps->acmod, ps->dict)) == NULL)
-            return -1;
-        ps->searches = glist_add_ptr(ps->searches, ps->phone_loop);
-    }
-
     /* Dictionary and triphone mappings (depends on acmod). */
     /* FIXME: pass config, change arguments, implement LTS, etc. */
     if ((ps->dict = dict_init(ps->config, ps->acmod->mdef)) == NULL)
@@ -261,7 +251,6 @@ ps_reinit(ps_decoder_t *ps, cmd_ln_t *config)
             return -1;
         if ((fsgs = fsg_search_init(ps->config, ps->acmod, ps->dict, ps->d2p)) == NULL)
             return -1;
-        fsgs->pls = ps->phone_loop;
         ps->searches = glist_add_ptr(ps->searches, fsgs);
         ps->search = fsgs;
     }
@@ -273,7 +262,6 @@ ps_reinit(ps_decoder_t *ps, cmd_ln_t *config)
             return -1;
         if ((ngs = ngram_search_init(ps->config, ps->acmod, ps->dict, ps->d2p)) == NULL)
             return -1;
-        ngs->pls = ps->phone_loop;
         ps->searches = glist_add_ptr(ps->searches, ngs);
         ps->search = ngs;
     }
@@ -398,7 +386,6 @@ ps_update_lmset(ps_decoder_t *ps, ngram_model_t *lmset)
         search = ngram_search_init(ps->config, ps->acmod, ps->dict, ps->d2p);
         if (search == NULL)
             return NULL;
-        search->pls = ps->phone_loop;
         ps->searches = glist_add_ptr(ps->searches, search);
         ngs = (ngram_search_t *)search;
     }
@@ -436,7 +423,6 @@ ps_update_fsgset(ps_decoder_t *ps)
         /* Initialize FSG search. */
         search = fsg_search_init(ps->config,
                                  ps->acmod, ps->dict, ps->d2p);
-        search->pls = ps->phone_loop;
         ps->searches = glist_add_ptr(ps->searches, search);
     }
     else {
@@ -688,33 +674,7 @@ ps_start_utt(ps_decoder_t *ps, char const *uttid)
         acmod_set_senfh(ps->acmod, senfh);
     }
 
-    /* Start auxiliary phone loop search. */
-    if (ps->phone_loop)
-        ps_search_start(ps->phone_loop);
-
     return ps_search_start(ps->search);
-}
-
-static int
-ps_search_forward(ps_decoder_t *ps)
-{
-    int nfr;
-
-    nfr = 0;
-    while (ps->acmod->n_feat_frame > 0) {
-        int k;
-        if (ps->phone_loop)
-            if ((k = ps_search_step(ps->phone_loop, ps->acmod->output_frame)) < 0)
-                return k;
-        if (ps->acmod->output_frame >= ps->pl_window)
-            if ((k = ps_search_step(ps->search,
-                                    ps->acmod->output_frame - ps->pl_window)) < 0)
-                return k;
-        acmod_advance(ps->acmod);
-        ++ps->n_frame;
-        ++nfr;
-    }
-    return nfr;
 }
 
 int
@@ -727,10 +687,11 @@ ps_decode_senscr(ps_decoder_t *ps, FILE *senfh,
     n_searchfr = 0;
     acmod_set_insenfh(ps->acmod, senfh);
     while ((nfr = acmod_read_scores(ps->acmod)) > 0) {
-        if ((nfr = ps_search_forward(ps)) < 0) {
+        if ((nfr = ps_search_step(ps->search)) < 0) {
             ps_end_utt(ps);
             return nfr;
         }
+        ps->n_frame += nfr;
         n_searchfr += nfr;
     }
     ps_end_utt(ps);
@@ -762,8 +723,9 @@ ps_process_raw(ps_decoder_t *ps,
         /* Score and search as much data as possible */
         if (no_search)
             continue;
-        if ((nfr = ps_search_forward(ps)) < 0)
+        if ((nfr = ps_search_step(ps->search)) < 0)
             return nfr;
+        ps->n_frame += nfr;
         n_searchfr += nfr;
     }
 
@@ -793,8 +755,9 @@ ps_process_cep(ps_decoder_t *ps,
         /* Score and search as much data as possible */
         if (no_search)
             continue;
-        if ((nfr = ps_search_forward(ps)) < 0)
+        if ((nfr = ps_search_step(ps->search)) < 0)
             return nfr;
+        ps->n_frame += nfr;
         n_searchfr += nfr;
     }
 
@@ -804,31 +767,22 @@ ps_process_cep(ps_decoder_t *ps,
 int
 ps_end_utt(ps_decoder_t *ps)
 {
-    int rv, i;
+    int rv;
 
     acmod_end_utt(ps->acmod);
 
     /* Search any remaining frames. */
-    if ((rv = ps_search_forward(ps)) < 0) {
+    if ((rv = ps_search_step(ps->search)) < 0) {
         ptmr_stop(&ps->perf);
         return rv;
     }
-    /* Finish phone loop search. */
-    if (ps->phone_loop) {
-        if ((rv = ps_search_finish(ps->phone_loop)) < 0) {
-            ptmr_stop(&ps->perf);
-            return rv;
-        }
-    }
-    /* Search any frames remaining in the lookahead window. */
-    for (i = ps->acmod->output_frame - ps->pl_window;
-         i < ps->acmod->output_frame; ++i)
-        ps_search_step(ps->search, i);
-    /* Finish main search. */
+    ps->n_frame += rv;
+    /* Finish search. */
     if ((rv = ps_search_finish(ps->search)) < 0) {
         ptmr_stop(&ps->perf);
         return rv;
     }
+    ps->n_frame += rv;
     ptmr_stop(&ps->perf);
 
     /* Log a backtrace if requested. */

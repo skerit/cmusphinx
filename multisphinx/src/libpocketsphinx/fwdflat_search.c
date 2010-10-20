@@ -60,7 +60,7 @@
 #endif
 
 static int fwdflat_search_start(ps_search_t *base);
-static int fwdflat_search_step(ps_search_t *base, int frame_idx);
+static int fwdflat_search_step(ps_search_t *base);
 static int fwdflat_search_finish(ps_search_t *base);
 static int fwdflat_search_reinit(ps_search_t *base, dict_t *dict, dict2pid_t *d2p);
 static void fwdflat_search_free(ps_search_t *base);
@@ -845,32 +845,25 @@ fwdflat_renormalize_scores(fwdflat_search_t *ffs, int frame_idx, int32 norm)
 }
 
 static int
-fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
+fwdflat_search_one_frame(fwdflat_search_t *ffs)
 {
+    acmod_t *acmod = ps_search_acmod(ffs);
     int16 const *senscr;
     int32 nf, i, j;
     int32 *nawl;
-    int fi;
+    int fi, nfr, frame_idx;
+
+    if ((nfr = acmod_available(acmod)) <= 0)
+        return nfr;
+    frame_idx = acmod_frame(acmod);
 
     /* Activate our HMMs for the current frame if need be. */
-    if (!ps_search_acmod(ffs)->compallsen)
+    if (!acmod->compallsen)
         compute_fwdflat_sen_active(ffs, frame_idx);
 
     /* Compute GMM scores for the current frame. */
-    senscr = acmod_score(ps_search_acmod(ffs), &frame_idx);
-    ffs->st.n_senone_active_utt += ps_search_acmod(ffs)->n_senone_active;
-    E_INFO("senones active %d in frame %d\n",
-           ps_search_acmod(ffs)->n_senone_active, frame_idx);
-    if (frame_idx == 5) {
-        int16 *senscr;
-        acmod_t *acmod = ps_search_acmod(ffs);
-        senscr = acmod->senone_scores;
-        for (i = 0; i < acmod->n_senone_active; ++i) {
-            senscr += acmod->senone_active[i];
-            E_INFOCONT(" %d=%d", senscr - acmod->senone_scores, *senscr);
-        }
-        E_INFOCONT("\n");
-    }
+    senscr = acmod_score(acmod, &frame_idx);
+    ffs->st.n_senone_active_utt += acmod->n_senone_active;
 
     /* Mark backpointer table for current frame. */
     fi = bptbl_push_frame(ffs->bptbl, ffs->oldest_bp);
@@ -908,6 +901,7 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
     }
     ffs->n_active_word[nf & 0x1] = j;
 
+    acmod_advance(acmod);
     /* Return the number of frames processed. */
     return 1;
 }
@@ -947,74 +941,63 @@ fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
 }
 
 static int
-fwdflat_search_step(ps_search_t *base, int frame_idx)
+fwdflat_search_step(ps_search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
+    acmod_t *acmod = ps_search_acmod(ffs);
+    int frame_idx, nfr;
 
+    if ((nfr = acmod_available(acmod)) <= 0)
+        return nfr;
+    frame_idx = acmod_frame(acmod);
+    
     if (ffs->input_bptbl) {
         int next_sf; /**< First frame pointed to by active bps. */
-        int nfr, narc;
-
+        int narc;
         /* next_sf is the first starting frame that is still active.  The
          * bptbl code tracks this for us in the form of the oldest
          * backpointer referenced by the active part of the bptbl. */
-        /* FIXME: Add a function/macro for this. */
-        if (ffs->input_bptbl->oldest_bp == NO_BP) {
+        if (ffs->input_bptbl->oldest_bp == NO_BP)
             /* Can't do anything yet, everything is active. */
             next_sf = 0;
-            return 0;
-        }
-        else {
-            /* FIXME: Add a function/macro for this. */
+        else 
             next_sf = bptbl_ent(ffs->input_bptbl,
                                 ffs->input_bptbl->oldest_bp)->frame + 1;
-            E_INFO("next_sf %d\n", next_sf);
-        }
 
         /* Extend the arc buffer the appropriate number of frames. */
-        fwdflat_arc_buffer_extend(ffs->input_arcs, next_sf);
-
-        /* Add the next chunk of bps to the arc buffer.  FIXME: For
-         * the time being we just try to add them all, the arc buffer
-         * code will filter out the irrelevant ones. */
-        narc = fwdflat_arc_buffer_add_bps(ffs->input_arcs, ffs->input_bptbl,
-                                          0, ffs->input_bptbl->first_invert_bp);
-        fwdflat_arc_buffer_commit(ffs->input_arcs);
-        E_INFO("narc %d\n", narc);
+        if (fwdflat_arc_buffer_extend(ffs->input_arcs, next_sf) > 0) {
+            /* Add the next chunk of bps to the arc buffer.  FIXME:
+             * For the time being we just try to add them all, the arc
+             * buffer code will filter out the irrelevant ones. */
+            narc = fwdflat_arc_buffer_add_bps(ffs->input_arcs, ffs->input_bptbl,
+                                              0, ffs->input_bptbl->first_invert_bp);
+            fwdflat_arc_buffer_commit(ffs->input_arcs);
+        }
 
         /* Now pull things from the arc buffer - everything above this
          * line will be done in a separate thread in the near
          * future.
-         *
-         * Basically we just want to wait until (frame_idx +
-         * max_sf_win - 1) is available in the arc buffer.  At that
-         * point we consume as many frames as possible (FIXME: this
-         * may or may not be the right policy but we'll deal with that
-         * later).
-         *
-         * In the non-threaded case we just figure out how many frames
-         * there are, and step through them.
          */
-        /* First incarnation, just scan the entire arc buffer every
-         * time - we don't need to do this but it is a useful
-         * baseline. */
-        nfr = 0;
         E_INFO("Looking for arcs in frame %d\n", frame_idx + ffs->max_sf_win - 1);
-        while (fwdflat_arc_buffer_iter(ffs->input_arcs,
-                                       frame_idx + ffs->max_sf_win - 1) != NULL) {
+        if (fwdflat_arc_buffer_iter(ffs->input_arcs,
+                                    frame_idx + ffs->max_sf_win - 1) != NULL) {
             fwdflat_search_expand_arcs(ffs, frame_idx, frame_idx + ffs->max_sf_win);
             E_INFO("Searching frame %d\n", frame_idx);
-            fwdflat_search_one_frame(ffs, frame_idx);
-            ++frame_idx;
-            ++nfr;
+            return fwdflat_search_one_frame(ffs);
         }
-
-        return nfr;
+        else
+            return 0;
     }
     else {
-        /* Search one frame. */
-        E_INFO("Searching frame %d\n", frame_idx);
-        return fwdflat_search_one_frame(ffs, frame_idx);
+        int nfr, k;
+
+        nfr = 0;
+        while ((k = fwdflat_search_one_frame(ffs)) > 0) {
+            nfr += k;
+        }
+        if (k < 0)
+            return k;
+        return nfr;
     }
 }
 
@@ -1022,12 +1005,13 @@ static int
 fwdflat_search_finish(ps_search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
+    acmod_t *acmod = ps_search_acmod(ffs);
     int32 cf, next_sf, frame_idx, narc;
     
     bitvec_clear_all(ffs->word_active, ps_search_n_words(ffs));
 
     /* This is the number of frames of input. */
-    cf = ps_search_acmod(ffs)->output_frame;
+    cf = acmod->output_frame;
 
     /* Add final bps to the arc buffer. */
     if (ffs->input_bptbl) {
@@ -1056,12 +1040,12 @@ fwdflat_search_finish(ps_search_t *base)
                                        frame_idx + ffs->max_sf_win - 1) != NULL) {
             fwdflat_search_expand_arcs(ffs, frame_idx, frame_idx + ffs->max_sf_win);
             E_INFO("Searching frame %d\n", frame_idx);
-            fwdflat_search_one_frame(ffs, frame_idx);
+            fwdflat_search_one_frame(ffs);
             ++frame_idx;
         }
         while (frame_idx < cf) {
             E_INFO("Searching frame %d\n", frame_idx);
-            fwdflat_search_one_frame(ffs, frame_idx);
+            fwdflat_search_one_frame(ffs);
             ++frame_idx;
         }
     }
@@ -1163,6 +1147,8 @@ fwdflat_arc_buffer_dump(fwdflat_arc_buffer_t *fab)
 int
 fwdflat_arc_buffer_extend(fwdflat_arc_buffer_t *fab, int next_sf)
 {
+    if (next_sf == fab->next_sf)
+        return 0;
     /* FIXME: Reuse old indices in the future, but not for now. */
     garray_expand(fab->sf_idx, next_sf);
     fab->next_sf = next_sf;
@@ -1285,6 +1271,7 @@ fwdflat_arc_t *
 fwdflat_arc_buffer_wait(fwdflat_arc_buffer_t *fab, int sf)
 {
     /* FIXME: Implement this... */
+    return NULL;
 }
 
 int

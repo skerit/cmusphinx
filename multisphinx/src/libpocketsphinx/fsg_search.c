@@ -855,21 +855,25 @@ fsg_search_word_trans(fsg_search_t *fsgs)
     }
 }
 
-
-int
-fsg_search_step(ps_search_t *search, int frame_idx)
+static int
+fsg_search_one_frame(fsg_search_t *fsgs)
 {
-    fsg_search_t *fsgs = (fsg_search_t *)search;
+    acmod_t *acmod = ps_search_acmod(fsgs);
     int16 const *senscr;
-    acmod_t *acmod = search->acmod;
     gnode_t *gn;
     fsg_pnode_t *pnode;
     hmm_t *hmm;
+    int frame_idx, nfr;
+
+    if ((nfr = acmod_available(acmod)) <= 0)
+        return nfr;
 
     /* Activate our HMMs for the current frame if need be. */
     if (!acmod->compallsen)
         fsg_search_sen_active(fsgs);
+
     /* Compute GMM scores for the current frame. */
+    frame_idx = acmod_frame(acmod);
     senscr = acmod_score(acmod, &frame_idx);
     fsgs->n_sen_eval += acmod->n_senone_active;
     hmm_context_set_senscore(fsgs->hmmctx, senscr);
@@ -928,9 +932,25 @@ fsg_search_step(ps_search_t *search, int frame_idx)
     fsgs->pnode_active_next = NULL;
 
     /* End of this frame; ready for the next */
+    acmod_advance(acmod);
     ++fsgs->frame;
 
     return 1;
+}
+
+int
+fsg_search_step(ps_search_t *search)
+{
+    fsg_search_t *fsgs = (fsg_search_t *)search;
+    int nfr, k;
+
+    nfr = 0;
+    while ((k = fsg_search_one_frame(fsgs)) > 0) {
+        nfr += k;
+    }
+    if (k < 0)
+        return k;
+    return nfr;
 }
 
 

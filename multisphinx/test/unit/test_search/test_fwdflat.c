@@ -43,10 +43,7 @@ main(int argc, char *argv[])
 	ps_search_start(fwdflat);
 	for (i = 0; i < 200; ++i) {
 		acmod_process_feat(acmod, feat[i]);
-		while (acmod->n_feat_frame > 0) {
-			ps_search_step(fwdflat, acmod->output_frame);
-			acmod_advance(acmod);
-		}
+		ps_search_step(fwdflat);
 	}
 	ps_search_finish(fwdflat);
 	hyp = ps_search_hyp(fwdflat, &score);
