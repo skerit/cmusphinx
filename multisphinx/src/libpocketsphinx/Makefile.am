@@ -43,7 +43,7 @@ noinst_HEADERS =				\
 	ms_mgau.h				\
 	ms_senone.h				\
 	ps_alignment.h				\
-	ps_lattice_internal.h			\
+	ps_search.h				\
 	posixwin32.h				\
 	ptm_mgau.h				\
 	sendump.h				\

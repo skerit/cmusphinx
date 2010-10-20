@@ -11,5 +11,6 @@ SUBDIRS= test_alloc				\
 	test_fsg				\
 	test_util				\
 	test_thread				\
+	test_acmod				\
 	test_search				\
 	test_vocab_map

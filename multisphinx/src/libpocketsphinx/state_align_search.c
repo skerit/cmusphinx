@@ -276,7 +276,6 @@ static ps_searchfuncs_t state_align_search_funcs = {
     /* finish: */ state_align_search_finish,
     /* reinit: */ state_align_search_reinit,
     /* free: */   state_align_search_free,
-    /* lattice: */  NULL,
     /* hyp: */      NULL,
     /* prob: */     NULL,
     /* seg_iter: */ NULL,

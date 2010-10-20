@@ -181,9 +181,6 @@ ps_init(cmd_ln_t *config)
         err_set_logfile(cmd_ln_str_r(ps->config, "-logfn"));
 #endif
     err_set_debug_level(cmd_ln_int32_r(ps->config, "-debug"));
-    ps->mfclogdir = cmd_ln_str_r(ps->config, "-mfclogdir");
-    ps->rawlogdir = cmd_ln_str_r(ps->config, "-rawlogdir");
-    ps->senlogdir = cmd_ln_str_r(ps->config, "-senlogdir");
 
     /* Fill in some default arguments. */
     ps_init_defaults(ps->config);
@@ -351,36 +348,6 @@ ps_start_utt(ps_decoder_t *ps, char const *uttid)
         sprintf(nuttid, "%09u", ps->uttno);
         ps->uttid = ckd_salloc(nuttid);
         ++ps->uttno;
-    }
-
-    /* Start logging features and audio if requested. */
-    /* FIXME: In theory ps->acmod is owned by fwdflat search so we
-     * shouldn't be screwing with it here. */
-    if (ps->mfclogdir) {
-        char *logfn = string_join(ps->mfclogdir, "/",
-                                  ps->uttid, ".mfc", NULL);
-        FILE *mfcfh;
-        E_INFO("Writing MFCC log file: %s\n", logfn);
-        if ((mfcfh = fopen(logfn, "wb")) == NULL) {
-            E_ERROR_SYSTEM("Failed to open MFCC log file %s", logfn);
-            ckd_free(logfn);
-            return -1;
-        }
-        ckd_free(logfn);
-        acmod_set_mfcfh(ps->acmod, mfcfh);
-    }
-    if (ps->rawlogdir) {
-        char *logfn = string_join(ps->rawlogdir, "/",
-                                  ps->uttid, ".raw", NULL);
-        FILE *rawfh;
-        E_INFO("Writing raw audio log file: %s\n", logfn);
-        if ((rawfh = fopen(logfn, "wb")) == NULL) {
-            E_ERROR_SYSTEM("Failed to open raw audio log file %s", logfn);
-            ckd_free(logfn);
-            return -1;
-        }
-        ckd_free(logfn);
-        acmod_set_rawfh(ps->acmod, rawfh);
     }
 
     if (ps_search_start(ps->fwdtree) < 0)
