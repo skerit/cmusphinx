@@ -82,11 +82,11 @@ typedef struct bptbl_s {
     bp_t *ent;           /**< Backpointer entries. */
     int32 n_ent;         /**< First free BPTable entry. */
     int32 n_alloc;       /**< Number of entries allocated for entry-based arrays (ent, permute) */
-    int32 active_sf;     /**< First frame containing active
-                              backpointers.  Also the first frame
-                              which is indexed by end frame.  ef_idx
-                              indices should be added to this to get
-                              actual frame indices. */
+    int32 active_fr;     /**< First frame containing active
+                            backpointers.  Also the first frame which
+                            is indexed by end frame.  ef_idx indices
+                            should be added to this to get actual
+                            frame indices. */
     int32 *permute;      /**< Current permutation of entries (used for gc/sorting). */
     int32 first_invert_bp; /**< First reordered backpointer (used in gc) */
 
@@ -94,12 +94,14 @@ typedef struct bptbl_s {
     int32 bss_head;          /**< First free BScoreStack entry */
     int32 bscore_stack_size; /**< Number of entries allocated in bscore_stack. */
 
-    int32 n_frame_alloc; /**< Number of frames allocated for frame-based arrays. */
-    int32 n_frame;       /**< Number of frames actually present. */
+    int32 n_frame;       /**< Number of frames searched (may be greater than n_frame_alloc). */
+    /* All these are indexed by frame - active_sf */
+    int32 n_active_alloc; /**< Number of frames allocated for frame-based arrays. */
     int32 *ef_idx;       /**< First BPTable entry exiting in each frame */
-    int32 *sf_idx;       /**< First BPTable entry entering in each frame */
-    bitvec_t *valid_fr;  /**< Set of accessible frames (used in gc) */
     ps_latnode_t **frm_wordlist;   /**< List of active words in each frame. */
+
+    int32 n_valid_alloc; /**< Number of frames allocated in valid_fr. */
+    bitvec_t *valid_fr;  /**< Set of accessible frames (used in gc) */
 
     int32 *word_idx;     /**< BPTable index for any word in current frame;
                             cleared before each frame */

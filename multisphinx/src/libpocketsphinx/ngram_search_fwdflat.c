@@ -223,7 +223,7 @@ build_fwdflat_wordlist(ngram_search_t *ngs)
     dict = ps_search_dict(ngs);
 
     memset(ngs->bptbl->frm_wordlist, 0,
-           ngs->bptbl->n_frame_alloc * sizeof(*ngs->bptbl->frm_wordlist));
+           ngs->bptbl->n_active_alloc * sizeof(*ngs->bptbl->frm_wordlist));
 
     /* Scan the backpointer table for all active words and record
      * their start frames. */

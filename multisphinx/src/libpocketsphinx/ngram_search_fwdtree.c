@@ -985,7 +985,7 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
          * backpointers.  Luckily by the definition of window_sf it's
          * not possible to have any candidates that fail this
          * assertion. */
-        assert(ngs->cand_sf[i].bp_ef >= ngs->bptbl->active_sf);
+        assert(ngs->cand_sf[i].bp_ef >= ngs->bptbl->active_fr);
         /* For the i-th unique end frame... */
         bp = bptbl_ef_idx(ngs->bptbl, ngs->cand_sf[i].bp_ef);
         bpend = bptbl_ef_idx(ngs->bptbl, ngs->cand_sf[i].bp_ef + 1);
