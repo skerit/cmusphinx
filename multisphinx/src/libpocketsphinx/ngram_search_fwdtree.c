@@ -1049,9 +1049,10 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
 
 /* Check if a given backpointer has been around for too long. */
 static int
-too_old_too_cold(ngram_search_t *ngs, int bp,int frame_idx)
+too_old_too_cold(ngram_search_t *ngs, int bp, int frame_idx)
 {
-    if (frame_idx - bp_sf(ngs->bptbl, bp) > 20) {
+    if (ngs->max_silence >= 0
+        && frame_idx - bp_sf(ngs->bptbl, bp) > ngs->max_silence) {
         E_DEBUG(4,("Pruning too-old HMM (bp %d sf %d frame_idx %d)\n",
                    bp, bp_sf(ngs->bptbl, bp), frame_idx));
         return TRUE;

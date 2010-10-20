@@ -160,6 +160,10 @@
       ARG_INT32,                                                                                \
       "-1",                                                                                     \
       "Maximum number of active HMMs to maintain at each frame (or -1 for no pruning)" },       \
+{ "-maxsilfr",                                                                                  \
+      ARG_INT32,                                                                                \
+      "-1",                                                                                     \
+      "Maximum number of frames a silence word may last (or -1 for no pruning)" },       \
 { "-min_endfr",                                                                                 \
       ARG_INT32,                                                                                \
       "0",                                                                                      \

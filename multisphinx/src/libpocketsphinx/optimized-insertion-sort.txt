@@ -55,4 +55,9 @@ the lattice generator.
 ---
 
 To reduce the length of the elastic window, forcibly break long
-silences - if the oldest backpointer in a filler word is too old, and 
+silences - if the oldest backpointer in a silence word is too old,
+clear its path scores and re-enter it.
+
+Note that if the threshold is too small this can cause errors at the
+beginning of the sentence - not sure why this happens (something to do
+with scores i guess) but it should be fixable somehow.

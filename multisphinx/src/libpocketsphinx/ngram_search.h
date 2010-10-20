@@ -316,6 +316,8 @@ struct ngram_search_s {
     int32 pip;
     int32 maxwpf;
     int32 maxhmmpf;
+    /* Maximum number of frames a silence word is allowed to persist. */
+    int max_silence;
 };
 typedef struct ngram_search_s ngram_search_t;
 

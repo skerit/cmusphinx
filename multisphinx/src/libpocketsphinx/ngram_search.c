@@ -113,6 +113,7 @@ ngram_search_calc_beams(ngram_search_t *ngs)
     /* Absolute pruning parameters. */
     ngs->maxwpf = cmd_ln_int32_r(config, "-maxwpf");
     ngs->maxhmmpf = cmd_ln_int32_r(config, "-maxhmmpf");
+    ngs->max_silence = cmd_ln_int32_r(config, "-maxsilfr");
 
     /* Various penalties which may or may not be useful. */
     ngs->wip = logmath_log(acmod->lmath, cmd_ln_float32_r(config, "-wip"));
