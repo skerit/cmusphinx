@@ -65,8 +65,6 @@ main(int argc, char *argv[])
 	i = 0;
 	fffr = 0;
 	for (i = 0; i < input_nfr; ++i) {
-		if (fffr == input_nfr)
-			fffr = 0;
 		acmod_process_feat(acmod, feat[i]);
 		ps_search_step(fwdtree);
 		fffr += acmod_process_feat(acmod2, feat[fffr]);

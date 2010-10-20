@@ -287,20 +287,6 @@ int acmod_start_utt(acmod_t *acmod);
 int acmod_end_utt(acmod_t *acmod);
 
 /**
- * Rewind the current utterance, allowing it to be rescored.
- *
- * After calling this function, the internal frame index is reset, and
- * acmod_score() will return scores starting at the first frame of the
- * current utterance.  Currently, acmod_set_grow() must have been
- * called to enable growing the feature buffer in order for this to
- * work.  In the future, senone scores may be cached instead.
- *
- * @return 0 for success, <0 for failure (if the utterance can't be
- *         rewound due to no feature or score data available)
- */
-int acmod_rewind(acmod_t *acmod);
-
-/**
  * Get the number of frames of available feature data.
  *
  * @return Number of available frames of feature data.
@@ -329,64 +315,6 @@ int acmod_advance(acmod_t *acmod);
 int acmod_frame(acmod_t *acmod);
 
 /**
- * Set memory allocation policy for utterance processing.
- *
- * @param grow_feat If non-zero, the internal dynamic feature buffer
- * will expand as necessary to encompass any amount of data fed to the
- * model.
- * @return previous allocation policy.
- */
-int acmod_set_grow(acmod_t *acmod, int grow_feat);
-
-/**
- * Feed raw audio data to the acoustic model for scoring.
- *
- * @param inout_raw In: Pointer to buffer of raw samples
- *                  Out: Pointer to next sample to be read
- * @param inout_n_samps In: Number of samples available
- *                      Out: Number of samples remaining
- * @param full_utt If non-zero, this block represents a full
- *                 utterance and should be processed as such.
- * @return Number of frames of data processed.
- */
-int acmod_process_raw(acmod_t *acmod,
-                      int16 const **inout_raw,
-                      size_t *inout_n_samps,
-                      int full_utt);
-
-/**
- * Feed acoustic feature data into the acoustic model for scoring.
- *
- * @param inout_cep In: Pointer to buffer of features
- *                  Out: Pointer to next frame to be read
- * @param inout_n_frames In: Number of frames available
- *                      Out: Number of frames remaining
- * @param full_utt If non-zero, this block represents a full
- *                 utterance and should be processed as such.
- * @return Number of frames of data processed.
- */
-int acmod_process_cep(acmod_t *acmod,
-                      mfcc_t ***inout_cep,
-                      int *inout_n_frames,
-                      int full_utt);
-
-/**
- * Feed dynamic feature data into the acoustic model for scoring.
- *
- * Unlike acmod_process_raw() and acmod_process_cep(), this function
- * accepts a single frame at a time.  This is because there is no need
- * to do buffering when using dynamic features as input.  However, if
- * the dynamic feature buffer is full, this function will fail, so you
- * should either always check the return value, or always pair a call
- * to it with a call to acmod_score().
- *
- * @param feat Pointer to one frame of dynamic features.
- * @return Number of frames processed (either 0 or 1).
- */
-int acmod_process_feat(acmod_t *acmod,
-                       mfcc_t **feat);
-
-/**
  * Set up a senone score dump file for input.
  *
  * @param insenfh File handle of dump file
@@ -400,17 +328,6 @@ int acmod_set_insenfh(acmod_t *acmod, FILE *insenfh);
  * @return Number of frames read or <0 on error.
  */
 int acmod_read_scores(acmod_t *acmod);
-
-/**
- * Get a frame of dynamic feature data.
- *
- * @param inout_frame_idx Input: frame index to get, or NULL
- *                        to obtain features for the most recent frame.
- *                        Output: frame index corresponding to this
- *                        set of features.
- * @return Feature array, or NULL if requested frame is not available.
- */
-mfcc_t **acmod_get_frame(acmod_t *acmod, int *inout_frame_idx);
 
 /**
  * Score one frame of data.
