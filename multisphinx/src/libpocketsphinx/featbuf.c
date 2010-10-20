@@ -288,8 +288,11 @@ featbuf_release_all(featbuf_t *fb, int sidx)
     if ((rv = featbuf_release(fb, sidx, -1)) < 0)
         return rv;
     /* FIXME: Still possible race conditions here, need to use semaphores. */
-    if (++fb->released == fb->refcount - 1)
+    if (++fb->released == fb->refcount - 1) {
+        E_INFO("WTF releasing start signal released %d refcount %d\n",
+               fb->released, fb->refcount);
         sbevent_reset(fb->start);
+    }
     sbevent_signal(fb->release);
     return rv;
 }
@@ -309,6 +312,7 @@ featbuf_start_utt(featbuf_t *fb)
 
     /* Signal any consumers. */
     fb->canceled = FALSE;
+    E_INFO("Signaling utt start\n");
     sbevent_signal(fb->start);
     return 0;
 }

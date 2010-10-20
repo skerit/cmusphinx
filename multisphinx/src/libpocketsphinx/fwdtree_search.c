@@ -1668,13 +1668,9 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     int16 const *senscr;
     int fi, frame_idx;
 
-    if ((frame_idx = acmod_wait(acmod, -1)) == -1) {
-        printf("got frame index %d\n", frame_idx);
+    if ((frame_idx = acmod_wait(acmod, -1)) == -1)
         return 0;
-    }
-    printf("got frame index %d\n", frame_idx);
-
-    printf("Searching frame %d\n", frame_idx);
+    E_INFO("Searching frame %d\n", frame_idx);
     /* Activate our HMMs for the current frame if need be. */
     if (!acmod->compallsen)
         compute_sen_active(fts, frame_idx);

@@ -92,6 +92,7 @@ ps_search_main(sbthread_t *thr)
 {
     ps_search_t *search = sbthread_arg(thr);
 
+    E_INFO("Waiting to start utt\n");
     while (acmod_start_utt(search->acmod, -1) == 0) {
         (*search->vt->decode)(search);
         acmod_end_utt(search->acmod);

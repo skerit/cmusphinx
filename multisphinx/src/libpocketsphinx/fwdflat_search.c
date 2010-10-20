@@ -813,12 +813,6 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
     int32 *nawl;
     int fi;
 
-    if ((frame_idx = acmod_wait(acmod, -1)) == -1) {
-        printf("got frame index %d\n", frame_idx);
-        return 0;
-    }
-    printf("got frame index %d\n", frame_idx);
-
     printf("Searching frame %d\n", frame_idx);
     /* Activate our HMMs for the current frame if need be. */
     if (!acmod->compallsen)
@@ -981,20 +975,24 @@ static int
 fwdflat_search_decode(ps_search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
-    int nfr, k;
-    
+    acmod_t *acmod = ps_search_acmod(base);
+    int frame_idx, nfr, k;
+
+    E_INFO("WTF decoding\n");
     if (ffs->input_bptbl)
         return fwdflat_search_decode_2ndpass(ffs, ps_search_acmod(base));
 
     nfr = 0;
     fwdflat_search_start(base);
-    while ((k = fwdflat_search_one_frame(ffs, 0)) > 0) {
+    while ((frame_idx = acmod_wait(acmod, -1)) >= 0) {
+        if ((k = fwdflat_search_one_frame(ffs, frame_idx)) <= 0)
+            break;
         nfr += k;
     }
     fwdflat_search_finish(base);
     bptbl_dump(ffs->bptbl);
     /* This means we were canceled.  FIXME: Not clear whether calling
-     * fwdflat_search_finish() is necessary in this case. */
+     * fwdflat_search_finish() was necessary in this case. */
     if (k < 0)
         return k;
     return nfr;

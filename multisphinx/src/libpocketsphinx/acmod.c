@@ -277,6 +277,7 @@ acmod_start_utt(acmod_t *acmod, int timeout)
     if ((rc = featbuf_wait_utt(acmod->fb, timeout)) < 0) {
         return rc;
     }
+    E_INFO("Finished waiting for start of utt\n");
     acmod->output_frame = 0;
     acmod->eou = FALSE;
 
