@@ -1034,8 +1034,6 @@ fwdflat_search_finish(ps_search_t *base)
     /* This is the number of frames of input. */
     cf = acmod->output_frame;
 
-    /* FIXME: Might need to keep searching a bit?! */
-
     /* Finalize the backpointer table. */
     bptbl_finalize(ffs->bptbl);
 
@@ -1186,8 +1184,12 @@ fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
     /* Save frame and arc counts. */
     n_active_fr = fab->next_sf - fab->active_sf;
     n_arcs = garray_next_idx(fab->arcs) - fab->active_arc;
-    assert(n_arcs > 0);
-    assert(n_active_fr > 0);
+
+    /* Nothing to do... */
+    if (n_active_fr == 0) {
+        assert(n_arcs == 0);
+        return;
+    }
 
 #if 0
     E_INFO("sf_idx before (%d:%d):", fab->active_sf, fab->next_sf);
@@ -1196,7 +1198,7 @@ fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
     E_INFOCONT("\n");
 #endif
 
-    /* Sum forward frame counters to create arc indices */
+    /* Sum forward frame counters to create arc indices. */
     sf = garray_ptr(fab->sf_idx, int, fab->active_sf);
     prev_count = sf[0];
     sf[0] = fab->active_arc;
@@ -1206,31 +1208,33 @@ fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
         prev_count = tmp;
     }
 
-    /* Permute incoming arcs to match frame counters */
-    active_sf = garray_slice(fab->sf_idx, fab->active_sf, n_active_fr);
-    active_arc = garray_slice(fab->arcs, fab->active_arc, n_arcs);
+    if (n_arcs > 0) {
+        /* Permute incoming arcs to match frame counters */
+        active_sf = garray_slice(fab->sf_idx, fab->active_sf, n_active_fr);
+        active_arc = garray_slice(fab->arcs, fab->active_arc, n_arcs);
 
-    for (i = 0; i < n_arcs; ++i) {
-        fwdflat_arc_t *arc = garray_ptr(active_arc, fwdflat_arc_t, i);
-        int *pos = garray_ptr(active_sf, int, arc->sf - fab->active_sf);
-        /* Copy it into place. */
-        garray_ent(fab->arcs, fwdflat_arc_t, *pos) = *arc;
-        /* Increment local frame counter. */
-        *pos += 1;
-    }
+        for (i = 0; i < n_arcs; ++i) {
+            fwdflat_arc_t *arc = garray_ptr(active_arc, fwdflat_arc_t, i);
+            int *pos = garray_ptr(active_sf, int, arc->sf - fab->active_sf);
+            /* Copy it into place. */
+            garray_ent(fab->arcs, fwdflat_arc_t, *pos) = *arc;
+            /* Increment local frame counter. */
+            *pos += 1;
+        }
 #if 0
-    E_INFO("sf_idx after (%d:%d):", fab->active_sf, fab->next_sf);
-    for (i = fab->active_sf; i < fab->next_sf; ++i) {
-        int idx = garray_ent(fab->sf_idx, int, i);
-        E_INFOCONT(" %d=%d:%d",
-                   idx, garray_ent(fab->arcs, fwdflat_arc_t, idx).sf,
-                   garray_ent(fab->arcs, fwdflat_arc_t, idx).ef);
-    }
-    E_INFOCONT("\n");
+        E_INFO("sf_idx after (%d:%d):", fab->active_sf, fab->next_sf);
+        for (i = fab->active_sf; i < fab->next_sf; ++i) {
+            int idx = garray_ent(fab->sf_idx, int, i);
+            E_INFOCONT(" %d=%d:%d",
+                       idx, garray_ent(fab->arcs, fwdflat_arc_t, idx).sf,
+                       garray_ent(fab->arcs, fwdflat_arc_t, idx).ef);
+        }
+        E_INFOCONT("\n");
 #endif
 
-    garray_free(active_sf);
-    garray_free(active_arc);
+        garray_free(active_sf);
+        garray_free(active_arc);
+    }
 
     /* Update frame and arc pointers. */
     fab->active_sf += n_active_fr;

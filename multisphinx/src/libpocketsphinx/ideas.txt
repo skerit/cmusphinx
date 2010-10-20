@@ -246,3 +246,26 @@ Now we need to figure out how to enforce a hard limit on the size of
 the backpointer table.  The duration modeling thing can be done after
 this - for the moment we just want to have a parameter to tune (though
 we will do the duration modeling, have no doubt about that)
+
+The essence of this hard limitation is that we need to retire old
+backpointers before it can overflow.
+
+We can't control the number of incoming backpointers per frame (well,
+actually, it's bounded by the number of words in the vocabulary, but
+below that, by the size of the last phone candidate list - more on
+this later) but of course we do control the number of backpointers
+that make into the active set.
+
+This implies splitting the bptbl again (which is okay), now we'll have
+incoming, active, and retired arrays, where the incoming and retired
+arrays are growable (although in the future the retired array will
+also be fixed size) and the incoming grows as needed (but probably
+won't get all that big)
+
+The question is do we actually need to do this?  The active bptbl
+never gets very big at all - for the test file which is long and
+pretty noisy it tops out at 128k.  The bigger problem is the rc
+pointers which get pretty huge.  So, incremental lattice generation is
+more of a priority.
+
+However fixing the size of the active bptbl

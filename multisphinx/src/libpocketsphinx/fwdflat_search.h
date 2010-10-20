@@ -104,11 +104,9 @@ typedef struct fwdflat_arc_buffer_s {
     int refcount;
     garray_t *arcs;
     garray_t *sf_idx;
-    int first_sf;  /**< First frame containing outgoing arcs. */
     int active_sf; /**< First frame of incoming arcs. */
-    int next_sf;   /**< First frame not containing arcs (last frame + 1). */
-
-    int first_arc;  /**< First arc index tracked in buffer. */
+    int next_sf;   /**< First frame not containing arcs (last frame + 1)
+                      (FIXME: same as garray_next_ent(sf_idx)). */
     int active_arc; /**< First incoming arc. */
 } fwdflat_arc_buffer_t;
 

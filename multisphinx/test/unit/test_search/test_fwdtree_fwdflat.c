@@ -24,7 +24,10 @@ main(int argc, char *argv[])
 	char const *hyp;
 	int32 score;
 	int fffr;
+	char const *maxwpf = "50";
 
+	if (argc > 1)
+		maxwpf = argv[1];
 	ckd_set_jump(NULL, TRUE);
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
@@ -32,6 +35,8 @@ main(int argc, char *argv[])
 			     "-fwdtree", "no",
 			     "-fwdflat", "no",
 			     "-fwdflatefwid", "3",
+			     "-maxwpf", maxwpf,
+			     "-latsize", "512",
 			     "-bestpath", "no", NULL);
 
 	/* Get the API to initialize a bunch of stuff for us (but not the search). */
@@ -52,8 +57,11 @@ main(int argc, char *argv[])
 		E_FATAL("Failed to read mfc file\n");
 	ps_search_start(fwdtree);
 	ps_search_start(fwdflat);
+	i = 0;
 	fffr = 0;
 	for (i = 0; i < input_nfr; ++i) {
+		if (fffr == input_nfr)
+			fffr = 0;
 		acmod_process_feat(acmod, feat[i]);
 		ps_search_step(fwdtree);
 		fffr += acmod_process_feat(acmod2, feat[fffr]);
@@ -61,7 +69,6 @@ main(int argc, char *argv[])
 		E_INFO("i %d fffr %d fwdflat nfr %d\n",
 		       i, fffr, nfr);
 	}
-
 	ps_search_finish(fwdtree);
 	hyp = ps_search_hyp(fwdtree, &score);
 	printf("fwdtree: %s (%d)\n", hyp, score);
