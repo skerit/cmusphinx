@@ -83,6 +83,7 @@ typedef struct {
  * \brief Multivariate gaussian mixture density parameters
  */
 typedef struct {
+    int refcount;
     mfcc_t ****mean;	/**< mean[codebook][feature][codeword] vector */
     mfcc_t ****var;	/**< like mean; diagonal covariance vector only */
     mfcc_t ***det;	/**< log(determinant) for each variance vector;
@@ -108,8 +109,13 @@ gauden_init (char const *meanfile,/**< Input: File containing means of mixture g
              logmath_t *lmath
     );
 
-/** Release memory allocated by gauden_init. */
-void gauden_free(gauden_t *g); /**< In: The gauden_t to free */
+/**
+ * Retain a pointer to a gauden_t.
+ */
+gauden_t *gauden_retain(gauden_t *g);
+
+/** Release a pointer to a gauden_t. */
+int gauden_free(gauden_t *g); /**< In: The gauden_t to free */
 
 /** Transform Gaussians according to an MLLR matrix (or, eventually, more). */
 int32 gauden_mllr_transform(gauden_t *s, ps_mllr_t *mllr, cmd_ln_t *config);

@@ -53,6 +53,7 @@ main(int argc, char *argv[])
 	printf("hyp: %s (%d)\n", hyp, score);
 
 	ps_search_free(fwdtree);
+	feat_array_free(feat);
 	ps_free(ps);
 
 	return 0;

@@ -1,3 +1,4 @@
+/* -*- c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /* ====================================================================
  * Copyright (c) 1999-2004 Carnegie Mellon University.  All rights
  * reserved.
@@ -107,6 +108,7 @@ extern "C" {
  * topology.
  */
 typedef struct {
+    int refcount;
     uint8 ***tp;	/**< The transition matrices; kept in the same scale as acoustic scores;
 			   tp[tmatid][from-state][to-state] */
     int16 n_tmat;	/**< Number matrices */
@@ -132,11 +134,13 @@ void tmat_dump (tmat_t *tmat,  /**< In: transition matrix */
     );	
 
 
+tmat_t *tmat_retain(tmat_t *t);
+
 /**
  * RAH, add code to remove memory allocated by tmat_init
  */
 
-void tmat_free (tmat_t *t /**< In: transition matrix */
+int tmat_free (tmat_t *t /**< In: transition matrix */
     );
 
 /**

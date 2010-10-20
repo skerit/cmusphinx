@@ -188,7 +188,8 @@ tmat_chk_1skip(tmat_t * tmat, logmath_t *lmath)
 
 
 tmat_t *
-tmat_init(char const *file_name, logmath_t *lmath, float64 tpfloor, int32 breport)
+tmat_init(char const *file_name, logmath_t *lmath, float64 tpfloor,
+          int32 breport)
 {
     char tmp;
     int32 n_src, n_dst;
@@ -207,13 +208,19 @@ tmat_init(char const *file_name, logmath_t *lmath, float64 tpfloor, int32 brepor
     }
 
     t = (tmat_t *) ckd_calloc(1, sizeof(tmat_t));
+    t->refcount = 1;
 
-    if ((fp = fopen(file_name, "rb")) == NULL)
-        E_FATAL_SYSTEM("Failed to open transition file '%s' for reading", file_name);
+    if ((fp = fopen(file_name, "rb")) == NULL) {
+        E_ERROR_SYSTEM("Failed to open transition file '%s' for reading",
+                       file_name);
+        goto error_out;
+    }
 
     /* Read header, including argument-value info and 32-bit byteorder magic */
-    if (bio_readhdr(fp, &argname, &argval, &byteswap) < 0)
-        E_FATAL("Failed to read header from file '%s'\n", file_name);
+    if (bio_readhdr(fp, &argname, &argval, &byteswap) < 0) {
+        E_ERROR("Failed to read header from file '%s'\n", file_name);
+        goto error_out;
+    }
 
     /* Parse argument-value list */
     chksum_present = 0;
@@ -242,18 +249,23 @@ tmat_init(char const *file_name, logmath_t *lmath, float64 tpfloor, int32 brepor
         || (bio_fread(&i, sizeof(int32), 1, fp, byteswap, &chksum) != 1)) {
         E_FATAL("bio_fread(%s) (arraysize) failed\n", file_name);
     }
-    if (t->n_tmat >= MAX_INT16) /* Comparison is always false... */
-        E_FATAL("%s: #tmat (%d) exceeds limit (%d)\n", file_name,
+    if (t->n_tmat >= MAX_INT16) {/* Comparison is always false... */
+        E_ERROR("%s: #tmat (%d) exceeds limit (%d)\n", file_name,
                 t->n_tmat, MAX_INT16);
-    if (n_dst != n_src + 1)
-        E_FATAL("%s: #from-states(%d) != #to-states(%d)-1\n", file_name,
+        goto error_out;
+    }
+    if (n_dst != n_src + 1) {
+        E_ERROR("%s: #from-states(%d) != #to-states(%d)-1\n", file_name,
                 n_src, n_dst);
+        goto error_out;
+    }
     t->n_state = n_src;
 
     if (i != t->n_tmat * n_src * n_dst) {
-        E_FATAL
+        E_ERROR
             ("%s: #float32s(%d) doesn't match dimensions: %d x %d x %d\n",
              file_name, i, t->n_tmat, n_src, n_dst);
+        goto error_out;
     }
 
     /* Allocate memory for tmat data */
@@ -267,7 +279,8 @@ tmat_init(char const *file_name, logmath_t *lmath, float64 tpfloor, int32 brepor
     for (i = 0; i < t->n_tmat; i++) {
         if (bio_fread(tp[0], sizeof(float32), tp_per_tmat, fp,
                       byteswap, &chksum) != tp_per_tmat) {
-            E_FATAL("fread(%s) (arraydata) failed\n", file_name);
+            E_ERROR("fread(%s) (arraydata) failed\n", file_name);
+            goto error_out;
         }
 
         /* Normalize and floor */
@@ -305,12 +318,20 @@ tmat_init(char const *file_name, logmath_t *lmath, float64 tpfloor, int32 brepor
 
     fclose(fp);
 
-    if (tmat_chk_uppertri(t, lmath) < 0)
-        E_FATAL("Tmat not upper triangular\n");
-    if (tmat_chk_1skip(t, lmath) < 0)
-        E_FATAL("Topology not Left-to-Right or Bakis\n");
+    if (tmat_chk_uppertri(t, lmath) < 0) {
+        E_ERROR("Tmat not upper triangular\n");
+        goto error_out;
+    }
+    if (tmat_chk_1skip(t, lmath) < 0) {
+        E_ERROR("Topology not Left-to-Right or Bakis\n");
+        goto error_out;
+    }
 
     return t;
+
+error_out:
+    tmat_free(t);
+    return NULL;
 }
 
 void
@@ -326,12 +347,22 @@ tmat_report(tmat_t * t)
 /* 
  *  RAH, Free memory allocated in tmat_init ()
  */
-void
+int
 tmat_free(tmat_t * t)
 {
-    if (t) {
-        if (t->tp)
-            ckd_free_3d(t->tp);
-        ckd_free(t);
-    }
+    if (t == NULL)
+        return 0;
+    if (--t->refcount > 0)
+        return t->refcount;
+    if (t->tp)
+        ckd_free_3d(t->tp);
+    ckd_free(t);
+    return 0;
+}
+
+tmat_t *
+tmat_retain(tmat_t *t)
+{
+    ++t->refcount;
+    return t;
 }

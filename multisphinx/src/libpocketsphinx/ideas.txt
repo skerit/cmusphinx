@@ -12,6 +12,27 @@ fwdflat sliding window
  * Alternately we could just sort the backpointer table according to start frame
    How efficient/inefficient is it to do this incrementally in fwdflat?
 
+* Add ability to pull from previous bptbl to fwdflat search
+  - Implement arc buffers - DONE
+    * Note that this is basically just incremental lattice generation
+    * And the same mechanism we'll use for a bunch of other stuff
+  - Pipelining requires acmod to be restructured a bit
+    * Because s2_semi_mgau is stateful, remembers last frame's topn
+  - A couple of options here to think about
+    * Separate acmod_t for each search module
+      + Would need some kind of COW or ability to share components
+      + Probably just add a "clone" function to the acmod_t and mgau_t
+      	- Shares fe_t, feat_t
+	- Separate mfcc and feat buffers
+	- Shares acoustic model parameters
+	- Separate senone score arrays and top-N stuff, etc
+    * Extend mgau_t interface to be aware of frame indices
+      + For s2_semi_mgau it would probably just keep a history of top-N
+      + There would also have to be an API to release old frames
+      + This seems somewhat more involved, especially since logically
+        we want to have separate acmods for each search component
+      + If we wanted to cache senone scores though it might make sense
+
 Potential idea:
 
  * Track oldest backpointer in lexicon tree

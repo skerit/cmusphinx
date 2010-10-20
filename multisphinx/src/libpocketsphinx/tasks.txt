@@ -14,30 +14,12 @@
   - Backtraces and lattice gen then refer to the retired portion - DONE
   - Test this on standalone fwdtree first - DONE
 
-* Work these algorithms out on paper, ugh
+* Implement arc buffers - DONE (mostly)
+  - Release old arcs
+  - Maybe rewrite bptbl and friends to use the new garray_t
+    + This would ease the future transition to circular arrays
 
-* Add ability to pull from previous bptbl to fwdflat search
-
-  - fwdflat step algorithm version 1:
-    * input_bptbl->oldest_bp's exit frame is the last start frame that
-      won't get any more arcs
-      - record this frame + 1 as next_input_sf
-      - count bps from input_next_bp up to the first bp exiting in
-        next_input_sf -> next_input_next_bp
-      - Extend sf_idx, arcs as needed
-      - count number of bps per new sf, add to sf_idx, simultaneously
-        + Append new bps to arc array at sf_idx
-        + arc array is just (wid, sf, ef), scores don't matter (for now)
-      - update bptbl->input_next_bp to next_input_next_bp
-    * If frame_idx doesn't have a sufficient window:
-      + Update word index for all available frames
-      + Update last_sf
-    * While frame_idx has a sufficient window:
-      + Expire word index for previous frame
-      + Update word index for current frame
-      + Do one frame of search
-      + Increment frame_idx
-      + Incrememt last_sf
+* Implement semi-shared acoustic models for search passes
 
 * Rewrite lattice generation to be incremental on retired bps
   - No problem with doing this

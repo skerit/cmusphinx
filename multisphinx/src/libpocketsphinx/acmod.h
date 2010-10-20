@@ -106,6 +106,7 @@ typedef struct ps_mgaufuncs_s {
                       int32 compallsen);
     int (*transform)(ps_mgau_t *mgau,
                      ps_mllr_t *mllr);
+    ps_mgau_t *(*copy)(ps_mgau_t *mgau);
     void (*free)(ps_mgau_t *mgau);
 } ps_mgaufuncs_t;    
 
@@ -122,6 +123,8 @@ struct ps_mgau_s {
     (*ps_mgau_base(mg)->vt->transform)(mg, mllr)
 #define ps_mgau_free(mg)                                  \
     (*ps_mgau_base(mg)->vt->free)(mg)
+#define ps_mgau_copy(mg)                                  \
+    (*ps_mgau_base(mg)->vt->copy)(mg)
 
 /**
  * Acoustic model structure.
@@ -139,10 +142,6 @@ struct ps_mgau_s {
  * scores (due to dynamic feature calculation), results may not be
  * immediately available after input, and the output results will not
  * correspond to the last piece of data input.
- *
- * TODO: In addition, this structure serves the purpose of queueing
- * frames of features (and potentially also scores in the future) for
- * asynchronous passes of recognition operating in parallel.
  */
 struct acmod_s {
     /* Global objects, not retained. */
@@ -202,7 +201,7 @@ typedef struct acmod_s acmod_t;
  *           or NULL to create one automatically.  If this is supplied
  *           and its parameters do not match those in the acoustic
  *           model, this function will fail.  This pointer is not retained.
- * @param fe a previously-initialized dynamic feature module to use,
+ * @param fcb a previously-initialized dynamic feature module to use,
  *           or NULL to create one automatically.  If this is supplied
  *           and its parameters do not match those in the acoustic
  *           model, this function will fail.  This pointer is not retained.
@@ -211,7 +210,19 @@ typedef struct acmod_s acmod_t;
 acmod_t *acmod_init(cmd_ln_t *config, logmath_t *lmath, fe_t *fe, feat_t *fcb);
 
 /**
+ * Create a partial copy of an acoustic model.
+ *
+ * The new acoustic model shares the same parameters, but keeps its
+ * own state, including acoustic feature buffers and the current frame
+ * of evaluation.
+ */
+acmod_t *acmod_copy(acmod_t *acmod);
+
+/**
  * Adapt acoustic model using a linear transform.
+ *
+ * FIXME: The semantics of this with respect to copied acoustic models
+ * are not defined at the moment.
  *
  * @param mllr The new transform to use, or NULL to update the existing
  *              transform.  The decoder retains ownership of this pointer,

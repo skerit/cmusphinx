@@ -344,23 +344,30 @@ senone_init(gauden_t *g, char const *mixwfile, char const *sen2mgau_map_file,
                     n, sen2mgau_map_file, s->n_sen, mixwfile);
     }
 
-    s->featscr = NULL;
     return s;
 }
 
-void
+senone_t *
+senone_retain(senone_t *s)
+{
+    ++s->refcount;
+    return s;
+}
+
+int
 senone_free(senone_t * s)
 {
     if (s == NULL)
-        return;
+        return 0;
+    if (--s->refcount > 0)
+        return s->refcount;
     if (s->pdf)
         ckd_free_3d((void *) s->pdf);
     if (s->mgau)
         ckd_free(s->mgau);
-    if (s->featscr)
-        ckd_free(s->featscr);
     logmath_free(s->lmath);
     ckd_free(s);
+    return 0;
 }
 
 

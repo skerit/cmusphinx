@@ -371,6 +371,8 @@ gauden_init(char const *meanfile, char const *varfile, float32 varfloor, logmath
     assert(varfloor > 0.0);
 
     g = (gauden_t *) ckd_calloc(1, sizeof(gauden_t));
+    g->refcount = 1;
+    /* FIXME: should this be refcounted? */
     g->lmath = lmath;
 
     /* Read means and (diagonal) variances for all mixture gaussians */
@@ -397,11 +399,21 @@ gauden_init(char const *meanfile, char const *varfile, float32 varfloor, logmath
     return g;
 }
 
-void
+gauden_t *
+gauden_retain(gauden_t *g)
+{
+    ++g->refcount;
+    return g;
+}
+
+int
 gauden_free(gauden_t * g)
 {
     if (g == NULL)
-        return;
+        return 0;
+    if (--g->refcount > 0)
+        return g->refcount;
+
     if (g->mean)
         gauden_param_free(g->mean);
     if (g->var)
@@ -411,6 +423,7 @@ gauden_free(gauden_t * g)
     if (g->featlen)
         ckd_free(g->featlen);
     ckd_free(g);
+    return 0;
 }
 
 /* See compute_dist below */

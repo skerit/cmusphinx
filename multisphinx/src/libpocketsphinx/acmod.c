@@ -228,8 +228,8 @@ acmod_init(cmd_ln_t *config, logmath_t *lmath, fe_t *fe, feat_t *fcb)
     char const *featparams;
 
     acmod = ckd_calloc(1, sizeof(*acmod));
-    acmod->config = config;
-    acmod->lmath = lmath;
+    acmod->config = cmd_ln_retain(config);
+    acmod->lmath = logmath_retain(lmath);
     acmod->state = ACMOD_IDLE;
 
     /* Look for feat.params in acoustic model dir. */
@@ -331,8 +331,51 @@ acmod_free(acmod_t *acmod)
         ps_mgau_free(acmod->mgau);
     if (acmod->mllr)
         ps_mllr_free(acmod->mllr);
-    
+
+    logmath_free(acmod->lmath);
+    cmd_ln_free_r(acmod->config);
     ckd_free(acmod);
+}
+
+acmod_t *
+acmod_copy(acmod_t *other)
+{
+    acmod_t *acmod;
+
+    acmod = ckd_calloc(1, sizeof(*acmod));
+    acmod->config = cmd_ln_retain(other->config);
+    acmod->lmath = logmath_retain(other->lmath);
+    acmod->state = ACMOD_IDLE;
+    acmod->fe = fe_retain(other->fe);
+    acmod->fcb = feat_retain(other->fcb);
+    acmod->mdef = bin_mdef_retain(other->mdef);
+    acmod->tmat = tmat_retain(other->tmat);
+    acmod->mgau = ps_mgau_copy(other->mgau);
+
+    /* FIXME: Not sure what exactly to do about MLLR. */
+    acmod->mllr = ps_mllr_retain(other->mllr);
+
+    /* The MFCC buffer needs to be at least as large as the dynamic
+     * feature window.  */
+    acmod->n_mfc_alloc = acmod->fcb->window_size * 2 + 1;
+    acmod->mfc_buf = (mfcc_t **)
+        ckd_calloc_2d(acmod->n_mfc_alloc, acmod->fcb->cepsize,
+                      sizeof(**acmod->mfc_buf));
+
+    /* Feature buffer has to be at least as large as MFCC buffer. */
+    acmod->n_feat_alloc = acmod->n_mfc_alloc + cmd_ln_int32_r(acmod->config, "-pl_window");
+    acmod->feat_buf = feat_array_alloc(acmod->fcb, acmod->n_feat_alloc);
+    acmod->framepos = ckd_calloc(acmod->n_feat_alloc, sizeof(*acmod->framepos));
+
+    /* Senone computation stuff. */
+    acmod->senone_scores = ckd_calloc(bin_mdef_n_sen(acmod->mdef),
+                                                     sizeof(*acmod->senone_scores));
+    acmod->senone_active_vec = bitvec_alloc(bin_mdef_n_sen(acmod->mdef));
+    acmod->senone_active = ckd_calloc(bin_mdef_n_sen(acmod->mdef),
+                                                     sizeof(*acmod->senone_active));
+    acmod->log_zero = logmath_get_zero(acmod->lmath);
+    acmod->compallsen = cmd_ln_boolean_r(acmod->config, "-compallsen");
+    return acmod;
 }
 
 ps_mllr_t *

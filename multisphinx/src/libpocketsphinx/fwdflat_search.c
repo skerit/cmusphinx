@@ -844,23 +844,6 @@ fwdflat_renormalize_scores(fwdflat_search_t *ffs, int frame_idx, int32 norm)
     ffs->renormalized = TRUE;
 }
 
-static void
-fwdflat_dump_active_words(fwdflat_search_t *ffs)
-{
-    int i, j;
-
-    E_INFO("Active words from input:\n");
-    for (i = 0; i < ps_search_n_words(ffs); ++i) {
-        if (ffs->input_words[i] >= ffs->min_ef_width) {
-            E_INFO_NOFN("%s (%d exits)\n",
-                        dict_wordstr(ps_search_dict(ffs), i),
-                        ffs->input_words[i]);
-            ++j;
-        }
-    }
-    E_INFO("%d active words\n", j);
-}
-
 static int
 fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
 {
@@ -876,6 +859,18 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
     /* Compute GMM scores for the current frame. */
     senscr = acmod_score(ps_search_acmod(ffs), &frame_idx);
     ffs->st.n_senone_active_utt += ps_search_acmod(ffs)->n_senone_active;
+    E_INFO("senones active %d in frame %d\n",
+           ps_search_acmod(ffs)->n_senone_active, frame_idx);
+    if (frame_idx == 5) {
+        int16 *senscr;
+        acmod_t *acmod = ps_search_acmod(ffs);
+        senscr = acmod->senone_scores;
+        for (i = 0; i < acmod->n_senone_active; ++i) {
+            senscr += acmod->senone_active[i];
+            E_INFOCONT(" %d=%d", senscr - acmod->senone_scores, *senscr);
+        }
+        E_INFOCONT("\n");
+    }
 
     /* Mark backpointer table for current frame. */
     fi = bptbl_push_frame(ffs->bptbl, ffs->oldest_bp);
@@ -917,16 +912,37 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
     return 1;
 }
 
+static void
+fwdflat_dump_active_words(fwdflat_search_t *ffs)
+{
+    int i, j;
+
+    E_INFO("Active words from input:\n");
+    for (i = 0; i < ps_search_n_words(ffs); ++i) {
+        if (ffs->input_words[i] >= ffs->min_ef_width) {
+            E_INFO_NOFN("%s (%d exits)\n",
+                        dict_wordstr(ps_search_dict(ffs), i),
+                        ffs->input_words[i]);
+            ++j;
+        }
+    }
+    E_INFO("%d active words\n", j);
+}
+
 static int
 fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
 {
     fwdflat_arc_t *arc_start, *arc_end, *arc;
 
+    E_INFO("Expanding arcs from %d to %d\n", sf, ef);
     arc_start = fwdflat_arc_buffer_iter(ffs->input_arcs, sf);
     arc_end = fwdflat_arc_buffer_iter(ffs->input_arcs, ef);
+    memset(ffs->input_words, 0, ps_search_n_words(ffs) * sizeof(*ffs->input_words));
     for (arc = arc_start; arc != arc_end;
          arc = fwdflat_arc_next(ffs->input_arcs, arc)) {
+        ++ffs->input_words[arc->wid];
     }
+    fwdflat_dump_active_words(ffs);
     return 0;
 }
 
@@ -983,9 +999,11 @@ fwdflat_search_step(ps_search_t *base, int frame_idx)
          * time - we don't need to do this but it is a useful
          * baseline. */
         nfr = 0;
+        E_INFO("Looking for arcs in frame %d\n", frame_idx + ffs->max_sf_win - 1);
         while (fwdflat_arc_buffer_iter(ffs->input_arcs,
                                        frame_idx + ffs->max_sf_win - 1) != NULL) {
             fwdflat_search_expand_arcs(ffs, frame_idx, frame_idx + ffs->max_sf_win);
+            E_INFO("Searching frame %d\n", frame_idx);
             fwdflat_search_one_frame(ffs, frame_idx);
             ++frame_idx;
             ++nfr;
@@ -995,6 +1013,7 @@ fwdflat_search_step(ps_search_t *base, int frame_idx)
     }
     else {
         /* Search one frame. */
+        E_INFO("Searching frame %d\n", frame_idx);
         return fwdflat_search_one_frame(ffs, frame_idx);
     }
 }
@@ -1003,12 +1022,50 @@ static int
 fwdflat_search_finish(ps_search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
-    int32 cf;
+    int32 cf, next_sf, frame_idx, narc;
     
     bitvec_clear_all(ffs->word_active, ps_search_n_words(ffs));
 
-    /* This is the number of frames processed. */
+    /* This is the number of frames of input. */
     cf = ps_search_acmod(ffs)->output_frame;
+
+    /* Add final bps to the arc buffer. */
+    if (ffs->input_bptbl) {
+        frame_idx = bptbl_frame_idx(ffs->bptbl);
+        next_sf = bptbl_ent(ffs->input_bptbl,
+                            ffs->input_bptbl->oldest_bp)->frame + 1;
+        E_INFO("next_sf %d cf %d\n", next_sf, cf);
+
+        /* Extend the arc buffer the appropriate number of frames. */
+        fwdflat_arc_buffer_extend(ffs->input_arcs, next_sf);
+
+        /* Add the next chunk of bps to the arc buffer.  FIXME: For the
+         * time being we just try to add them all, the arc buffer code
+         * will filter out the irrelevant ones. */
+        narc = fwdflat_arc_buffer_add_bps(ffs->input_arcs, ffs->input_bptbl,
+                                          0, ffs->input_bptbl->first_invert_bp);
+        fwdflat_arc_buffer_commit(ffs->input_arcs);
+        E_INFO("narc %d\n", narc);
+        E_INFO("Final input bptbl:\n");
+        bptbl_dump(ffs->input_bptbl);
+        E_INFO("Final arc buffer:\n");
+        fwdflat_arc_buffer_dump(ffs->input_arcs);
+        /* Step through all remaining frames. */
+        E_INFO("Looking for arcs in frame %d\n", frame_idx + ffs->max_sf_win - 1);
+        while (fwdflat_arc_buffer_iter(ffs->input_arcs,
+                                       frame_idx + ffs->max_sf_win - 1) != NULL) {
+            fwdflat_search_expand_arcs(ffs, frame_idx, frame_idx + ffs->max_sf_win);
+            E_INFO("Searching frame %d\n", frame_idx);
+            fwdflat_search_one_frame(ffs, frame_idx);
+            ++frame_idx;
+        }
+        while (frame_idx < cf) {
+            E_INFO("Searching frame %d\n", frame_idx);
+            fwdflat_search_one_frame(ffs, frame_idx);
+            ++frame_idx;
+        }
+    }
+
     /* Finalize the backpointer table. */
     bptbl_finalize(ffs->bptbl);
 
@@ -1186,8 +1243,6 @@ fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
     for (i = 0; i < n_arcs; ++i) {
         fwdflat_arc_t *arc = garray_ptr(active_arc, fwdflat_arc_t, i);
         int *pos = garray_ptr(active_sf, int, arc->sf - fab->active_sf);
-        E_INFO("Coping arc %d sf %d to %d\n",
-               fab->active_arc + i, arc->sf, *pos);
         /* Copy it into place. */
         garray_ent(fab->arcs, fwdflat_arc_t, *pos) = *arc;
         /* Increment local frame counter. */

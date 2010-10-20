@@ -145,6 +145,7 @@ typedef uint8 senprob_t;	/**< Senone logs3-probs, truncated to 8 bits */
  * logs3 domain, and finally truncated to 8 bits precision to conserve memory space.
  */
 typedef struct {
+    int refcount;
     senprob_t ***pdf;		/**< gaussian density mixture weights, organized two possible
                                    ways depending on n_gauden:
                                    if (n_gauden > 1): pdf[sen][feat][codeword].  Not an
@@ -159,7 +160,6 @@ typedef struct {
     uint32 n_gauden;		/**< Number gaussian density codebooks referred to by senones */
     float32 mixwfloor;		/**< floor applied to each PDF entry */
     uint32 *mgau;		/**< senone-id -> mgau-id mapping for senones in this set */
-    int32 *featscr;              /**< The feature score for every senone, will be initialized inside senone_eval_all */
     int32 aw;			/**< Inverse acoustic weight */
 } senone_t;
 
@@ -180,8 +180,11 @@ senone_t *senone_init (gauden_t *g,             /**< In: codebooks */
                        bin_mdef_t *mdef         /**< In: model definition */
     );
 
-/** Release memory allocated by senone_init. */
-void senone_free(senone_t *s); /**< In: The senone_t to free */
+/** Retain a pointer to senone_t */
+senone_t *senone_retain(senone_t *s);
+
+/** Release a pointer to senone_t. */
+int senone_free(senone_t *s); /**< In: The senone_t to free */
 
 /**
  * Evaluate the score for the given senone wrt to the given top N gaussian codewords.

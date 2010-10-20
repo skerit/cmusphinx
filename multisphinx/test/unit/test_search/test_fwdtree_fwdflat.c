@@ -15,7 +15,7 @@ main(int argc, char *argv[])
 {
 	ps_decoder_t *ps;
 	cmd_ln_t *config;
-	acmod_t *acmod;
+	acmod_t *acmod, *acmod2;
 	ps_search_t *fwdtree;
 	ps_search_t *fwdflat;
 	mfcc_t ***feat;
@@ -36,7 +36,8 @@ main(int argc, char *argv[])
 	acmod = ps->acmod;
 	cmd_ln_set_str_r(config, "-lm", TESTDATADIR "/hub4.5000.DMP");
 	fwdtree = fwdtree_search_init(config, acmod, ps->dict, ps->d2p);
-	fwdflat = fwdflat_search_init(config, acmod, ps->dict, ps->d2p,
+	acmod2 = acmod_init(config, ps->lmath, acmod->fe, acmod->fcb);
+	fwdflat = fwdflat_search_init(config, acmod2, ps->dict, ps->d2p,
 				      ((fwdtree_search_t *)fwdtree)->bptbl);
 
 	nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
@@ -47,18 +48,16 @@ main(int argc, char *argv[])
 		E_FATAL("Failed to read mfc file\n");
 	ps_search_start(fwdtree);
 	ps_search_start(fwdflat);
-	/* Turn this on for now so that we can pass arbitrary frames to fwdflat. */
-	acmod_set_grow(acmod, TRUE);
 	ftfr = fffr = 0;
-	for (i = 0; i < 200; ++i) {
-		acmod_process_feat(acmod, feat[i]);
-		while (acmod->n_feat_frame > 0) {
-			nfr = ps_search_step(fwdtree, ftfr);
-			ftfr += nfr;
-			nfr = ps_search_step(fwdflat, fffr);
-			fffr += nfr;
-			acmod_advance(acmod);
-		}
+	while (fffr < 200) {
+		acmod_process_feat(acmod, feat[ftfr]);
+		nfr = ps_search_step(fwdtree, ftfr);
+		ftfr += nfr;
+
+		acmod_process_feat(acmod2, feat[fffr]);
+		nfr = ps_search_step(fwdflat, fffr);
+		fffr += nfr;
+		acmod_advance(acmod);
 	}
 	ps_search_finish(fwdtree);
 	hyp = ps_search_hyp(fwdtree, &score);
@@ -67,6 +66,7 @@ main(int argc, char *argv[])
 	hyp = ps_search_hyp(fwdflat, &score);
 	printf("hyp: %s (%d)\n", hyp, score);
 
+	acmod_free(acmod2);
 	ps_search_free(fwdtree);
 	ps_search_free(fwdflat);
 	ps_free(ps);

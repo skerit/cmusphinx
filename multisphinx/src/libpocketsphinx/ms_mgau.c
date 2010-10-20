@@ -75,6 +75,7 @@ static ps_mgaufuncs_t ms_mgau_funcs = {
     "ms",
     &ms_cont_mgau_frame_eval, /* frame_eval */
     &ms_mgau_mllr_transform,  /* transform */
+    &ms_mgau_copy,            /* copy */
     &ms_mgau_free             /* free */
 };
 
@@ -87,7 +88,7 @@ ms_mgau_init(cmd_ln_t *config, logmath_t *lmath, bin_mdef_t *mdef)
     gauden_t *g;
     senone_t *s;
 
-    msg = (ms_mgau_model_t *) ckd_calloc(1, sizeof(ms_mgau_model_t));
+    msg = (ms_mgau_model_t *) ckd_calloc(1, sizeof(*msg));
     msg->config = config;
     msg->g = NULL;
     msg->s = NULL;
@@ -131,6 +132,29 @@ ms_mgau_init(cmd_ln_t *config, logmath_t *lmath, bin_mdef_t *mdef)
         ckd_calloc_3d(g->n_mgau, g->n_feat, msg->topn,
                       sizeof(gauden_dist_t));
     msg->mgau_active = ckd_calloc(g->n_mgau, sizeof(int8));
+
+    mg = (ps_mgau_t *)msg;
+    mg->vt = &ms_mgau_funcs;
+    return mg;
+}
+
+ps_mgau_t *
+ms_mgau_copy(ps_mgau_t *other)
+{
+    ms_mgau_model_t *otherm = (ms_mgau_model_t *)other;
+    ms_mgau_model_t *msg;
+    ps_mgau_t *mg;
+
+    msg = (ms_mgau_model_t *) ckd_calloc(1, sizeof(*msg));
+    msg->config = cmd_ln_retain(otherm->config);
+    msg->g = gauden_retain(otherm->g);
+    msg->s = senone_retain(otherm->s);
+    msg->topn = otherm->topn;
+    
+    msg->dist = (gauden_dist_t ***)
+        ckd_calloc_3d(msg->g->n_mgau, msg->g->n_feat, msg->topn,
+                      sizeof(gauden_dist_t));
+    msg->mgau_active = ckd_calloc(msg->g->n_mgau, sizeof(int8));
 
     mg = (ps_mgau_t *)msg;
     mg->vt = &ms_mgau_funcs;

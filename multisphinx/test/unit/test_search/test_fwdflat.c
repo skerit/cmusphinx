@@ -41,7 +41,7 @@ main(int argc, char *argv[])
 				   ".mfc", 0, -1, feat, -1)) < 0)
 		E_FATAL("Failed to read mfc file\n");
 	ps_search_start(fwdflat);
-	for (i = 20; i < 200; ++i) {
+	for (i = 0; i < 200; ++i) {
 		acmod_process_feat(acmod, feat[i]);
 		while (acmod->n_feat_frame > 0) {
 			ps_search_step(fwdflat, acmod->output_frame);

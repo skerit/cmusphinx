@@ -52,6 +52,7 @@
 #include "hmm.h"
 #include "bin_mdef.h"
 #include "ms_gauden.h"
+#include "sendump.h"
 
 typedef struct vqFeature_s vqFeature_t;
 
@@ -65,14 +66,11 @@ struct s2_semi_mgau_s {
     mfcc_t  ***vars;	/* inverse var vectors foreach feature, density */
     mfcc_t  **dets;	/* det values foreach cb, feature */
 
-    uint8 ***mixw;     /* mixture weight distributions */
-    mmio_file_t *sendump_mmap;/* memory map for mixw (or NULL if not mmap) */
-
-    uint8 *mixw_cb;    /* mixture weight codebook, if any (assume it contains 16 values) */
     int32 *veclen;	/* Length of feature streams */
     int16 n_feat;	/* Number of feature streams */
     int16 n_density;	/* Number of mixtures per codebook */
     int32 n_sen;	/* Number of senones */
+    sendump_t *s;
     uint8 *topn_beam;   /* Beam for determining per-frame top-N densities */
     int16 max_topn;
     int16 ds_ratio;
@@ -99,6 +97,7 @@ int s2_semi_mgau_frame_eval(ps_mgau_t *s,
                             int32 compallsen);
 int s2_semi_mgau_mllr_transform(ps_mgau_t *s,
                                 ps_mllr_t *mllr);
+ps_mgau_t *s2_semi_mgau_copy(ps_mgau_t *other);
 
 
 #endif /*  __S2_SEMI_MGAU_H__ */

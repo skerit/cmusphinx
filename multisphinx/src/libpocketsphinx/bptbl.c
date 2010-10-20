@@ -53,7 +53,7 @@
 
 static int bptbl_rcsize(bptbl_t *bptbl, bp_t *be);
 
-#if 1
+#if 0
 #undef E_DEBUG
 #define E_DEBUG(level,x) E_INFO x
 #undef E_DEBUGCONT
@@ -508,9 +508,15 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
                 bptbl_ef_idx(bptbl, active_fr),
                 bptbl_ef_idx(bptbl, active_fr));
     bptbl_update_active(bptbl, active_fr, last_retired_bp);
-    E_INFO("Retired %d bps: now %d retired, %d active, first_active_sf %d\n", n_retired,
-           bptbl->first_invert_bp, bptbl->n_ent - bptbl->ef_idx[0],
-           bptbl->oldest_bp == NO_BP ? 0 : bptbl->retired[bptbl->oldest_bp].frame + 1);
+    E_INFO("Retired %d bps: now %d retired, %d active\n", n_retired,
+           bptbl->first_invert_bp, bptbl->n_ent - bptbl->ef_idx[0]);
+    E_INFO("First active sf %d output frame %d window %d\n",
+           bptbl->oldest_bp == NO_BP
+           ? 0 : bptbl->retired[bptbl->oldest_bp].frame + 1,
+           frame_idx,
+           frame_idx -
+           (bptbl->oldest_bp == NO_BP
+            ? 0 : bptbl->retired[bptbl->oldest_bp].frame + 1));
 }
 
 int
@@ -643,6 +649,12 @@ bpidx_t
 bptbl_end_idx(bptbl_t *bptbl)
 {
     return bptbl->n_ent;
+}
+
+int
+bptbl_frame_idx(bptbl_t *bptbl)
+{
+    return bptbl->n_frame;
 }
 
 bpidx_t
