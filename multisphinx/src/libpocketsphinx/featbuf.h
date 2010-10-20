@@ -214,16 +214,15 @@ int featbuf_end_utt(featbuf_t *fb, int timeout);
 int featbuf_abort_utt(featbuf_t *fb);
 
 /**
- * Abort processing for all utterances.
+ * Shut down utterance processing.
  *
- * This function immediately ends utterance processing as in
- * featbuf_abort_utt(), but also cancels any consumers waiting for an
+ * This function cancels any consumers waiting for an
  * utterance to start.
  *
  * @param fb Feature buffer.
  * @return 0, or <0 on error (in which case you have Problems)
  */
-int featbuf_cancel(featbuf_t *fb);
+int featbuf_shutdown(featbuf_t *fb);
 
 /**
  * Process audio data, adding to the buffer.

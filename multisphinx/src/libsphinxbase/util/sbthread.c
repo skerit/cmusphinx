@@ -70,6 +70,8 @@ struct sbmtx_s {
     CRITICAL_SECTION mtx;
 };
 
+/* FIXME: Implement sbsem_t for Win32. */
+
 DWORD WINAPI
 sbthread_internal_main(LPVOID arg)
 {
@@ -238,6 +240,12 @@ struct sbevent_s {
 
 struct sbmtx_s {
     pthread_mutex_t mtx;
+};
+
+struct sbsem_s {
+    pthread_mutex_t mtx;
+    pthread_cond_t cond;
+    int value;
 };
 
 static void *
@@ -420,6 +428,78 @@ sbmtx_free(sbmtx_t *mtx)
     pthread_mutex_destroy(&mtx->mtx);
     ckd_free(mtx);
 }
+
+sbsem_t *
+sbsem_init(int value)
+{
+    sbsem_t *sem;
+    int rv;
+
+    sem = ckd_calloc(1, sizeof(*sem));
+    if ((rv = pthread_mutex_init(&sem->mtx, NULL)) != 0) {
+        E_ERROR("Failed to initialize mutex: %d\n", rv);
+        ckd_free(sem);
+        return NULL;
+    }
+    if ((rv = pthread_cond_init(&sem->cond, NULL)) != 0) {
+        E_ERROR_SYSTEM("Failed to initialize mutex: %d\n", rv);
+        pthread_mutex_destroy(&sem->mtx);
+        ckd_free(sem);
+        return NULL;
+    }
+    sem->value = value;
+    return sem;
+}
+
+void
+sbsem_free(sbsem_t *sem)
+{
+    pthread_mutex_destroy(&sem->mtx);
+    pthread_cond_destroy(&sem->cond);
+    ckd_free(sem);
+}
+
+int
+sbsem_down(sbsem_t *sem, int sec, int nsec)
+{
+    pthread_mutex_lock(&sem->mtx);
+    while (sem->value <= 0) {
+        int rv;
+        rv = cond_timed_wait(&sem->cond, &sem->mtx, sec, nsec);
+        if (rv < 0) {
+            pthread_mutex_unlock(&sem->mtx);
+            return rv;
+        }
+    }
+    --sem->value;
+    pthread_mutex_unlock(&sem->mtx);
+    return 0;
+}
+
+int
+sbsem_up(sbsem_t *sem)
+{
+    int rv = 0;
+
+    pthread_mutex_lock(&sem->mtx);
+    if (++sem->value > 0)
+        rv = pthread_cond_broadcast(&sem->cond);
+    pthread_mutex_unlock(&sem->mtx);
+    return rv;
+}
+
+int
+sbsem_set(sbsem_t *sem, int count)
+{
+    int rv;
+
+    pthread_mutex_lock(&sem->mtx);
+    sem->value = count;
+    rv = pthread_cond_broadcast(&sem->cond);
+    pthread_mutex_unlock(&sem->mtx);
+    return rv;
+}
+
 #endif /* not WIN32 */
 
 cmd_ln_t *

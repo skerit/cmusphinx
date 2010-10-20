@@ -66,8 +66,8 @@ main(int argc, char *argv[])
 	printf("hyp: %s (%d)\n", hyp, score);
 
 	/* Reap the search thread. */
-	printf("Reaping the search thread\n");
-	ps_search_stop(fwdflat);
+	E_INFO("Reaping the search thread\n");
+	featbuf_shutdown(fb);
 	printf("Done reaping\n");
 	ps_search_free(fwdflat);
 	acmod_free(acmod);

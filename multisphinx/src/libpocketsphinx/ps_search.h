@@ -127,11 +127,6 @@ void ps_search_deinit(ps_search_t *search);
 sbthread_t *ps_search_run(ps_search_t *search);
 
 /**
- * Stop a search thread.
- */
-int ps_search_stop(ps_search_t *search);
-
-/**
  * Free a search structure.
  */
 int ps_search_free(ps_search_t *search);

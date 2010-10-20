@@ -107,13 +107,6 @@ ps_search_run(ps_search_t *search)
     return search->thr;
 }
 
-int
-ps_search_stop(ps_search_t *search)
-{
-    acmod_cancel(search->acmod);
-    return sbthread_wait(search->thr);
-}
-
 char const *
 ps_search_hyp(ps_search_t *search, int32 *out_score)
 {

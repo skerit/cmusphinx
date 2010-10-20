@@ -242,18 +242,6 @@ int acmod_eou(acmod_t *acmod);
 int acmod_start_utt(acmod_t *acmod, int timeout);
 
 /**
- * Cancel all waiting functions.
- *
- * This causes any pending calls to acmod_start_utt() or acmod_score()
- * to immediately return a failure code.  The consumer thread is still
- * required to clean up by calling acmod_end_utt() if an utterance was
- * started.
- *
- * @return 0, or <0 on error
- */
-int acmod_cancel(acmod_t *acmod);
-
-/**
  * Clean up after the end of an utterance.
  *
  * This function must be called after an end-of-utterance condition is

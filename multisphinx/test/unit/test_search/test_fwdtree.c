@@ -67,7 +67,7 @@ main(int argc, char *argv[])
 
 	/* Reap the search thread. */
 	printf("Reaping the search thread\n");
-	ps_search_stop(fwdtree);
+	featbuf_shutdown(fb);
 	printf("Done reaping\n");
 	ps_search_free(fwdtree);
 	acmod_free(acmod);

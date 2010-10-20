@@ -71,8 +71,8 @@ main(int argc, char *argv[])
 	E_INFO("hyp: %s (%d)\n", hyp, score);
 
 	/* Reap the search thread. */
-	E_INFO("Reaping the search thread\n");
-	ps_search_stop(fwdflat);
+	E_INFO("Reaping the search threads\n");
+	featbuf_shutdown(fb);
 	E_INFO("Done reaping\n");
 	ps_search_free(fwdflat);
 	acmod_free(acmod);

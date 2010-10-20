@@ -70,31 +70,10 @@ struct featbuf_s {
     int beginutt, endutt;
     FILE *mfcfh;
     FILE *rawfh;
-    /**
-     * Event signaled by consumer threads when featbuf_release_all()
-     * is called.
-     */
-    sbevent_t *release;
-    /**
-     * Number of consumer threads which have completed the utterance.
-     *
-     * FIXME: This has race conditions and should be replaced by a
-     * semaphore-like object.
-     */
-    int released;
-    /**
-     * Event signaled by producer thread when a new utterance is
-     * started.  Also signaled to cancel waiting on an utterance in
-     * which case @a canceled will be true.
-     */
-    sbevent_t *start;
-    /**
-     * Number of consumer threads which are waiting to start the utterance.
-     *
-     * FIXME: This has race conditions and should be replaced by a semaphore.
-     */
-    int started;
-   
+
+    sbsem_t *release;
+    sbsem_t *start;
+
     /**
      * Flag signifying that featbuf_cancel() was called.  Reset by
      * featbuf_start_utt().  */
@@ -185,8 +164,8 @@ featbuf_init(cmd_ln_t *config)
     fb->sa = sync_array_init(0,
                              feat_dimension(fb->fcb)
                              * sizeof(mfcc_t));
-    fb->start = sbevent_init(TRUE);
-    fb->release = sbevent_init(TRUE);
+    fb->start = sbsem_init(0);
+    fb->release = sbsem_init(0);
     return fb;
 error_out:
     featbuf_free(fb);
@@ -217,8 +196,8 @@ featbuf_free(featbuf_t *fb)
     /* cmd_ln_free_r(fb->config); */
 
     /* Non-refcounted things. */
-    sbevent_free(fb->release);
-    sbevent_free(fb->start);
+    sbsem_free(fb->release);
+    sbsem_free(fb->start);
     ckd_free(fb->cepbuf);
     feat_array_free(fb->featbuf);
     if (fb->mfcfh)
@@ -253,19 +232,12 @@ featbuf_wait_utt(featbuf_t *fb, int timeout)
     int s = (timeout == -1) ? -1 : 0;
     int rc;
 
-    E_INFO("Waiting for utt refcount = %d\n", fb->refcount);
-    if ((rc = sbevent_wait(fb->start, s, timeout)) < 0) {
-        /* This means a timeout, so don't decrement fb->started. */
+    /* Wait for the semaphore to be zero then record this thread as
+     * started. */
+    if ((rc = sbsem_down(fb->start, s, timeout)) < 0)
         return rc;
-    }
-    /* FIXME: Race condition. */
-    if (++fb->started == fb->refcount - 1)
-        sbevent_reset(fb->start);
-    E_INFO("Wait finished with %d\n", rc);
-    if (fb->canceled) {
-        E_INFO("Wait canceled\n");
+    if (fb->canceled)
         return -1;
-    }
     return 0;
 }
 
@@ -304,8 +276,8 @@ featbuf_release_all(featbuf_t *fb, int sidx)
 
     if ((rv = featbuf_release(fb, sidx, -1)) < 0)
         return rv;
-    ++fb->released;
-    sbevent_signal(fb->release);
+    /* Record this thread as having finished. */
+    sbsem_up(fb->release);
     return rv;
 }
 
@@ -318,24 +290,22 @@ featbuf_start_utt(featbuf_t *fb)
     /* Set utterance processing state. */
     fb->beginutt = TRUE;
     fb->endutt = FALSE;
-    fb->released = 0;
-    fb->started = 0;
 
     fe_start_utt(fb->fe);
 
     /* Signal any consumers. */
     fb->canceled = FALSE;
-    sbevent_signal(fb->start);
+    /* Allow refcount - 1 threads to start. */
+    sbsem_set(fb->start, fb->refcount - 1);
+
     return 0;
 }
 
 int
 featbuf_end_utt(featbuf_t *fb, int timeout)
 {
-    int nfr, s;
+    int nfr, i, rc, nth;
     size_t last_idx;
-
-    s = (timeout == -1) ? -1 : 0;
 
     /* Set utterance processing state. */
     fb->endutt = TRUE;
@@ -366,15 +336,17 @@ featbuf_end_utt(featbuf_t *fb, int timeout)
         fb->rawfh = NULL;
     }
 
+    /* Figure out how many threads we are going to be waiting for
+     * before we finalize (since they may exit after that...) */
+    nth = fb->refcount - 1;
+
     /* Finalize. */
     last_idx = sync_array_finalize(fb->sa);
 
-    /* Wait for everybody to be done.  (FIXME: Race condition, need semaphore) */
-    while (fb->released < fb->refcount - 1) {
-        if (sbevent_wait(fb->release, s, timeout) < 0)
-            return -1;
-        sbevent_reset(fb->release);
-    }
+    /* Wait for everybody to be done. */
+    for (i = 0; i < nth; ++i)
+        if ((rc = sbsem_down(fb->release, -1, -1)) < 0)
+            return rc;
     
     return 0;
 }
@@ -382,34 +354,31 @@ featbuf_end_utt(featbuf_t *fb, int timeout)
 int
 featbuf_abort_utt(featbuf_t *fb)
 {
-    size_t last_idx;
+    int i, rc, nth;
 
+    /* Figure out how many threads we are going to be waiting for
+     * before we force quit (since they may exit after that...) */
+    nth = fb->refcount - 1;
+
+    /* Abort any utterance processing. */
     sync_array_force_quit(fb->sa);
-    last_idx = sync_array_next_idx(fb->sa);
 
-    /* Wait for everybody to be done.  (FIXME: Race condition, need semaphore) */
-    while (fb->released < fb->refcount - 1) {
-        if (sbevent_wait(fb->release, -1, -1) < 0)
-            return -1;
-        sbevent_reset(fb->release);
-    }
+    /* Wait for everybody to be done. */
+    for (i = 0; i < nth; ++i)
+        if ((rc = sbsem_down(fb->release, -1, -1)) < 0)
+            return rc;
 
     return 0;
 }
 
 int
-featbuf_cancel(featbuf_t *fb)
+featbuf_shutdown(featbuf_t *fb)
 {
-    int rc;
-
-    /* Cancel any utterance in progress. */
-    if ((rc = featbuf_abort_utt(fb)) < 0)
-        return rc;
-
-    /* Now wake up anybody waiting for an utterance, but first set a
-     * flag that makes featbuf_wait_utt() fail. */
+    /* Wake up anybody waiting for an utterance, but first set a flag
+     * that makes featbuf_wait_utt() fail. */
     fb->canceled = TRUE;
-    return sbevent_signal(fb->start);
+    sbsem_set(fb->start, fb->refcount - 1);
+    return 0;
 }
 
 static int

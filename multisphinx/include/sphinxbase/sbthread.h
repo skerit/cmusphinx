@@ -72,6 +72,11 @@ typedef struct sbmtx_s sbmtx_t;
 typedef struct sbevent_s sbevent_t;
 
 /**
+ * Semaphore object.
+ */
+typedef struct sbsem_s sbsem_t;
+
+/**
  * Entry point for a thread.
  */
 typedef int (*sbthread_main)(sbthread_t *th);
@@ -171,6 +176,36 @@ int sbevent_reset(sbevent_t *evt);
  */
 SPHINXBASE_EXPORT
 int sbevent_wait(sbevent_t *evt, int sec, int nsec);
+
+/**
+ * Initialize a semaphore.
+ */
+SPHINXBASE_EXPORT
+sbsem_t *sbsem_init(int value);
+
+/**
+ * Free a semaphore.
+ */
+SPHINXBASE_EXPORT
+void sbsem_free(sbsem_t *sem);
+
+/**
+ * Wait for semaphore to be greater than zero, then decrement it.
+ */
+SPHINXBASE_EXPORT
+int sbsem_down(sbsem_t *sem, int sec, int nsec);
+
+/**
+ * Increment the semaphore by one.
+ */
+SPHINXBASE_EXPORT
+int sbsem_up(sbsem_t *sem);
+
+/**
+ * Set the count of a semaphore to the specified count.
+ */
+SPHINXBASE_EXPORT
+int sbsem_set(sbsem_t *sem, int count);
 
 
 #ifdef __cplusplus

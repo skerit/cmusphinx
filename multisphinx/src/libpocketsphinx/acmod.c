@@ -294,12 +294,6 @@ acmod_end_utt(acmod_t *acmod)
 }
 
 int
-acmod_cancel(acmod_t *acmod)
-{
-    return featbuf_cancel(acmod->fb);
-}
-
-int
 acmod_best_score(acmod_t *acmod, int *out_best_senid)
 {
     int i, best;
