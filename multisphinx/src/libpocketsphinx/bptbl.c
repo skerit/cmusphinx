@@ -540,6 +540,9 @@ bptbl_finalize(bptbl_t *bptbl)
            garray_alloc_size(bptbl->retired),
            garray_alloc_size(bptbl->ent) * sizeof(bp_t) / 1024,
            garray_alloc_size(bptbl->retired) * sizeof(bp_t) / 1024);
+    E_INFO("Allocated %d right context scores (%d KiB)\n",
+           garray_alloc_size(bptbl->rc),
+           garray_alloc_size(bptbl->rc) * sizeof(int32) / 1024);
     E_INFO("Allocated %d permutation entries and %d end frame entries\n",
            garray_alloc_size(bptbl->permute), garray_alloc_size(bptbl->ef_idx));
     return n_retired;
