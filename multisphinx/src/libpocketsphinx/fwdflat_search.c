@@ -548,8 +548,9 @@ fwdflat_search_save_bp(fwdflat_search_t *ffs, int frame_idx,
         ffs->bptbl->bscore_stack[bpe->s_idx + rc] = score;
     }
     else {
-        bp_t *bpe = bptbl_enter(ffs->bptbl, w, frame_idx, path, score, rc);
+        bp_t *bpe = bptbl_enter(ffs->bptbl, w, path, score, rc);
         ffs->word_idx[w] = bptbl_idx(ffs->bptbl, bpe);
+        assert(frame_idx == bpe->frame);
     }
 }
 
@@ -837,6 +838,7 @@ fwdflat_search_step(ps_search_t *base, int frame_idx)
     int16 const *senscr;
     int32 nf, i, j;
     int32 *nawl;
+    int fi;
 
     /* Activate our HMMs for the current frame if need be. */
     if (!ps_search_acmod(ffs)->compallsen)
@@ -847,7 +849,8 @@ fwdflat_search_step(ps_search_t *base, int frame_idx)
     ffs->st.n_senone_active_utt += ps_search_acmod(ffs)->n_senone_active;
 
     /* Mark backpointer table for current frame. */
-    bptbl_push_frame(ffs->bptbl, ffs->oldest_bp, frame_idx);
+    fi = bptbl_push_frame(ffs->bptbl, ffs->oldest_bp);
+    assert(fi == frame_idx);
 
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
@@ -890,13 +893,15 @@ fwdflat_search_finish(ps_search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
     int32 cf;
+    int fi;
 
     bitvec_clear_all(ffs->word_active, ps_search_n_words(ffs));
 
     /* This is the number of frames processed. */
     cf = ps_search_acmod(ffs)->output_frame;
     /* Add a mark in the backpointer table for one past the final frame. */
-    bptbl_push_frame(ffs->bptbl, ffs->oldest_bp, cf);
+    fi = bptbl_push_frame(ffs->bptbl, ffs->oldest_bp);
+    assert(fi == cf);
 
     /* Print out some statistics. */
     if (cf > 0) {

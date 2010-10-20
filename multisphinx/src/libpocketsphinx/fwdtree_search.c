@@ -1297,9 +1297,9 @@ static int
 too_old_too_cold(fwdtree_search_t *fts, int bp, int frame_idx)
 {
     if (fts->max_silence >= 0
-        && frame_idx - bp_sf(fts->bptbl, bp) > fts->max_silence) {
+        && frame_idx - bptbl_sf(fts->bptbl, bp) > fts->max_silence) {
         E_DEBUG(4,("Pruning too-old HMM (bp %d sf %d frame_idx %d)\n",
-                   bp, bp_sf(fts->bptbl, bp), frame_idx));
+                   bp, bptbl_sf(fts->bptbl, bp), frame_idx));
         return TRUE;
     }
     return FALSE;
@@ -1750,6 +1750,7 @@ fwdtree_search_step(ps_search_t *base, int frame_idx)
 {
     fwdtree_search_t *fts = (fwdtree_search_t *)base;
     int16 const *senscr;
+    int fi;
 
     /* Activate our HMMs for the current frame if need be. */
     if (!ps_search_acmod(fts)->compallsen)
@@ -1761,9 +1762,8 @@ fwdtree_search_step(ps_search_t *base, int frame_idx)
     fts->st.n_senone_active_utt += ps_search_acmod(fts)->n_senone_active;
 
     /* Mark backpointer table for current frame. */
-    /* FIXME: This always pushes the next active frame, and can't do
-     * anything else, so we need to get rid of frame_idx */
-    bptbl_push_frame(fts->bptbl, fts->oldest_bp, frame_idx);
+    fi = bptbl_push_frame(fts->bptbl, fts->oldest_bp);
+    assert(fi == frame_idx);
 
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
@@ -1798,13 +1798,15 @@ fwdtree_search_finish(ps_search_t *base)
     int32 i, w, cf, *awl;
     root_node_t *rhmm;
     nonroot_node_t *hmm, **acl;
+    int fi;
 
     /* This is the number of frames processed. */
     cf = ps_search_acmod(fts)->output_frame;
     /* Add a mark in the backpointer table for one past the final frame. */
     /* FIXME: BPTBL: Replace this with a final GC operation that
      * retires all backpointers from this bptbl. */
-    bptbl_push_frame(fts->bptbl, fts->oldest_bp, cf);
+    fi = bptbl_push_frame(fts->bptbl, fts->oldest_bp);
+    assert(fi == cf);
 
     /* Deactivate channels lined up for the next frame */
     /* First, root channels of HMM tree */
@@ -2080,8 +2082,9 @@ fwdtree_search_save_bp(fwdtree_search_t *fts, int frame_idx,
         fts->bptbl->bscore_stack[bpe->s_idx + rc] = score;
     }
     else {
-        bp_t *bpe = bptbl_enter(fts->bptbl, w, frame_idx, path, score, rc);
+        bp_t *bpe = bptbl_enter(fts->bptbl, w, path, score, rc);
         fts->word_idx[w] = bptbl_idx(fts->bptbl, bpe);
+        assert(frame_idx == bpe->frame);
     }
 }
 
