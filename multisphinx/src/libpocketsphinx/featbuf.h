@@ -121,7 +121,7 @@ int featbuf_next(featbuf_t *fb);
 mfcc_t **featbuf_wait(featbuf_t *fb, int fidx, int timeout);
 
 /**
- * Relinquish interest in a frame and its predecessors.
+ * Relinquish interest in a series of frames.
  *
  * Once all consumers (defined as all objects retaining a reference to
  * @a fb) release a frame, it will no longer be available to any of

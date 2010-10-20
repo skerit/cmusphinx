@@ -97,6 +97,12 @@ garray_size(garray_t *gar)
 }
 
 size_t
+garray_ent_size(garray_t *gar)
+{
+    return gar->ent_size;
+}
+
+size_t
 garray_next_idx(garray_t *gar)
 {
     return gar->n_ent + gar->base_idx;

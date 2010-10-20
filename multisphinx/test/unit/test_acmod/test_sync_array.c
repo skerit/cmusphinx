@@ -22,10 +22,11 @@ consumer(sbthread_t *th)
 	printf("Thread %p woke up\n", th);
 
 	for (i = 0; i < 20; ++i) {
-		int *ent = sync_array_wait(sa, i, -1, -1);
-		if (ent != NULL) {
+		if (sync_array_wait(sa, i, -1, -1) == 0) {
+			int ent;
+			sync_array_get(sa, i, &ent);
 			printf("Thread %p got element %d = %d\n",
-			       th, i, *ent);
+			       th, i, ent);
 			sync_array_release(sa, i, i + 1);
 		}
 	}

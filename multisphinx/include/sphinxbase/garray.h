@@ -79,6 +79,11 @@ int garray_free(garray_t *gar);
 size_t garray_size(garray_t *gar);
 
 /**
+ * Get the size of an element in a garray_t
+ */
+size_t garray_ent_size(garray_t *gar);
+
+/**
  * Get the next absolute index in a garray_t
  */
 size_t garray_next_idx(garray_t *gar);

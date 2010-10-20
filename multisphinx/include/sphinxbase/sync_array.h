@@ -45,6 +45,21 @@
 
 #include <stdlib.h>
 
+/**
+ * Expandable array with synchronization.
+ *
+ * This is an implementation of a growable array with a movable base
+ * pointer, similar to garray_t, with the added functionality of
+ * synchronization between a single producer and multiple consumers.
+ * The producer can append to the end of the array, while the
+ * consumers have random access to its contents.
+ *
+ * In addition, the elements of the array are reference counted and
+ * can be released by consumers.  When all consumers have released
+ * claims on an initial sequence of the array, the memory associated
+ * with it will be released.  Since this implies that the elements may
+ * be moved in memory, pointers to array elements 
+ */
 typedef struct sync_array_s sync_array_t;
 
 sync_array_t *sync_array_init(size_t n_ent, size_t ent_size);
@@ -53,7 +68,9 @@ sync_array_t *sync_array_retain(sync_array_t *sa);
 
 int sync_array_free(sync_array_t *sa);
 
-void *sync_array_wait(sync_array_t *sa, size_t idx, int sec, int nsec);
+int sync_array_wait(sync_array_t *sa, size_t idx, int sec, int nsec);
+
+int sync_array_get(sync_array_t *sa, size_t idx, void *out_ent);
 
 void *sync_array_append(sync_array_t *sa, void *ent);
 

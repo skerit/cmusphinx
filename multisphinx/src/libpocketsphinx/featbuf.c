@@ -43,7 +43,115 @@
 /* System headers. */
 
 /* SphinxBase headers. */
+#include <sphinxbase/sync_array.h>
+#include <sphinxbase/sbthread.h>
 
 /* Local headers. */
 #include "featbuf.h"
 
+struct featbuf_s {
+    sync_array_t *sa;
+    cmd_ln_t *config;
+    fe_t *fe;
+    feat_t *fcb;
+};
+
+featbuf_t *
+featbuf_init(cmd_ln_t *config)
+{
+    featbuf_t *fb;
+
+    fb = ckd_calloc(1, sizeof(*fb));
+
+    return fb;
+}
+
+featbuf_t *
+featbuf_retain(featbuf_t *fb)
+{
+    /* Piggyback on the refcount of the sync array. */
+    sync_array_retain(fb->sa);
+    return fb;
+}
+
+int
+featbuf_free(featbuf_t *fb)
+{
+    int rc;
+
+    if (fb == NULL)
+        return 0;
+    /* Piggyback on the refcount of the sync array. */
+    if ((rc = sync_array_free(fb->sa)) > 0)
+        return rc;
+    cmd_ln_free_r(fb->config);
+    fe_free(fb->fe);
+    feat_free(fb->fcb);
+    ckd_free(fb);
+    return 0;
+}
+
+fe_t *
+featbuf_get_fe(featbuf_t *fb)
+{
+    return fb->fe;
+}
+
+feat_t *
+featbuf_get_fcb(featbuf_t *fb)
+{
+    return fb->fcb;
+}
+
+int
+featbuf_next(featbuf_t *fb)
+{
+    return sync_array_next_idx(fb->sa);
+}
+
+mfcc_t **
+featbuf_wait(featbuf_t *fb, int fidx, int timeout)
+{
+}
+
+int
+featbuf_release(featbuf_t *fb, int sidx, int eidx)
+{
+}
+
+int
+featbuf_start_utt(featbuf_t *fb)
+{
+}
+
+int
+featbuf_end_utt(featbuf_t *fb, int timeout)
+{
+}
+
+int
+featbuf_abort_utt(featbuf_t *fb)
+{
+}
+
+int
+featbuf_process_raw(featbuf_t *fb,
+			int16 const *raw,
+			size_t n_samps,
+			int full_utt)
+{
+}
+
+int
+featbuf_process_cep(featbuf_t *fb,
+			mfcc_t **cep,
+			size_t n_frames,
+			int full_utt)
+{
+}
+
+int
+featbuf_process_feat(featbuf_t *fb,
+                     mfcc_t **feat)
+{
+}
