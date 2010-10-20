@@ -145,3 +145,20 @@ garray_shift(garray_t *gar, size_t n_ent)
     return gar->n_ent;
 }
 
+void
+garray_clear(garray_t *gar, size_t start, size_t n_ent)
+{
+    memset(garray_void(gar, start), 0, n_ent * gar->ent_size);
+}
+
+garray_t *
+garray_slice(garray_t *gar, size_t start, size_t n_ent)
+{
+    garray_t *gar2;
+
+    if (start + n_ent > gar->n_ent)
+        return NULL;
+    gar2 = garray_init(n_ent, gar->ent_size);
+    memcpy(gar2->ent, garray_void(gar, start), n_ent * gar->ent_size);
+    return gar2;
+}

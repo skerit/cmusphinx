@@ -158,7 +158,7 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     ffs->input_words = ckd_calloc(ps_search_n_words(ffs), sizeof(*ffs->input_words));
     E_INFO("Allocated %d KiB for active word flags\n",
            (int)ps_search_n_words(ffs) * sizeof(*ffs->input_words) / 1024);
-    ffs->input_arcs = fwdflat_arc_buffer_init(256, 256);
+    ffs->input_arcs = fwdflat_arc_buffer_init();
 
     ffs->bptbl = bptbl_init(d2p, cmd_ln_int32_r(config, "-latsize"), 256);
     if (input_bptbl)
@@ -962,7 +962,7 @@ fwdflat_search_step(ps_search_t *base, int frame_idx)
          * the time being we just try to add them all, the arc buffer
          * code will filter out the irrelevant ones. */
         narc = fwdflat_arc_buffer_add_bps(ffs->input_arcs, ffs->input_bptbl,
-                                          0, ffs->input_bptbl->oldest_bp);
+                                          0, ffs->input_bptbl->first_invert_bp);
         fwdflat_arc_buffer_commit(ffs->input_arcs);
         E_INFO("narc %d\n", narc);
 
@@ -1056,18 +1056,14 @@ fwdflat_search_seg_iter(ps_search_t *base, int32 *out_score)
 }
 
 fwdflat_arc_buffer_t *
-fwdflat_arc_buffer_init(int n_sf, int n_arc)
+fwdflat_arc_buffer_init(void)
 {
     fwdflat_arc_buffer_t *fab;
 
     fab = ckd_calloc(1, sizeof(*fab));
     fab->refcount = 1;
-    fab->n_arcs_alloc = n_arc;
-    fab->n_arcs = 0;
-    fab->arcs = ckd_calloc(fab->n_arcs_alloc, sizeof(*fab->arcs));
-    fab->n_sf_alloc = n_sf;
-    fab->n_sf = 0;
-    fab->sf_idx = ckd_calloc(fab->n_sf_alloc, sizeof(*fab->sf_idx));
+    fab->arcs = garray_init(0, sizeof(fwdflat_arc_t));
+    fab->sf_idx = garray_init(0, sizeof(int));
 
     return fab;
 }
@@ -1087,8 +1083,8 @@ fwdflat_arc_buffer_free(fwdflat_arc_buffer_t *fab)
     if (--fab->refcount > 0)
         return fab->refcount;
 
-    ckd_free(fab->sf_idx);
-    ckd_free(fab->arcs);
+    garray_free(fab->sf_idx);
+    garray_free(fab->arcs);
     ckd_free(fab);
     return 0;
 }
@@ -1097,10 +1093,11 @@ int
 fwdflat_arc_buffer_extend(fwdflat_arc_buffer_t *fab, int next_sf)
 {
     /* FIXME: Reuse old indices in the future, but not for now. */
-    if (next_sf > fab->n_sf_alloc) {
-        while (next_sf > fab->n_sf_alloc)
-            fab->n_sf_alloc *= 2;
-    }
+    garray_expand(fab->sf_idx, next_sf);
+    fab->next_sf = next_sf;
+    garray_clear(fab->sf_idx, fab->active_sf,
+                 fab->next_sf - fab->active_sf);
+    return next_sf - fab->active_sf;
 }
 
 int
@@ -1108,29 +1105,120 @@ fwdflat_arc_buffer_add_bps(fwdflat_arc_buffer_t *fab,
                            bptbl_t *bptbl, bpidx_t start,
                            bpidx_t end)
 {
+    bpidx_t idx;
+    int n_arcs;
+
+    n_arcs = 0;
+    for (idx = start; idx < end; ++idx) {
+        fwdflat_arc_t arc;
+        bp_t *ent;
+
+        /* Convert it to an arc. */
+        ent = bptbl_ent(bptbl, idx);
+        arc.wid = ent->wid;
+        arc.sf = bptbl_sf(bptbl, idx);
+        arc.ef = ent->frame;
+        /* If it's inside the appropriate frame span, add it. */
+        if (arc.sf >= fab->active_sf && arc.sf < fab->next_sf) {
+            garray_append(fab->arcs, &arc);
+            /* Increment the frame counter for its start frame. */
+            ++garray_ent(fab->sf_idx, int, arc.sf - fab->first_sf);
+            ++n_arcs;
+        }
+    }
+
+    return n_arcs;
 }
 
 int
 fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
 {
+    size_t n_arcs;
+    int n_active_fr, i, prev_count;
+    garray_t *active_arc;
+    garray_t *active_sf;
+    int *sf;
+
+    /* Save frame and arc counts. */
+    n_active_fr = fab->next_sf - fab->active_sf;
+    n_arcs = garray_size(fab->arcs) - fab->active_arc;
+
+    E_INFO("sf_idx before (%d:%d):", fab->active_sf, fab->next_sf);
+    for (i = fab->active_sf; i < fab->next_sf; ++i)
+        E_INFOCONT(" %d", garray_ent(fab->sf_idx, int, i - fab->first_sf));
+    E_INFOCONT("\n");
+
+    /* Sum forward frame counters to create arc indices */
+    sf = garray_ptr(fab->sf_idx, int, fab->active_sf - fab->first_sf);
+    prev_count = sf[0];
+    sf[0] = fab->active_arc;
+    for (i = 1; i < n_active_fr; ++i)  {
+        int tmp = sf[i];
+        sf[i] = sf[i-1] + prev_count;
+        prev_count = tmp;
+    }
+
+    /* Permute incoming arcs to match frame counters */
+    active_sf = garray_slice(fab->sf_idx,
+                             fab->active_sf - fab->first_sf, n_active_fr);
+    active_arc = garray_slice(fab->arcs,
+                              fab->active_arc, n_arcs);
+
+    E_INFO("sf_idx after (%d:%d):", fab->active_sf, fab->next_sf);
+    for (i = fab->active_sf; i < fab->next_sf; ++i)
+        E_INFOCONT(" %d", garray_ent(fab->sf_idx, int, i - fab->first_sf));
+    E_INFOCONT("\n");
+
+    for (i = 0; i < n_arcs; ++i) {
+        fwdflat_arc_t *arc = garray_ptr(active_arc, fwdflat_arc_t, i);
+        int *pos = garray_ptr(active_sf, int, arc->sf - fab->active_sf);
+        E_INFO("Coping arc %d sf %d to %d\n",
+               fab->active_arc + i, arc->sf, *pos);
+        /* Copy it into place. */
+        garray_ent(fab->arcs, fwdflat_arc_t, *pos) = *arc;
+        /* Increment local frame counter. */
+        *pos += 1;
+    }
+    garray_free(active_sf);
+    garray_free(active_arc);
+
+    /* Update frame and arc pointers. */
+    fab->active_sf += n_active_fr;
+    fab->active_arc += n_arcs;
+
+    return n_arcs;
 }
 
 fwdflat_arc_t *
 fwdflat_arc_buffer_iter(fwdflat_arc_buffer_t *fab, int sf)
 {
+    if (sf < fab->first_sf || sf >= fab->active_sf)
+        return NULL;
+    return garray_ptr(fab->arcs, fwdflat_arc_t,
+                      garray_ent(fab->sf_idx, int, sf - fab->first_sf));
 }
 
 fwdflat_arc_t *
 fwdflat_arc_next(fwdflat_arc_buffer_t *fab, fwdflat_arc_t *ab)
 {
+    ab += 1;
+    if (ab >= garray_ptr(fab->arcs, fwdflat_arc_t, fab->active_arc))
+        return NULL;
+    return ab;
 }
 
 fwdflat_arc_t *
 fwdflat_arc_buffer_wait(fwdflat_arc_buffer_t *fab, int sf)
 {
+    /* FIXME: Implement this... */
 }
 
 int
 fwdflat_arc_buffer_release(fwdflat_arc_buffer_t *fab, int first_sf)
 {
+    /* FIXME: Leave this alone for now until the other stuff works. */
+    /* Update the first frame pointer. */
+    /* Shift back arc entries. */
+    /* Shift back start frame entries. */
+    return 0;
 }

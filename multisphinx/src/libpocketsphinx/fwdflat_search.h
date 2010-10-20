@@ -43,6 +43,7 @@
 #define __FWDFLAT_SEARCH_H__
 
 /* SphinxBase headers. */
+#include <sphinxbase/garray.h>
 
 /* Local headers. */
 #include "bptbl.h"
@@ -101,16 +102,19 @@ typedef struct fwdflat_arc_s {
 
 typedef struct fwdflat_arc_buffer_s {
     int refcount;
-    fwdflat_arc_t *arcs;
-    int n_arcs, n_arcs_alloc;
-    int *sf_idx;
-    int n_sf, n_sf_alloc;
+    garray_t *arcs;
+    garray_t *sf_idx;
+    int first_sf;  /**< First frame containing outgoing arcs. */
+    int active_sf; /**< First frame of incoming arcs. */
+    int next_sf;   /**< First frame not containing arcs (last frame + 1). */
+
+    int active_arc; /**< First incoming arc. */
 } fwdflat_arc_buffer_t;
 
 /**
  * Create a new arc buffer.
  */
-fwdflat_arc_buffer_t *fwdflat_arc_buffer_init(int n_sf, int n_arc);
+fwdflat_arc_buffer_t *fwdflat_arc_buffer_init(void);
 
 /**
  * Retain a pointer to an arc buffer.

@@ -99,6 +99,16 @@ size_t garray_pop(garray_t *gar, size_t n_ent);
 size_t garray_shift(garray_t *gar, size_t n_ent);
 
 /**
+ * Set memory for elements to zero.
+ */
+void garray_clear(garray_t *gar, size_t start, size_t n_ent);
+
+/**
+ * Copy a subsection of the array to another array.
+ */
+garray_t *garray_slice(garray_t *gar, size_t start, size_t n_ent);
+
+/**
  * Get a pointer to an element in the array.
  */
 void *garray_void(garray_t *gar, size_t idx);
@@ -106,12 +116,12 @@ void *garray_void(garray_t *gar, size_t idx);
 /**
  * Get the underlying data store.
  */
-#define garray_ptr(gar, type) ((type *)garray_void(gar, 0))
+#define garray_ptr(gar, type, idx) ((type *)garray_void(gar, idx))
 
 /**
  * Get an individual element in the array.
  */
-#define garray_ent(gar, type, idx) garray_ptr(gar, type)[idx]
+#define garray_ent(gar, type, idx) garray_ptr(gar, type, 0)[idx]
 
 #ifdef __cplusplus
 }

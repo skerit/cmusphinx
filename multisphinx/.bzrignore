@@ -108,3 +108,4 @@ test/unit/test_util/test_filename
 test/unit/test_util/test_fopen
 test/unit/test_util/test_heap
 test/unit/test_util/test_huff_code
+test/unit/test_search/test_arc_buffer

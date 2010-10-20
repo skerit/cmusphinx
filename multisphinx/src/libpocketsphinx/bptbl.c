@@ -143,7 +143,8 @@ bptbl_dump(bptbl_t *bptbl)
 {
     int i;
 
-    E_INFO("Retired backpointers (%d entries):\n", bptbl->first_invert_bp);
+    E_INFO("Retired backpointers (%d entries, oldest active %d):\n",
+           bptbl->first_invert_bp, bptbl->oldest_bp);
     for (i = 0; i < bptbl->first_invert_bp; ++i) {
         bp_t *ent = bptbl_ent(bptbl, i);
         assert(ent->valid);
