@@ -55,7 +55,7 @@
 #define NO_BP		-1
 
 /**
- * Back pointer table entry
+ * Back pointer table entry (32 bytes)
  */
 typedef struct bp_s {
     int16    frame;		/**< start or end frame */

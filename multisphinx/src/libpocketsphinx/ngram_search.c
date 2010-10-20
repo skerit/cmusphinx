@@ -307,24 +307,24 @@ void
 ngram_search_save_bp(ngram_search_t *ngs, int frame_idx,
                      int32 w, int32 score, int32 path, int32 rc)
 {
-    int32 _bp_;
+    int32 bp;
 
     /* Look for an existing exit for this word in this frame. */
-    _bp_ = ngs->bptbl->word_idx[w];
-    if (_bp_ != NO_BP) {
+    bp = ngs->bptbl->word_idx[w];
+    if (bp != NO_BP) {
         /* Keep only the best scoring one (this is a potential source
          * of search errors...) */
-        if (ngs->bptbl->ent[_bp_].score WORSE_THAN score) {
-            if (ngs->bptbl->ent[_bp_].bp != path) {
-                ngs->bptbl->ent[_bp_].bp = path;
-                bptbl_fake_lmstate(ngs->bptbl, _bp_);
+        if (ngs->bptbl->ent[bp].score WORSE_THAN score) {
+            if (ngs->bptbl->ent[bp].bp != path) {
+                ngs->bptbl->ent[bp].bp = path;
+                bptbl_fake_lmstate(ngs->bptbl, bp);
             }
-            ngs->bptbl->ent[_bp_].score = score;
+            ngs->bptbl->ent[bp].score = score;
         }
         /* But do keep track of scores for all right contexts, since
          * we need them to determine the starting path scores for any
          * successors of this word exit. */
-        ngs->bptbl->bscore_stack[ngs->bptbl->ent[_bp_].s_idx + rc] = score;
+        ngs->bptbl->bscore_stack[ngs->bptbl->ent[bp].s_idx + rc] = score;
     }
     else {
         bptbl_enter(ngs->bptbl, w, frame_idx, path, score, rc);
