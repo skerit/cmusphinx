@@ -117,11 +117,18 @@ typedef struct fwdflat_search_s {
                             cleared before each frame */
 
     /**
-     * Input backpointer table (determines word list).
+     * Input backpointer table (determines successor words).
      */
     bptbl_t *input_bptbl;
     int16 min_ef_width;   /**< Minimum number of active endpoints. */
     int16 max_sf_win;     /**< Lookahead window for active words */
+
+    uint8 *input_words;     /**< Active words (end frame counts) */
+    int16 input_first_sf; /**< First frame of current lookahead window. */
+    int16 input_last_sf;  /**< Last start frame found in the input. */
+
+    bpidx_t input_first_bp;
+    bpidx_t input_last_bp;
 
     /**
      * First HMMs for multiple-phone words.

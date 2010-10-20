@@ -103,9 +103,9 @@ typedef struct bptbl_s {
      */
     int32 active_fr;
     /**
-     * Index of first bptbl entry to be reordered by compaction and
-     * insertion sort.  Also marks the end of the region of retired
-     * bptbl entries.
+     * Index of first bptbl entry to be reordered by compaction.  Also
+     * marks the end of the region of retired bptbl entries.  FIXME:
+     * This is really the wrong name for it.
      */
     bpidx_t first_invert_bp;
     int32 dest_s_idx;        /**< bscorestack index corresponding to

@@ -148,24 +148,27 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     fwdflat_search_calc_beams(ffs);
 
     /* Allocate a billion different tables for stuff. */
-    ffs->word_chan = ckd_calloc(dict_size(dict),
+    ffs->word_chan = ckd_calloc(ps_search_n_words(ffs),
                                 sizeof(*ffs->word_chan));
-    ffs->word_active = bitvec_alloc(dict_size(dict));
-    ffs->word_idx = ckd_calloc(dict_size(dict),
-                               sizeof(*ffs->word_idx));
     E_INFO("Allocated %d KiB for word HMMs\n",
-           (int)dict_size(dict) * sizeof(*ffs->word_chan) / 1024);
+           (int)ps_search_n_words(ffs) * sizeof(*ffs->word_chan) / 1024);
+    ffs->word_active = bitvec_alloc(ps_search_n_words(ffs));
+    ffs->word_idx = ckd_calloc(ps_search_n_words(ffs),
+                               sizeof(*ffs->word_idx));
+    ffs->input_words = ckd_calloc(ps_search_n_words(ffs), sizeof(*ffs->input_words));
+    E_INFO("Allocated %d KiB for active word flags\n",
+           (int)ps_search_n_words(ffs) * sizeof(*ffs->input_words) / 1024);
 
     ffs->bptbl = bptbl_init(d2p, cmd_ln_int32_r(config, "-latsize"), 256);
     if (input_bptbl)
         ffs->input_bptbl = bptbl_retain(input_bptbl);
 
     /* Allocate active word list array */
-    ffs->active_word_list = ckd_calloc_2d(2, dict_size(dict),
+    ffs->active_word_list = ckd_calloc_2d(2, ps_search_n_words(ffs),
                                           sizeof(**ffs->active_word_list));
     E_INFO("Allocated %d KiB for active word list\n",
-           (dict_size(dict) * sizeof(**ffs->active_word_list)
-            + dict_size(dict) * sizeof(*ffs->active_word_list)) / 1024);
+           (ps_search_n_words(ffs) * sizeof(**ffs->active_word_list)
+            + ps_search_n_words(ffs) * sizeof(*ffs->active_word_list)) / 1024);
 
     /* Load language model(s) */
     if ((path = cmd_ln_str_r(config, "-lmctl"))) {
@@ -280,6 +283,7 @@ fwdflat_search_reinit(ps_search_t *base, dict_t *dict, dict2pid_t *d2p)
         ckd_free(ffs->word_active);
         ckd_free_2d(ffs->active_word_list);
         ckd_free(ffs->word_chan);
+        ckd_free(ffs->input_words);
 
         ffs->word_idx = ckd_calloc(base->n_words,
                                    sizeof(*ffs->word_idx));
@@ -288,6 +292,7 @@ fwdflat_search_reinit(ps_search_t *base, dict_t *dict, dict2pid_t *d2p)
             = ckd_calloc_2d(2, base->n_words,
                             sizeof(**ffs->active_word_list));
         ffs->word_chan = ckd_calloc(base->n_words, sizeof(*ffs->word_chan));
+        ffs->input_words = ckd_calloc(base->n_words, sizeof(*ffs->input_words));
     }
 
     /* Free old dict2pid, dict */
@@ -434,6 +439,12 @@ fwdflat_search_start(ps_search_t *base)
     hmm_enter(&rhmm->hmm, 0, NO_BP, 0);
     ffs->active_word_list[0][0] = ps_search_start_wid(ffs);
     ffs->n_active_word[0] = 1;
+
+    memset(ffs->input_words, 0, ps_search_n_words(ffs) * sizeof(*ffs->input_words));
+    ffs->input_first_sf = 0;
+    ffs->input_last_sf = 0;
+    ffs->input_first_bp = 0;
+    ffs->input_last_bp = 0;
 
     ffs->best_score = 0;
     ffs->renormalized = FALSE;
@@ -837,6 +848,82 @@ fwdflat_renormalize_scores(fwdflat_search_t *ffs, int frame_idx, int32 norm)
     ffs->renormalized = TRUE;
 }
 
+static void
+fwdflat_dump_active_words(fwdflat_search_t *ffs)
+{
+    int i, j;
+
+    E_INFO("Active words from input:\n");
+    for (i = 0; i < ps_search_n_words(ffs); ++i) {
+        if (ffs->input_words[i] >= ffs->min_ef_width) {
+            E_INFO_NOFN("%s (%d exits)\n",
+                        dict_wordstr(ps_search_dict(ffs), i),
+                        ffs->input_words[i]);
+            ++j;
+        }
+    }
+    E_INFO("%d active words\n", j);
+}
+
+/* FIXME: Would like to unit test this but not sure how... */
+static int
+fwdflat_update_active_words(fwdflat_search_t *ffs, int frame_idx)
+{
+    bpidx_t i, new_first_bp;
+    int old_first_sf, new_last_sf;
+
+    /* Check if there are new backpointers to be scanned. */
+    /* FIXME: Need an API for this, not mucking around in the internals. */
+    if (ffs->input_bptbl->first_invert_bp == ffs->input_last_bp)
+        return 0;
+
+    /* Scan through newly available backpointers to find the last
+     * start frame and adjusting exit counts. */
+    new_last_sf = ffs->input_last_sf;
+    for (i = ffs->input_last_bp; i < ffs->input_bptbl->first_invert_bp; ++i) {
+        int sf = bptbl_sf(ffs->input_bptbl, i);
+        bp_t *bpe = bptbl_ent(ffs->input_bptbl, i);
+        if (sf > new_last_sf)
+            new_last_sf = sf;
+        ffs->input_words[bpe->wid]++;
+    }
+    /* Update first_sf if the window has grown too large. */
+    old_first_sf = ffs->input_first_sf;
+    if (new_last_sf - ffs->input_first_sf > ffs->max_sf_win) {
+        ffs->input_first_sf = new_last_sf - ffs->max_sf_win;
+    }
+
+    /* Scan backpointers, adjusting exit counts for expired ones. */
+    new_first_bp = ffs->input_bptbl->first_invert_bp;
+    for (i = ffs->input_first_bp; i < ffs->input_bptbl->first_invert_bp; ++i) {
+        int sf = bptbl_sf(ffs->input_bptbl, i);
+        if (sf >= ffs->input_first_sf) {
+            /* Update input_first_bp once. */
+            if (i < new_first_bp)
+                new_first_bp = i;
+        }
+        else {
+            /* Expire this word. */
+            bp_t *bpe = bptbl_ent(ffs->input_bptbl, i);
+            ffs->input_words[bpe->wid]--;
+        }
+    }
+
+    /* Update pointers. */
+    E_INFO("Update window bpidx %d:%d => %d:%d sf %d:%d => %d:%d\n",
+           ffs->input_first_bp, ffs->input_last_bp,
+           new_first_bp, ffs->input_bptbl->first_invert_bp,
+           old_first_sf, ffs->input_last_sf,
+           ffs->input_first_sf, new_last_sf);
+
+    ffs->input_first_bp = new_first_bp;
+    ffs->input_last_bp = ffs->input_bptbl->first_invert_bp;
+    ffs->input_last_sf = new_last_sf;
+
+    fwdflat_dump_active_words(ffs);
+    return 0;
+}
+
 static int
 fwdflat_search_step(ps_search_t *base, int frame_idx)
 {
@@ -845,6 +932,11 @@ fwdflat_search_step(ps_search_t *base, int frame_idx)
     int32 nf, i, j;
     int32 *nawl;
     int fi;
+
+    /* Update the active word list. */
+    fwdflat_update_active_words(ffs, frame_idx);
+
+    /* Decide whether we can actually go ahead and search again. */
 
     /* Activate our HMMs for the current frame if need be. */
     if (!ps_search_acmod(ffs)->compallsen)
