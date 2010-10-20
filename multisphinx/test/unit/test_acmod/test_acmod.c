@@ -15,6 +15,7 @@ consumer(sbthread_t *th)
 	int frame_idx;
 
 	printf("Consumer %p started\n", acmod);
+	acmod_start_utt(acmod, -1);
 	while ((frame_idx = acmod_wait(acmod, -1)) >= 0) {
 		int senid, score;
 		/* Score a frame. */
@@ -26,10 +27,10 @@ consumer(sbthread_t *th)
 		acmod_release(acmod, frame_idx);
 	}
 	TEST_ASSERT(acmod_eou(acmod));
+	acmod_end_utt(acmod);
 	printf("Consumer %p exiting\n", acmod);
 	return 0;
 }
-
 
 int
 main(int argc, char *argv[])
@@ -54,7 +55,7 @@ main(int argc, char *argv[])
 	fb = featbuf_init(config);
 	TEST_ASSERT(fb);
 
-	lmath = logmath_init(cmd_ln_float64_r(config, "-logbase"),
+	lmath = logmath_init(cmd_ln_float32_r(config, "-logbase"),
 			     0, FALSE);
 	acmod[0] = acmod_init(config, lmath, fb);
 	TEST_ASSERT(acmod[0]);
@@ -87,6 +88,7 @@ main(int argc, char *argv[])
 		printf("Reaped consumer %p\n", acmod[i]);
 	}
 	featbuf_free(fb);
+	logmath_free(lmath);
 	cmd_ln_free_r(config);
 	return 0;
 }

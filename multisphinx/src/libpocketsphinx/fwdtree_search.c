@@ -62,7 +62,6 @@
 static int fwdtree_search_start(ps_search_t *base);
 static int fwdtree_search_step(ps_search_t *base);
 static int fwdtree_search_finish(ps_search_t *base);
-static int fwdtree_search_reinit(ps_search_t *base, dict_t *dict, dict2pid_t *d2p);
 static void fwdtree_search_free(ps_search_t *base);
 static char const *fwdtree_search_hyp(ps_search_t *base, int32 *out_score);
 static int32 fwdtree_search_prob(ps_search_t *base);
@@ -70,10 +69,6 @@ static ps_seg_t *fwdtree_search_seg_iter(ps_search_t *base, int32 *out_score);
 
 static ps_searchfuncs_t fwdtree_funcs = {
     /* name: */   "fwdtree",
-    /* start: */  fwdtree_search_start,
-    /* step: */   fwdtree_search_step,
-    /* finish: */ fwdtree_search_finish,
-    /* reinit: */ fwdtree_search_reinit,
     /* free: */   fwdtree_search_free,
     /* hyp: */      fwdtree_search_hyp,
     /* prob: */     fwdtree_search_prob,
@@ -608,7 +603,6 @@ fwdtree_search_free(ps_search_t *base)
 {
     fwdtree_search_t *fts = (fwdtree_search_t *)base;
 
-    ps_search_deinit(base);
     /* Reset non-root channels. */
     reinit_search_tree(fts);
     /* Free the search tree. */
@@ -635,53 +629,6 @@ fwdtree_search_free(ps_search_t *base)
     bptbl_free(fts->bptbl);
     ckd_free_2d(fts->active_word_list);
     ckd_free(fts->last_ltrans);
-    ckd_free(fts);
-}
-
-int
-fwdtree_search_reinit(ps_search_t *base, dict_t *dict, dict2pid_t *d2p)
-{
-    fwdtree_search_t *fts = (fwdtree_search_t *)base;
-    int old_n_words;
-
-    /* Update the number of words. */
-    old_n_words = base->n_words;
-    if (old_n_words != dict_size(dict)) {
-        base->n_words = dict_size(dict);
-        /* Reallocate these temporary arrays. */
-        ckd_free(fts->word_idx);
-        ckd_free(fts->word_active);
-        ckd_free(fts->last_ltrans);
-        ckd_free_2d(fts->active_word_list);
-        ckd_free(fts->lastphn_cand);
-        ckd_free(fts->word_chan);
-        fts->word_idx = ckd_calloc(base->n_words, sizeof(*fts->word_idx));
-        fts->word_active = bitvec_alloc(base->n_words);
-        fts->last_ltrans = ckd_calloc(base->n_words, sizeof(*fts->last_ltrans));
-        fts->active_word_list
-            = ckd_calloc_2d(2, base->n_words,
-                            sizeof(**fts->active_word_list));
-        fts->lastphn_cand = ckd_calloc(ps_search_n_words(fts),
-                                       sizeof(*fts->lastphn_cand));
-        fts->word_chan = ckd_calloc(ps_search_n_words(fts),
-                                    sizeof(*fts->word_chan));
-    }
-    /* Free old dict2pid, dict */
-    ps_search_base_reinit(base, dict, d2p);
-    /* Update beam widths. */
-    fwdtree_search_calc_beams(fts);
-    /* Update word mappifts. */
-    fwdtree_search_update_widmap(fts);
-
-    /* Reset non-root channels. */
-    reinit_search_tree(fts);
-    /* Free the search tree. */
-    deinit_search_tree(fts);
-
-    /* Rebuild the search tree. */
-    init_search_tree(fts);
-    create_search_tree(fts);
-    return 0;
 }
 
 int

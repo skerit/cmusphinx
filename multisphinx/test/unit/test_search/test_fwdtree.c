@@ -30,32 +30,43 @@ main(int argc, char *argv[])
 			     "-dict", TESTDATADIR "/hub4.5000.dic",
 			     NULL);
 	ps_init_defaults(config);
+	fb = featbuf_init(config);
+
+	/* Create acoustic model and search. */
 	lmath = logmath_init(cmd_ln_float32_r(config, "-logbase"),
 			     0, FALSE);
-	acmod = acmod_init(config, lmath, NULL, NULL);
+	acmod = acmod_init(config, lmath);
 	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));
 	dict = dict_init(config, mdef);
 	d2p = dict2pid_build(mdef, dict);
 	fwdtree = fwdtree_search_init(config, acmod, dict, d2p);
 
+	/* Launch a search thread. */
+	ps_search_run(fwdtree);
+
+	/* Feed it a bunch of data. */
 	nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
 			      ".mfc", 0, -1, NULL, -1);
 	feat = feat_array_alloc(acmod->fcb, nfr);
 	if ((nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
 				   ".mfc", 0, -1, feat, -1)) < 0)
 		E_FATAL("Failed to read mfc file\n");
-	ps_search_start(fwdtree);
-	for (i = 0; i < nfr; ++i) {
-		acmod_process_feat(acmod, feat[i]);
-		ps_search_step(fwdtree);
-	}
-	ps_search_finish(fwdtree);
+	featbuf_start_utt(fb);
+	for (i = 0; i < nfr; ++i)
+		featbuf_process_feat(fb, feat[i]);
+	featbuf_end_utt(fb);
+
+	/* Retrieve the hypothesis from the search thread. */
 	hyp = ps_search_hyp(fwdtree, &score);
 	printf("hyp: %s (%d)\n", hyp, score);
 
+	/* Reap the search thread. */
+	ps_search_stop(fwdtree);
 	ps_search_free(fwdtree);
-	feat_array_free(feat);
 	acmod_free(acmod);
+
+	/* Clean everything else up. */
+	feat_array_free(feat);
 	logmath_free(lmath);
 	cmd_ln_free_r(config);
 

@@ -60,17 +60,12 @@
 typedef struct ps_search_s ps_search_t;
 
 /**
- * V-table for search algorithm.
+ * V-table for search algorithm functions, not called directly by users.
  */
 typedef struct ps_searchfuncs_s {
     char const *name;
 
-    int (*start)(ps_search_t *search);
-    int (*step)(ps_search_t *search);
-    int (*finish)(ps_search_t *search);
-    int (*reinit)(ps_search_t *search, dict_t *dict, dict2pid_t *d2p);
-    void (*free)(ps_search_t *search);
-
+    int (*free)(ps_search_t *search);
     char const *(*hyp)(ps_search_t *search, int32 *out_score);
     int32 (*prob)(ps_search_t *search);
     ps_seg_t *(*seg_iter)(ps_search_t *search, int32 *out_score);
@@ -82,6 +77,8 @@ typedef struct ps_searchfuncs_s {
 struct ps_search_s {
     ps_searchfuncs_t *vt;  /**< V-table of search methods. */
     sbthread_t *thr;       /**< Thread in which this search runs. */
+    sbmtx_t *mtx;          /**< Lock for this search. */
+
     cmd_ln_t *config;      /**< Configuration. */
     acmod_t *acmod;        /**< Acoustic model. */
     dict_t *dict;          /**< Pronunciation dictionary. */
@@ -97,29 +94,15 @@ struct ps_search_s {
     int32 finish_wid;      /**< Finish word ID. */
 };
 
+/* A variety of accessors. */
 #define ps_search_base(s) ((ps_search_t *)s)
+#define ps_search_thread(s) ps_search_base(s)->thr
 #define ps_search_config(s) ps_search_base(s)->config
 #define ps_search_acmod(s) ps_search_base(s)->acmod
 #define ps_search_dict(s) ps_search_base(s)->dict
 #define ps_search_dict2pid(s) ps_search_base(s)->d2p
-#define ps_search_dag(s) ps_search_base(s)->dag
-#define ps_search_last_link(s) ps_search_base(s)->last_link
 #define ps_search_post(s) ps_search_base(s)->post
-#define ps_search_lookahead(s) ps_search_base(s)->pls
 #define ps_search_n_words(s) ps_search_base(s)->n_words
-
-#define ps_search_name(s) ps_search_base(s)->vt->name
-#define ps_search_start(s) (*(ps_search_base(s)->vt->start))(s)
-#define ps_search_step(s) (*(ps_search_base(s)->vt->step))(s)
-#define ps_search_finish(s) (*(ps_search_base(s)->vt->finish))(s)
-#define ps_search_reinit(s,d,d2p) (*(ps_search_base(s)->vt->reinit))(s,d,d2p)
-#define ps_search_free(s) (*(ps_search_base(s)->vt->free))(s)
-#define ps_search_lattice(s) (*(ps_search_base(s)->vt->lattice))(s)
-#define ps_search_hyp(s,sc) (*(ps_search_base(s)->vt->hyp))(s,sc)
-#define ps_search_prob(s) (*(ps_search_base(s)->vt->prob))(s)
-#define ps_search_seg_iter(s,sc) (*(ps_search_base(s)->vt->seg_iter))(s,sc)
-
-/* For convenience... */
 #define ps_search_silence_wid(s) ps_search_base(s)->silence_wid
 #define ps_search_start_wid(s) ps_search_base(s)->start_wid
 #define ps_search_finish_wid(s) ps_search_base(s)->finish_wid
@@ -132,14 +115,37 @@ void ps_search_init(ps_search_t *search, ps_searchfuncs_t *vt,
                     dict2pid_t *d2p);
 
 /**
- * Re-initialize base structure with new dictionary.
- */
-void ps_search_base_reinit(ps_search_t *search, dict_t *dict,
-                           dict2pid_t *d2p);
-
-/**
  * De-initialize base structure.
  */
 void ps_search_deinit(ps_search_t *search);
+
+/**
+ * Start a search thread.
+ */
+sbthread_t *ps_search_run(ps_search_t *search);
+
+/**
+ * Stop a search thread.
+ */
+int ps_search_stop(ps_search_t *search);
+
+/**
+ * Free a search structure.
+ */
+int ps_search_free(ps_search_t *search);
+
+/**
+ * Get the latest hypothesis from a search.
+ *
+ * FIXME: This will probably go away due to hypothesis splicing
+ */
+char const *ps_search_hyp(ps_search_t *search, int32 *out_score);
+
+/**
+ * Get the latest segmentation from a search
+ *
+ * FIXME: This will probably go away due to hypothesis splicing
+ */
+ps_seg_t *ps_search_seg_iter(ps_search_t *search, int32 *out_score);
 
 #endif /* __PS_SEARCH_H__ */

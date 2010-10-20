@@ -262,19 +262,13 @@ static void
 state_align_search_free(ps_search_t *search)
 {
     state_align_search_t *sas = (state_align_search_t *)search;
-    ps_search_deinit(search);
     ckd_free(sas->hmms);
     ckd_free(sas->tokens);
     hmm_context_free(sas->hmmctx);
-    ckd_free(sas);
 }
 
 static ps_searchfuncs_t state_align_search_funcs = {
     /* name: */   "state_align",
-    /* start: */  state_align_search_start,
-    /* step: */   state_align_search_step,
-    /* finish: */ state_align_search_finish,
-    /* reinit: */ state_align_search_reinit,
     /* free: */   state_align_search_free,
     /* hyp: */      NULL,
     /* prob: */     NULL,

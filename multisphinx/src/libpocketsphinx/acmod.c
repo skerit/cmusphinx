@@ -223,7 +223,6 @@ acmod_wait(acmod_t *acmod, int timeout)
     if ((rv = featbuf_wait(acmod->fb, acmod->output_frame,
                            timeout, acmod->feat_buf[0][0])) < 0) {
         /* This means end of utterance. */
-        featbuf_release(acmod->fb, acmod->output_frame, -1);
         acmod->eou = TRUE;
         return rv;
     }
@@ -271,10 +270,24 @@ acmod_frame(acmod_t *acmod)
 }
 
 int
-acmod_reset(acmod_t *acmod)
+acmod_start_utt(acmod_t *acmod, int timeout)
 {
+    int rc;
+
+    if ((rc = featbuf_wait_utt(acmod->fb, timeout)) < 0)
+        return rc;
+
     acmod->output_frame = 0;
     acmod->eou = FALSE;
+
+    return 0;
+}
+
+int
+acmod_end_utt(acmod_t *acmod)
+{
+    featbuf_release(acmod->fb, acmod->output_frame, -1);
+    acmod->eou = TRUE;
 
     return 0;
 }

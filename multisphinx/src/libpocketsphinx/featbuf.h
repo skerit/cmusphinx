@@ -87,6 +87,17 @@ fe_t *featbuf_get_fe(featbuf_t *fb);
 feat_t *featbuf_get_fcb(featbuf_t *fb);
 
 /**
+ * Wait for the beginning of an utterance.
+ *
+ * If an utterance is already in progress this returns immediately.
+ *
+ * @param fb Feature buffer.
+ * @param timeout Maximum time to wait, in nanoseconds, or -1 to wait forever.
+ * @return 0, or <0 on timeout or failure.
+ */
+int featbuf_wait_utt(featbuf_t *fb, int timeout);
+
+/**
  * Get the index of the next frame to become available.
  *
  * This is also the same as the number of frames processed so far.
@@ -101,7 +112,7 @@ int featbuf_next(featbuf_t *fb);
  *
  * This function blocks for the requested timeout, or until the
  * requested frame becomes available.  If the timeout is reached it
- * will return NULL.  It will also return NULL in the case where the
+ * will return -1.  It will also return -1 in the case where the
  * end of the utterance has been established by featbuf_end_utt() and
  * the frame requested is beyond the end of the utterance, or if
  * utterance processing has been aborted by featbuf_abort_utt().
@@ -124,7 +135,7 @@ int featbuf_next(featbuf_t *fb);
  * @param fidx Index of frame requested.
  * @param timeout Maximum time to wait, in nanoseconds, or -1 to wait forever.
  * @param out_frame Memory region to which the requested frame will be copied.
- * @return 0, or <0 for failure
+ * @return 0, or <0 for timeout or failure.
  */
 int featbuf_wait(featbuf_t *fb, int fidx, int timeout, mfcc_t *out_frame);
 

@@ -62,7 +62,6 @@
 static int fwdflat_search_start(ps_search_t *base);
 static int fwdflat_search_step(ps_search_t *base);
 static int fwdflat_search_finish(ps_search_t *base);
-static int fwdflat_search_reinit(ps_search_t *base, dict_t *dict, dict2pid_t *d2p);
 static void fwdflat_search_free(ps_search_t *base);
 static char const *fwdflat_search_hyp(ps_search_t *base, int32 *out_score);
 static int32 fwdflat_search_prob(ps_search_t *base);
@@ -70,10 +69,6 @@ static ps_seg_t *fwdflat_search_seg_iter(ps_search_t *base, int32 *out_score);
 
 static ps_searchfuncs_t fwdflat_funcs = {
     /* name: */   "fwdflat",
-    /* start: */  fwdflat_search_start,
-    /* step: */   fwdflat_search_step,
-    /* finish: */ fwdflat_search_finish,
-    /* reinit: */ fwdflat_search_reinit,
     /* free: */   fwdflat_search_free,
     /* hyp: */      fwdflat_search_hyp,
     /* prob: */     fwdflat_search_prob,
@@ -252,8 +247,6 @@ fwdflat_search_free(ps_search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
 
-    ps_search_deinit(base);
-
     destroy_fwdflat_chan(ffs);
 
     hmm_context_free(ffs->hmmctx);
@@ -266,45 +259,6 @@ fwdflat_search_free(ps_search_t *base)
     bitvec_free(ffs->word_active);
     bptbl_free(ffs->bptbl);
     ckd_free_2d(ffs->active_word_list);
-    ckd_free(ffs);
-}
-
-static int
-fwdflat_search_reinit(ps_search_t *base, dict_t *dict, dict2pid_t *d2p)
-{
-    /* Reallocate things that depend on the number of words. */
-    fwdflat_search_t *ffs = (fwdflat_search_t *)base;
-    int old_n_words;
-
-    old_n_words = ps_search_n_words(ffs);
-    if (old_n_words != dict_size(dict)) {
-        base->n_words = dict_size(dict);
-        ckd_free(ffs->word_idx);
-        ckd_free(ffs->word_active);
-        ckd_free_2d(ffs->active_word_list);
-        ckd_free(ffs->word_chan);
-        ckd_free(ffs->input_words);
-
-        ffs->word_idx = ckd_calloc(base->n_words,
-                                   sizeof(*ffs->word_idx));
-        ffs->word_active = bitvec_alloc(base->n_words);
-        ffs->active_word_list
-            = ckd_calloc_2d(2, base->n_words,
-                            sizeof(**ffs->active_word_list));
-        ffs->word_chan = ckd_calloc(base->n_words, sizeof(*ffs->word_chan));
-        ffs->input_words = ckd_calloc(base->n_words, sizeof(*ffs->input_words));
-    }
-
-    /* Free old dict2pid, dict */
-    ps_search_base_reinit(base, dict, d2p);
-    /* Update beam widths. */
-    fwdflat_search_calc_beams(ffs);
-    /* Update word mappings. */
-    fwdflat_search_update_widmap(ffs);
-    /* Rebuild HMM network */
-    build_fwdflat_chan(ffs);
-
-    return 0;
 }
 
 static internal_node_t *

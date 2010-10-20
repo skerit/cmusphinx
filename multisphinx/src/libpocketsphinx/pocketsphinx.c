@@ -364,9 +364,7 @@ ps_start_utt(ps_decoder_t *ps, char const *uttid)
         ++ps->uttno;
     }
 
-    if (ps_search_start(ps->fwdtree) < 0)
-        return -1;
-    return ps_search_start(ps->fwdflat);
+    return featbuf_start_utt(ps->fb);
 }
 
 int
@@ -443,8 +441,9 @@ ps_get_hyp(ps_decoder_t *ps, int32 *out_best_score, char const **out_uttid)
 int32
 ps_get_prob(ps_decoder_t *ps, char const **out_uttid)
 {
+    return 0;
+#if 0
     int32 prob;
-
     ptmr_start(&ps->perf);
     /* FIXME: Nope. */
     prob = ps_search_prob(ps->fwdtree);
@@ -452,6 +451,7 @@ ps_get_prob(ps_decoder_t *ps, char const **out_uttid)
         *out_uttid = ps->uttid;
     ptmr_stop(&ps->perf);
     return prob;
+#endif
 }
 
 ps_seg_t *
@@ -530,64 +530,3 @@ ps_get_all_time(ps_decoder_t *ps, double *out_nspeech,
     *out_nwall = ps->perf.t_tot_elapsed;
 }
 
-void
-ps_search_init(ps_search_t *search, ps_searchfuncs_t *vt,
-               cmd_ln_t *config, acmod_t *acmod, dict_t *dict,
-               dict2pid_t *d2p)
-{
-    search->vt = vt;
-    search->config = cmd_ln_retain(config);
-    search->acmod = acmod_retain(acmod);
-    if (d2p)
-        search->d2p = dict2pid_retain(d2p);
-    else
-        search->d2p = NULL;
-    if (dict) {
-        search->dict = dict_retain(dict);
-        search->start_wid = dict_startwid(dict);
-        search->finish_wid = dict_finishwid(dict);
-        search->silence_wid = dict_silwid(dict);
-        search->n_words = dict_size(dict);
-    }
-    else {
-        search->dict = NULL;
-        search->start_wid = search->finish_wid = search->silence_wid = -1;
-        search->n_words = 0;
-    }
-}
-
-void
-ps_search_base_reinit(ps_search_t *search, dict_t *dict,
-                      dict2pid_t *d2p)
-{
-    dict_free(search->dict);
-    dict2pid_free(search->d2p);
-    /* FIXME: _retain() should just return NULL if passed NULL. */
-    if (dict) {
-        search->dict = dict_retain(dict);
-        search->start_wid = dict_startwid(dict);
-        search->finish_wid = dict_finishwid(dict);
-        search->silence_wid = dict_silwid(dict);
-        search->n_words = dict_size(dict);
-    }
-    else {
-        search->dict = NULL;
-        search->start_wid = search->finish_wid = search->silence_wid = -1;
-        search->n_words = 0;
-    }
-    if (d2p)
-        search->d2p = dict2pid_retain(d2p);
-    else
-        search->d2p = NULL;
-}
-
-
-void
-ps_search_deinit(ps_search_t *search)
-{
-    cmd_ln_free_r(search->config);
-    acmod_free(search->acmod);
-    dict_free(search->dict);
-    dict2pid_free(search->d2p);
-    ckd_free(search->hyp_str);
-}

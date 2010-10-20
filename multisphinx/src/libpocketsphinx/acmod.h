@@ -231,15 +231,27 @@ int acmod_release(acmod_t *acmod, int frame_idx);
 int acmod_eou(acmod_t *acmod);
 
 /**
- * Reset acoustic model for a new utterance.
+ * Wait for a new utterance to start.
  *
  * This function resets the internal frame counter and other data
- * structures in the acmod_t.
+ * structures in the acmod_t, then blocks until a new utterance
+ * starts.
  *
  * @param acmod Acoustic model.
- * @return 0, or <0 on error.
+ * @return 0, or <0 on timeout or error
  */
-int acmod_reset(acmod_t *acmod);
+int acmod_start_utt(acmod_t *acmod, int timeout);
+
+/**
+ * Clean up after the end of an utterance.
+ *
+ * This function must be called after an end-of-utterance condition is
+ * detected (usually by acmod_wait returning -1).  It releases all
+ * remaining frames being waited on by the acoustic model.
+ *
+ * @return 0, or <0 on timeout or error
+ */
+int acmod_end_utt(acmod_t *acmod);
 
 /**
  * Get best score and senone index for current frame.

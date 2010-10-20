@@ -69,7 +69,16 @@ struct featbuf_s {
     int beginutt, endutt;
     FILE *mfcfh;
     FILE *rawfh;
-    sbevent_t *evt;
+    /**
+     * Event signaled by consumer threads when elements are released
+     * from @a sa.  Manually reset by producer thread.
+     */
+    sbevent_t *release;
+    /**
+     * Event signaled by producer thread when a new utterance is
+     * started.  Manually reset at end of utterance.
+     */
+    sbevent_t *start;
 };
 
 static int
@@ -155,7 +164,8 @@ featbuf_init(cmd_ln_t *config)
     fb->sa = sync_array_init(0,
                              feat_dimension(fb->fcb)
                              * sizeof(mfcc_t));
-    fb->evt = sbevent_init();
+    fb->start = sbevent_init(TRUE);
+    fb->release = sbevent_init(TRUE);
     return fb;
 error_out:
     featbuf_free(fb);
@@ -189,7 +199,8 @@ featbuf_free(featbuf_t *fb)
     /* cmd_ln_free_r(fb->config); */
 
     /* Non-refcounted things. */
-    sbevent_free(fb->evt);
+    sbevent_free(fb->release);
+    sbevent_free(fb->start);
     ckd_free(fb->cepbuf);
     feat_array_free(fb->featbuf);
     if (fb->mfcfh)
@@ -219,6 +230,17 @@ featbuf_next(featbuf_t *fb)
 }
 
 int
+featbuf_wait_utt(featbuf_t *fb, int timeout)
+{
+    int s = timeout == -1 ? -1 : 0;
+    int rc;
+
+    if ((rc = sbevent_wait(fb->start, s, timeout)) < 0)
+        return rc;
+    return 0;
+}
+
+int
 featbuf_wait(featbuf_t *fb, int fidx, int timeout, mfcc_t *out_frame)
 {
     int s = timeout == -1 ? -1 : 0;
@@ -243,7 +265,7 @@ featbuf_release(featbuf_t *fb, int sidx, int eidx)
         eidx = sync_array_next_idx(fb->sa);
     if ((rv = sync_array_release(fb->sa, sidx, eidx)) < 0)
         return rv;
-    sbevent_signal(fb->evt);
+    sbevent_signal(fb->release);
     return rv;
 }
 
@@ -259,7 +281,9 @@ featbuf_start_utt(featbuf_t *fb)
 
     fe_start_utt(fb->fe);
 
-    return -1;
+    /* Signal any consumers. */
+    sbevent_signal(fb->start);
+    return 0;
 }
 
 int
@@ -301,22 +325,13 @@ featbuf_end_utt(featbuf_t *fb, int timeout)
     last_idx = sync_array_finalize(fb->sa);
 
     /* Wait for everybody to be done. */
-    if (timeout == -1) {
-        tsec = 0;
-        tnsec = 50000; /* Arbitrary polling interval. */
-    }
-    else {
-        tsec = 0;
-        tnsec = timeout;
-    }
-    while (sync_array_available(fb->sa) < last_idx) {
-        if (nwait > 0)
+    if (sync_array_available(fb->sa) < last_idx)
+        if (sbevent_wait(fb->release, 0, timeout) < 0)
             return -1;
-        if (sbevent_wait(fb->evt, tsec, tnsec) < 0)
-            return -1;
-        if (timeout != -1)
-            ++nwait;
-    }
+
+    /* Reset both events. */
+    sbevent_reset(fb->release);
+    sbevent_reset(fb->start);
     
     return 0;
 }
@@ -329,11 +344,12 @@ featbuf_abort_utt(featbuf_t *fb)
     sync_array_force_quit(fb->sa);
     last_idx = sync_array_next_idx(fb->sa);
 
-    while (sync_array_available(fb->sa) < last_idx) {
-        /* Arbitrary polling interval. */
-        if (sbevent_wait(fb->evt, 0, 50000) < 0)
+    /* Reset both events. */
+    if (sync_array_available(fb->sa) < last_idx)
+        if (sbevent_wait(fb->release, -1, -1) < 0)
             return -1;
-    }
+    sbevent_reset(fb->release);
+    sbevent_reset(fb->start);
 
     return 0;
 }
