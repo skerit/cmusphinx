@@ -51,6 +51,7 @@
 
 /* Local headers. */
 #include "pocketsphinx_internal.h"
+#include "bptbl.h"
 #include "hmm.h"
 
 /**
@@ -103,32 +104,6 @@ typedef struct root_chan_s {
                                    unique right context */
 } root_chan_t;
 
-/**
- * Back pointer table (forward pass lattice; actually a tree)
- */
-typedef struct bptbl_s {
-    int16    frame;		/**< start or end frame */
-    uint8    valid;		/**< For absolute pruning */
-    uint8    refcnt;            /**< Reference count (number of successors) */
-    int32    wid;		/**< Word index */
-    int32    bp;		/**< Back Pointer */
-    int32    score;		/**< Score (best among all right contexts) */
-    int32    s_idx;		/**< Start of BScoreStack for various right contexts*/
-    int32    real_wid;		/**< wid of this or latest predecessor real word */
-    int32    prev_real_wid;	/**< real word predecessor of real_wid */
-    int16    last_phone;        /**< last phone of this word */
-    int16    last2_phone;       /**< next-to-last phone of this word */
-} bptbl_t;
-
-/**
- * Segmentation "iterator" for backpointer table results.
- */
-typedef struct bptbl_seg_s {
-    ps_seg_t base;  /**< Base structure. */
-    int32 *bpidx;   /**< Sequence of backpointer IDs. */
-    int16 n_bpidx;  /**< Number of backpointer IDs. */
-    int16 cur;      /**< Current position in bpidx. */
-} bptbl_seg_t;
 
 /*
  * Candidates words for entering their last phones.  Cleared and rebuilt in each

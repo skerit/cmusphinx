@@ -37,6 +37,7 @@ libpocketsphinx_la_SOURCES =			\
 noinst_HEADERS =				\
 	pocketsphinx_internal.h			\
 	acmod.h					\
+	bptbl.h					\
 	ngram_search.h				\
 	bin_mdef.h				\
 	blkarray_list.h				\
