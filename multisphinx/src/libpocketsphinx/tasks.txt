@@ -4,11 +4,6 @@
 * Give fwdflat its own bptbl - DONE
 * Figure out bscorestack problems - DONE (apparently)
 
-Places where retiring backpointers might trip us up
- * fake_lmstate - potentially has to crawl a long way back across lots
-   of silence/noise words.
- * last_ltrans - 
-
 * Split bptbl into active and retired
   - Retire bps to separate table
     * Partition the permute array into retired and active indices
@@ -18,6 +13,11 @@ Places where retiring backpointers might trip us up
   - Pull end frame finding into bptbl
   - Backtraces and lattice gen then refer to the retired portion
   - Test this on standalone fwdtree first
+
+Places where splitting/retiring backpointers might trip us up
+ * fake_lmstate - potentially has to crawl a long way back across lots
+   of silence/noise words, which might no longer be active.  it should
+   be possible to do this incrementally.
 
 * Rewrite lattice generation to be incremental on retired bps
   - No problem with doing this

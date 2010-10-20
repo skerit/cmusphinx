@@ -1212,6 +1212,7 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
          * assertion. */
         assert(fts->cand_sf[i].bp_ef >= fts->bptbl->active_fr);
         /* For the i-th unique end frame... */
+        /* BPTBL: Replace this with explicit iteration over bp_ef. */
         bp = bptbl_ef_idx(fts->bptbl, fts->cand_sf[i].bp_ef);
         bpend = bptbl_ef_idx(fts->bptbl, fts->cand_sf[i].bp_ef + 1);
         for (bpe = bptbl_ent(fts->bptbl, bp); bp < bpend; bp++, bpe++) {
@@ -1461,6 +1462,8 @@ bptable_maxwpf(fwdtree_search_t *fts, int frame_idx)
     bestscr = (int32) 0x80000000;
     bestbpe = NULL;
     n = 0;
+    /* BPTBL: Replace this with explicit iteration over the current
+     * frame (which frame_idx always is). */
     for (bp = bptbl_ef_idx(fts->bptbl, frame_idx);
          bp < bptbl_ef_idx(fts->bptbl, frame_idx + 1); bp++) {
         bpe = bptbl_ent(fts->bptbl, bp);
@@ -1480,11 +1483,14 @@ bptable_maxwpf(fwdtree_search_t *fts, int frame_idx)
     }
 
     /* Allow up to maxwpf best entries to survive; mark the remaining with valid = 0 */
+    /* BPTBL: replace this with a count created above (duh) */
     n = bptbl_ef_count(fts->bptbl, frame_idx) - n; /* No. of entries after limiting fillers */
     for (; n > fts->maxwpf; --n) {
         /* Find worst BPTable entry */
         worstscr = (int32) 0x7fffffff;
         worstbpe = NULL;
+        /* BPTBL: Replace this with explicit iteration over the
+         * current frame (which frame_idx always is). */
         for (bp = bptbl_ef_idx(fts->bptbl, frame_idx);
              bp < bptbl_ef_idx(fts->bptbl, frame_idx + 1); bp++) {
             bpe = bptbl_ent(fts->bptbl, bp);
@@ -1525,6 +1531,8 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
     pls = (phone_loop_search_t *)ps_search_lookahead(fts);
     /* Ugh, this is complicated.  Scan all word exits for this frame
      * (they have already been created by prune_word_chan()). */
+    /* BPTBL: Replace this with explicit iteration over the current
+     * frame (which frame_idx always is). */
     for (bp = bptbl_ef_idx(fts->bptbl, frame_idx);
          bp < bptbl_ef_idx(fts->bptbl, frame_idx + 1); bp++) {
         bpe = bptbl_ent(fts->bptbl, bp);
@@ -1602,6 +1610,8 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
         w = fts->single_phone_wid[i];
         fts->last_ltrans[w].dscr = (int32) 0x80000000;
     }
+    /* BPTBL: Replace this with explicit iteration over the current
+     * frame (which frame_idx always is). */
     for (bp = bptbl_ef_idx(fts->bptbl, frame_idx);
          bp < bptbl_ef_idx(fts->bptbl, frame_idx + 1); bp++) {
         bpe = bptbl_ent(fts->bptbl, bp);
@@ -1738,6 +1748,8 @@ fwdtree_search_step(ps_search_t *base, int frame_idx)
     fts->st.n_senone_active_utt += ps_search_acmod(fts)->n_senone_active;
 
     /* Mark backpointer table for current frame. */
+    /* FIXME: This always pushes the next active frame, and can't do
+     * anything else, so we need to get rid of frame_idx */
     bptbl_push_frame(fts->bptbl, fts->oldest_bp, frame_idx);
 
     /* If the best score is equal to or worse than WORST_SCORE,
@@ -1777,6 +1789,8 @@ fwdtree_search_finish(ps_search_t *base)
     /* This is the number of frames processed. */
     cf = ps_search_acmod(fts)->output_frame;
     /* Add a mark in the backpointer table for one past the final frame. */
+    /* FIXME: BPTBL: Replace this with a final GC operation that
+     * retires all backpointers from this bptbl. */
     bptbl_push_frame(fts->bptbl, fts->oldest_bp, cf);
 
     /* Deactivate channels lined up for the next frame */
@@ -1941,6 +1955,8 @@ fwdtree_search_find_exit(fwdtree_search_t *fts, int frame_idx, int32 *out_best_s
     if (fts->bptbl->n_frame == 0)
         return NO_BP;
 
+    /* FIXME: BPTBL: Replace this with a call into bptbl code to find
+     * the best exit from the bptbl. */
     if (frame_idx == -1 || frame_idx >= fts->bptbl->n_frame)
         frame_idx = fts->bptbl->n_frame - 1;
     end_bpidx = bptbl_ef_idx(fts->bptbl, frame_idx);
@@ -1984,6 +2000,7 @@ fwdtree_search_hyp(ps_search_t *base, int32 *out_score)
     if (bpidx == NO_BP)
         return NULL;
 
+    /* BPTBL: Replace all of this with arc buffers. */
     bp = bpidx;
     len = 0;
     while (bp != NO_BP) {
