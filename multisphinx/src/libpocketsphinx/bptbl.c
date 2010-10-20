@@ -69,7 +69,6 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
     bptbl->n_ent_alloc = n_alloc;
     bptbl->n_retired_alloc = n_alloc;
     bptbl->n_frame_alloc = n_frame_alloc;
-    /* FIXME: This will be used for bptbl->ent too */
     bptbl->n_permute_alloc = n_frame_alloc;
 
     bptbl->ent = ckd_calloc(bptbl->n_ent_alloc, sizeof(*bptbl->ent));
@@ -129,49 +128,37 @@ dump_bptable(bptbl_t *bptbl, int start, int end)
     E_INFO("Backpointer table (%d entries from %d to %d):\n",
            bptbl->n_ent, start, end);
     for (j = i = start; i < end; ++i) {
-        if (bptbl->ent[i].valid == FALSE)
+        bp_t *ent = bptbl_ent(bptbl, i);
+        if (ent == NULL || ent->valid == FALSE)
             continue;
         ++j;
         E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
-                    i, dict_wordstr(bptbl->d2p->dict, bptbl->ent[i].wid),
-                    bp_sf(bptbl, i),
-                    bptbl->ent[i].frame,
-                    bptbl->ent[i].score,
-                    bptbl->ent[i].bp);
+                    i, dict_wordstr(bptbl->d2p->dict, ent->wid),
+                    bptbl_sf(bptbl, i),
+                    ent->frame,
+                    ent->score,
+                    ent->bp);
     }
     E_INFO("%d valid entries\n", j);
-    if (bptbl_ef_idx(bptbl, start) < bptbl->active_fr)
-        start = bptbl_ef_idx(bptbl, bptbl->active_fr);
-    E_INFO("End frame index from %d to %d:\n",
-           bptbl->ent[start].frame, bptbl->ent[end-1].frame);
-    for (i = bptbl->ent[start].frame; i <= bptbl->ent[end-1].frame; ++i) {
-        E_INFO_NOFN("%d: %d\n", i, bptbl_ef_idx(bptbl, i));
-        assert(bptbl_ef_idx(bptbl, i) >= bptbl_ef_idx(bptbl, i-1));
-    }
 }
 
 /**
- * Mark coaccessible entries in the backpointer table.
+ * Mark coaccessible active entries in the backpointer table.
  *
  * @param bptbl Backpointer table
- * @param sf First frame (as per ef_idx) to mark entries in
  * @param ef Frame after last frame (as per ef_idx) to mark entries in
  * @param cf Current frame of search
  */
 static void
-bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
+bptbl_mark(bptbl_t *bptbl, int ef, int cf)
 {
     int i, j, n_active_fr, last_gc_fr;
 
     assert(cf >= ef);
-    assert(ef > sf);
-    assert(sf >= bptbl->active_fr);
+    assert(ef > bptbl->active_fr);
 
-    /* Invalidate all backpointer entries between sf and ef. */
-    /* FIXME: might be good to keep track of ones that have already been invalidated by maxwpf? */
-    E_DEBUG(2,("Garbage collecting from %d to %d (%d to %d):\n",
-               bptbl_ef_idx(bptbl, sf), bptbl_ef_idx(bptbl, ef), sf, ef));
-    for (i = bptbl_ef_idx(bptbl, sf);
+    /* Invalidate all active backpointer entries up to ef. */
+    for (i = bptbl_ef_idx(bptbl, bptbl->active_fr);
          i < bptbl_ef_idx(bptbl, ef); ++i) {
         bptbl->ent[i].valid = FALSE;
     }
@@ -182,11 +169,15 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
     /* Mark everything immediately reachable from (ef..cf) */
     bitvec_clear_all(bptbl->valid_fr, cf - bptbl->active_fr);
     n_active_fr = 0;
+    /* NOTE: This for statement can be sped up at the cost of being
+     * less obvious. */
     for (i = bptbl_ef_idx(bptbl, ef);
          i < bptbl_ef_idx(bptbl, cf); ++i) {
-        int32 bp = bptbl->ent[i].bp;
-        if (bp != NO_BP) {
-            int frame = bptbl->ent[bp].frame;
+        bp_t *ent, *prev;
+        ent = bptbl_ent(bptbl, i);
+        prev = bptbl_prev(bptbl, ent);
+        if (prev != NULL) {
+            int frame = prev->frame;
             if (frame >= bptbl->active_fr
                 && bitvec_is_clear(bptbl->valid_fr, frame - bptbl->active_fr)) {
                 bitvec_set(bptbl->valid_fr, frame - bptbl->active_fr);
@@ -203,7 +194,7 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
     while (n_active_fr > 0) {
         int next_gc_fr = 0;
         n_active_fr = 0;
-        for (i = sf; i <= last_gc_fr; ++i) {
+        for (i = bptbl->active_fr; i <= last_gc_fr; ++i) {
             /* NOTE: We asserted i >= bptbl->active_fr */
             if (bitvec_is_set(bptbl->valid_fr, i - bptbl->active_fr)) {
                 bitvec_clear(bptbl->valid_fr, i - bptbl->active_fr);
@@ -211,10 +202,11 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
                  * lattice generation algorithm) */
                 for (j = bptbl_ef_idx(bptbl, i);
                      j < bptbl_ef_idx(bptbl, i + 1); ++j) {
-                    int32 bp = bptbl->ent[j].bp;
-                    bptbl->ent[j].valid = TRUE;
-                    if (bp != NO_BP) {
-                        int frame = bptbl->ent[bp].frame;
+                    bp_t *ent = bptbl_ent(bptbl, j);
+                    bp_t *prev = bptbl_prev(bptbl, ent)
+                    ent->valid = TRUE;
+                    if (prev != NULL) {
+                        int frame = prev->frame;
                         if (frame >= bptbl->active_fr
                             && bitvec_is_clear(bptbl->valid_fr,
                                                frame - bptbl->active_fr)) {
@@ -232,9 +224,10 @@ bptbl_mark(bptbl_t *bptbl, int sf, int ef, int cf)
         last_gc_fr = next_gc_fr;
     }
     E_DEBUG(2,("Removed"));
-    for (i = bptbl_ef_idx(bptbl, sf);
+    for (i = bptbl_ef_idx(bptbl, bptbl->active_fr);
          i < bptbl_ef_idx(bptbl, ef); ++i) {
-        if (bptbl->ent[i].valid == FALSE)
+        bp_t *ent = bptbl_ent(bptbl, i);
+        if (ent && ent->valid == FALSE)
             E_DEBUGCONT(2,(" %d", i));
     }
     E_DEBUGCONT(2,("\n"));
@@ -251,16 +244,16 @@ static int
 bptbl_compact(bptbl_t *bptbl, int eidx)
 {
     int src, dest, ef;
-    int sidx = bptbl->first_invert_bp;
     /* bss index for active frames (we don't want to track this in bptbl) */
     int active_dest_s_idx;
 
-    ef = bptbl->ent[sidx].frame;
-    E_DEBUG(2,("compacting from %d to %d (%d to %d)\n",
-               sidx, eidx, ef, bptbl->ent[eidx].frame));
-    for (dest = src = sidx; src < eidx; ++src) {
+    /* First available backpointer index in retired */
+    dest = bptbl->first_invert_bp;
+    ef = bptbl->active_fr;
+    /* Note we use the "raw" backpointer indices here. */
+    for (src = 0; src < eidx - bptbl->ef_idx[0]; ++src) {
         /* Update all ef_idx including missing frames (there are many) */
-        while (ef >= bptbl->active_fr && ef <= bptbl->ent[src].frame) {
+        while (ef <= bptbl->ent[src].frame) {
             assert(ef - bptbl->active_fr < bptbl->n_frame_alloc);
             bptbl->ef_idx[ef - bptbl->active_fr] = dest;
             ++ef;
@@ -277,34 +270,23 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
                 memmove(bptbl->bscore_stack + bptbl->dest_s_idx,
                         bptbl->bscore_stack + bptbl->ent[src].s_idx,
                         rcsize * sizeof(*bptbl->bscore_stack));
-                if (bptbl->dest_s_idx == 8568) {
-                    int k;
-                    E_INFO_NOFN("bscore:");
-                    for (k = 0; k < rcsize; ++k)
-                        E_INFOCONT(" %d", bptbl->bscore_stack[bptbl->dest_s_idx + k]);
-                    E_INFOCONT("\n");
-                }
             }
-            bptbl->ent[dest].s_idx = bptbl->dest_s_idx;
-            if (dest != src) {
-                bptbl->ent[dest] = bptbl->ent[src];
-                bptbl->ent[src].valid = FALSE;
-            }
+            bptbl->retired[dest] = bptbl->ent[src];
+            bptbl->retired[dest].s_idx = bptbl->dest_s_idx;
 
-            assert(src - bptbl->first_invert_bp < bptbl->n_permute_alloc);
-            bptbl->permute[src - bptbl->first_invert_bp] = dest;
+            assert(src - bptbl->ef_idx[0] < bptbl->n_permute_alloc);
+            bptbl->permute[src - bptbl->ef_idx[0]] = dest;
             bptbl->dest_s_idx += rcsize;
             ++dest;
         }
         else {
             E_DEBUG(4,("permute %d => -1\n", src));
-            assert(src - bptbl->first_invert_bp < bptbl->n_permute_alloc);
-            bptbl->permute[src - bptbl->first_invert_bp] = -1;
+            assert(src - bptbl->ef_idx[0] < bptbl->n_permute_alloc);
+            bptbl->permute[src - bptbl->ef_idx[0]] = -1;
         }
     }
     /* We can keep compacting the bscore_stack since it is indirected. */
     if (src < bptbl->n_ent
-        && dest != src
         && bptbl->ent[src].s_idx != bptbl->dest_s_idx) {
         /* Leave dest_s_idx where it is for future compaction. */
         active_dest_s_idx = bptbl->dest_s_idx;
@@ -323,6 +305,7 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
         }
         bptbl->bss_head = active_dest_s_idx;
     }
+    /* FIXME: This should work but I think it does not */
     if (eidx == bptbl->n_ent)
         bptbl->n_ent = dest;
     E_INFO("Retired %d bps (%d to %d)\n",
@@ -347,8 +330,12 @@ bptbl_invert(bptbl_t *bptbl, int eidx, int last_invert_bp)
 
     E_DEBUG(2,("inverting %d:%d from %d to %d\n", first_invert_bp, last_invert_bp,
                first_invert_bp, eidx));
+    assert(last_invert_bp <= eidx);
+    /* FIXME: Actually, have to do this in two parts, from
+     * first_invert_bp to last_invert_bp (retired) and from ef_idx[0]
+     * to eidx (active). */
     for (i = first_invert_bp; i < eidx; ++i) {
-        if (bptbl->ent[i].bp >= first_invert_bp && bptbl->ent[i].bp < last_invert_bp) {
+        if (bptbl->reired[i].bp >= first_invert_bp && bptbl->ent[i].bp < last_invert_bp) {
             assert(bptbl->ent[i].bp - bptbl->first_invert_bp < bptbl->n_permute_alloc);
             assert(bptbl->ent[i].bp - bptbl->first_invert_bp >= 0);
             if (bptbl->ent[i].bp != bptbl->permute[bptbl->ent[i].bp - first_invert_bp])
@@ -356,26 +343,34 @@ bptbl_invert(bptbl_t *bptbl, int eidx, int last_invert_bp)
                            bptbl->ent[i].bp, bptbl->permute[bptbl->ent[i].bp
                                                             - first_invert_bp], i));
             bptbl->ent[i].bp = bptbl->permute[bptbl->ent[i].bp - first_invert_bp];
-            assert(bp_sf(bptbl, i) < bptbl->ent[i].frame);
+            assert(bptbl_sf(bptbl, i) < bptbl->ent[i].frame);
         }
     }
 }
 
 /**
- * Update the active frame pointer.
+ * Update the active frame pointer and backpointer array.
  */
 static void
-bptbl_update_active_fr(bptbl_t *bptbl, int active_fr)
+bptbl_update_active(bptbl_t *bptbl, int active_fr)
 {
-    int delta = active_fr - bptbl->active_fr;
-    if (delta == 0)
+    int frame_delta = active_fr - bptbl->active_fr;
+    int bp_delta;
+    /* This means nothing happened. */
+    if (frame_delta == 0)
         return;
-    assert(delta > 0);
+    assert(frame_delta > 0);
+    bp_delta = bptbl->ef_idx[frame_delta] - bptbl->ef_idx[0];
+    E_DEBUG(3,("moving %d ent from %d (%d - %d)\n",
+               bptbl->n_ent - bptbl->ef_idx[frame_delta],
+               bp_delta, bptbl->ef_idx[frame_delta], bptbl->ef_idx[0]));
+    memmove(bptbl->ent, bptbl->ent + bp_delta,
+            (bptbl->n_ent - bptbl->ef_idx[frame_delta]) * sizeof(*bptbl->ent));
     E_DEBUG(3,("moving %d ef_idx from %d (%d - %d)\n",
                bptbl->n_frame - active_fr,
-               delta, active_fr, bptbl->active_fr));
-    assert(delta + bptbl->n_frame - active_fr < bptbl->n_frame_alloc);
-    memmove(bptbl->ef_idx, bptbl->ef_idx + delta,
+               frame_delta, active_fr, bptbl->active_fr));
+    assert(frame_delta + bptbl->n_frame - active_fr < bptbl->n_frame_alloc);
+    memmove(bptbl->ef_idx, bptbl->ef_idx + frame_delta,
             (bptbl->n_frame - active_fr) * sizeof(*bptbl->ef_idx));
     bptbl->active_fr = active_fr;
 }
@@ -393,40 +388,50 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
      * backpointers which are not reachable from those exiting in
      * active_fr will never be reachable. */
     prev_active_fr = bptbl->active_fr;
-    active_fr = (oldest_bp == NO_BP) ? 0 : bptbl->ent[oldest_bp].frame;
+    if (oldest_bp == NO_BP)
+        active_fr = 0;
+    else
+        active_fr = bptbl_ent(bptbl, oldest_bp)->frame;
     assert(active_fr >= prev_active_fr);
+    /* Need at least 2 frames to GC. */
     if (active_fr <= prev_active_fr + 1)
         return;
-    /* If there is nothing to GC then finish up */
-    if (bptbl_ef_idx(bptbl, prev_active_fr) == bptbl_ef_idx(bptbl, active_fr)) {
-        bptbl_update_active_fr(bptbl, active_fr);
+    /* If there is nothing to GC then finish up. */
+    if (bptbl_ef_idx(bptbl, prev_active_fr)
+        == bptbl_ef_idx(bptbl, active_fr)) {
+        bptbl_update_active(bptbl, active_fr);
         return;
     }
-    if (bptbl_ef_idx(bptbl, active_fr) - bptbl->first_invert_bp
+    /* Expand the permutation table if necessary. */
+    if ((bptbl_ef_idx(bptbl, active_fr) - bptbl->ef_idx[0])
         > bptbl->n_permute_alloc) {
-        while (bptbl_ef_idx(bptbl, active_fr) - bptbl->first_invert_bp
+        while (bptbl_ef_idx(bptbl, active_fr) - bptbl->ef_idx[0]
                > bptbl->n_permute_alloc)
             bptbl->n_permute_alloc *= 2;
         bptbl->permute = ckd_realloc(bptbl->permute,
                                      bptbl->n_permute_alloc
                                      * sizeof(*bptbl->permute));
-        E_INFO("Resized permutation table to %d entries (active ef = %d first_invert_bp = %d)\n",
-               bptbl->n_permute_alloc, bptbl_ef_idx(bptbl, active_fr), bptbl->first_invert_bp);
+        E_INFO("Resized permutation table to %d entries (active ef = %d ef_idx[0] = %d)\n",
+               bptbl->n_permute_alloc, bptbl_ef_idx(bptbl, active_fr), bptbl->ef_idx[0]);
     }
-    /* Mark, compact, snap pointers, sort, snap 'em again. */
-    bptbl_mark(bptbl, prev_active_fr, active_fr, frame_idx);
+    /* Mark, compact, snap pointers. */
+    bptbl_mark(bptbl, active_fr, frame_idx);
     last_compacted_bp = bptbl_compact(bptbl, bptbl_ef_idx(bptbl, active_fr));
     bptbl_invert(bptbl, bptbl->n_ent, bptbl_ef_idx(bptbl, active_fr));
 
     bptbl->first_invert_bp = last_compacted_bp;
-    bptbl_update_active_fr(bptbl, active_fr);
+    bptbl_update_active(bptbl, active_fr);
 }
 
 int
-bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
+bptbl_push_frame(bptbl_t *bptbl, int oldest_bp)
 {
+    int frame_idx = bptbl->n_frame;
+
     E_DEBUG(2,("pushing frame %d, oldest bp %d in frame %d\n",
-               frame_idx, oldest_bp, oldest_bp == NO_BP ? -1 : bptbl->ent[oldest_bp].frame));
+               frame_idx, oldest_bp,
+               oldest_bp == NO_BP
+               ? -1 : bptbl_ent(bptbl, oldest_bp)->frame));
     if (frame_idx - bptbl->active_fr >= bptbl->n_frame_alloc) {
         bptbl->n_frame_alloc *= 2;
         E_INFO("Reallocating frame-based bptr arrays to %d\n", bptbl->n_frame_alloc);
@@ -437,6 +442,7 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     bptbl->ef_idx[frame_idx - bptbl->active_fr] = bptbl->n_ent;
     bptbl->n_frame = frame_idx + 1;
     bptbl_gc(bptbl, oldest_bp, frame_idx);
+#if 0
     if (bptbl->first_invert_bp > 0 && bptbl->ef_idx[0] > bptbl->first_invert_bp) {
         E_INFO("%d active bps (%d to %d)\n",
                bptbl->n_ent - bptbl->ef_idx[0],
@@ -446,7 +452,8 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
         assert(bptbl->ent[bptbl->ef_idx[0] - 1].valid == FALSE);
         assert(bptbl->ent[bptbl->ef_idx[0]].valid == TRUE);
     }
-    return bptbl->n_ent;
+#endif
+    return frame_idx;
 }
 
 int32
@@ -459,6 +466,54 @@ bptbl_ef_idx(bptbl_t *bptbl, int frame_idx)
     else {
         return bptbl->ef_idx[frame_idx - bptbl->active_fr];
     }
+}
+
+bp_t *
+bptbl_ent(bptbl_t *bptbl, bpidx_t bpidx)
+{
+    if (bpidx == NO_BP)
+        return NULL;
+    if (bpidx < bptbl->ef_idx[0])
+        return bptbl->retired + bpidx;
+    else
+        return bptbl->ent + (bpidx - bptbl->ef_idx[0])
+}
+
+bpidx_t
+bptbl_idx(bptbl_t *bptbl, bp_t *bpe)
+{
+    if (bpe->frame < bptbl->active_fr)
+        return bpe - bptbl->retired;
+    else
+        return bpe - bptbl->ent;
+}
+
+bp_t *
+bptbl_prev(bptbl_t *bptbl, bp_t *ent)
+{
+    return bptbl_ent(bptbl, ent->bp);
+}
+
+int
+bptbl_sf(bptbl_t *bptbl, bpidx_t bpidx)
+{
+    bp_t *ent = bptbl_ent(bptbl, bpidx);
+    bp_t *prev;
+
+    if (ent == NULL)
+        return -1;
+    prev = bptbl_prev(bptbl, ent);
+    if (prev == NULL)
+        return 0;
+    else
+        return prev->frame + 1;
+}
+
+int
+bptbl_ef_count(bptbl_t *bptbl, int frame_idx)
+{
+    return bptbl_ef_idx(bptbl, frame_idx + 1)
+        - bptbl_ef_idx(bptbl, frame_idx);
 }
 
 static int
@@ -479,8 +534,7 @@ bptbl_rcsize(bptbl_t *bptbl, bp_t *be)
 }
 
 bp_t *
-bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx, int32 path,
-            int32 score, int rc)
+bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
 {
     int32 i, rcsize, *bss;
     bp_t *be;
@@ -510,7 +564,7 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx, int32 path,
 
     be = bptbl_ent(bptbl, bptbl->n_ent);
     be->wid = w;
-    be->frame = frame_idx;
+    be->frame = bptbl->n_frame - 1;
     be->bp = path;
     be->score = score;
     be->s_idx = bptbl->bss_head;
@@ -526,8 +580,8 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx, int32 path,
         *bss = WORST_SCORE;
     bptbl->bscore_stack[bptbl->bss_head + rc] = score;
     E_DEBUG(3,("Entered bp %d sf %d ef %d active_fr %d\n", bptbl->n_ent,
-               bp_sf(bptbl, bptbl->n_ent), frame_idx, bptbl->active_fr));
-    assert(bp_sf(bptbl, bptbl->n_ent) >= bptbl->active_fr);
+               bptbl_sf(bptbl, bptbl->n_ent), bptbl->n_frame - 1, bptbl->active_fr));
+    assert(bptbl_sf(bptbl, bptbl->n_ent) >= bptbl->active_fr);
 
     bptbl->n_ent++;
     bptbl->bss_head += rcsize;
@@ -542,7 +596,7 @@ bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp)
 
     assert(bp != NO_BP);
     ent = bptbl_ent(bptbl, bp);
-    prev = bptbl_ent(bptbl, ent->bp);
+    prev = bptbl_prev(bptbl, ent);
     /* Propagate lm state for fillers, rotate it for words. */
     if (dict_filler_word(bptbl->d2p->dict, ent->wid)) {
         if (prev != NULL) {
