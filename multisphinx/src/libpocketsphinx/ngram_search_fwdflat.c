@@ -622,7 +622,6 @@ fwdflat_word_transition(ngram_search_t *ngs, int frame_idx)
 {
     int32 cf, nf, b, thresh, pip, i, w, newscore;
     int32 best_silrc_score = 0, best_silrc_bp = 0;      /* FIXME: good defaults? */
-    bp_t *bp;
     int32 *rcss;
     root_chan_t *rhmm;
     int32 *awl;
@@ -642,24 +641,26 @@ fwdflat_word_transition(ngram_search_t *ngs, int frame_idx)
     get_expand_wordlist(ngs, cf, ngs->max_sf_win);
 
     /* Scan words exited in current frame */
-    for (b = ngs->bptbl->ef_idx[cf]; b < ngs->bptbl->n_ent; b++) {
+    for (b = bptbl_ef_idx(ngs->bptbl, cf);
+         b < bptbl_ef_idx(ngs->bptbl, cf + 1); b++) {
         xwdssid_t *rssid;
         int32 silscore;
+        bp_t *ent;
 
-        bp = ngs->bptbl->ent + b;
-        ngs->bptbl->word_idx[bp->wid] = NO_BP;
+        ent = bptbl_ent(ngs->bptbl, b);
+        ngs->bptbl->word_idx[ent->wid] = NO_BP;
 
-        if (bp->wid == ps_search_finish_wid(ngs))
+        if (ent->wid == ps_search_finish_wid(ngs))
             continue;
 
         /* DICT2PID location */
         /* Get the mapping from right context phone ID to index in the
          * right context table and the bptbl->bscore_stack. */
-        rcss = ngs->bptbl->bscore_stack + bp->s_idx;
-        if (bp->last2_phone == -1)
+        rcss = ngs->bptbl->bscore_stack + ent->s_idx;
+        if (ent->last2_phone == -1)
             rssid = NULL;
         else
-            rssid = dict2pid_rssid(d2p, bp->last_phone, bp->last2_phone);
+            rssid = dict2pid_rssid(d2p, ent->last_phone, ent->last2_phone);
 
         /* Transition to all successor words. */
         for (i = 0; ngs->expand_word_list[i] >= 0; i++) {
@@ -679,8 +680,8 @@ fwdflat_word_transition(ngram_search_t *ngs, int frame_idx)
             newscore += lwf
                 * ngram_tg_score(ngs->lmset,
                                  dict_basewid(dict, w),
-                                 bp->real_wid,
-                                 bp->prev_real_wid, &n_used);
+                                 ent->real_wid,
+                                 ent->prev_real_wid, &n_used);
             newscore += pip;
 
             /* Enter the next word */
@@ -693,10 +694,10 @@ fwdflat_word_transition(ngram_search_t *ngs, int frame_idx)
                     /* Look up the ssid to use when entering this mpx triphone. */
                     hmm_mpx_ssid(&rhmm->hmm, 0) =
                         dict2pid_ldiph_lc(d2p, rhmm->ciphone, rhmm->ci2phone,
-                                          dict_last_phone(dict, bp->wid));
+                                          dict_last_phone(dict, ent->wid));
                     assert(IS_S3SSID(hmm_mpx_ssid(&rhmm->hmm, 0)));
                     E_DEBUG(6,("ssid %d(%d,%d) = %d\n",
-                               rhmm->ciphone, dict_last_phone(dict, bp->wid), rhmm->ci2phone,
+                               rhmm->ciphone, dict_last_phone(dict, ent->wid), rhmm->ci2phone,
                                hmm_mpx_ssid(&rhmm->hmm, 0)));
                     bitvec_set(ngs->word_active, w);
                 }
@@ -835,8 +836,6 @@ ngram_fwdflat_search(ngram_search_t *ngs, int frame_idx)
             j++;
         }
     }
-    if (!ngs->fwdtree)
-        ++ngs->bptbl->n_frame;
     ngs->n_active_word[nf & 0x1] = j;
 
     /* Return the number of frames processed. */

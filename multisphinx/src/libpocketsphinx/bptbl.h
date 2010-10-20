@@ -82,7 +82,11 @@ typedef struct bptbl_s {
     bp_t *ent;           /**< Backpointer entries. */
     int32 n_ent;         /**< First free BPTable entry. */
     int32 n_alloc;       /**< Number of entries allocated for entry-based arrays (ent, permute) */
-    int32 active_sf;     /**< First frame containing active backpointers. */
+    int32 active_sf;     /**< First frame containing active
+                              backpointers.  Also the first frame
+                              which is indexed by end frame.  ef_idx
+                              indices should be added to this to get
+                              actual frame indices. */
     int32 *permute;      /**< Current permutation of entries (used for gc/sorting). */
     int32 first_invert_bp; /**< First reordered backpointer (used in gc) */
 
@@ -113,11 +117,25 @@ typedef struct bptbl_seg_s {
 } bptbl_seg_t;
 
 
+/**
+ * Create a new bptbl.
+ */
 bptbl_t *bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc);
 
+/**
+ * Release a bptbl.
+ */
 void bptbl_free(bptbl_t *bpt);
 
+/**
+ * Dump contents of a bptbl for debugging.
+ */
 void dump_bptable(bptbl_t *bptbl, int start, int end);
+
+/**
+ * Clear the backpointer table.
+ */
+void bptbl_reset(bptbl_t *bptbl);
 
 /**
  * Record the current frame's index in the backpointer table.
@@ -133,9 +151,25 @@ bp_t *bptbl_enter(bptbl_t *bptbl, int32 w, int frame_idx,
                   int32 path, int32 score, int rc);
 
 /**
- * Clear the backpointer table.
+ * Obtain the index of the first word exit for a given frame.
  */
-void bptbl_reset(bptbl_t *bptbl);
+int32 bptbl_ef_idx(bptbl_t *bptbl, int frame_idx);
+
+/**
+ * Obtain a pointer to the backpointer with a given index.
+ */
+#define bptbl_ent(bpt, bp) (((bp) == NO_BP) ? NULL : (bpt)->ent + bp)
+
+/**
+ * Get the index for a given backpointer.
+ */
+#define bptbl_idx(bpt, bpe) (((bpe) == NULL) ? NO_BP : ((bpe) - (bpt)->ent))
+
+/**
+ * Get the number of word exits in a given frame.
+ */
+#define bptbl_ef_count(bpt, ef) (bptbl_ef_idx((bpt), (ef) + 1)  \
+                                 - bptbl_ef_idx((bpt), (ef)))
 
 /**
  * Cache trigram predecessors for a backpointer table entry.

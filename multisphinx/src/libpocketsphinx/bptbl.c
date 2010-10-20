@@ -340,6 +340,7 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     E_INFO("pushing frame %d, oldest bp %d in frame %d\n",
            frame_idx, oldest_bp, oldest_bp == NO_BP ? -1 : bptbl->ent[oldest_bp].frame);
     bptbl->ef_idx[frame_idx] = bptbl->n_ent;
+    bptbl->n_frame = frame_idx + 1;
     bptbl_gc(bptbl, oldest_bp, frame_idx);
     if (frame_idx >= bptbl->n_frame_alloc) {
         bptbl->n_frame_alloc *= 2;
@@ -353,9 +354,20 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
         bptbl->frm_wordlist = ckd_realloc(bptbl->frm_wordlist,
                                           bptbl->n_frame_alloc
                                           * sizeof(*bptbl->frm_wordlist));
-        ++bptbl->ef_idx; /* Make bptableidx[-1] valid */
+        ++bptbl->ef_idx; /* Make ef_idx[-1] valid (may no longer be necessary) */
     }
     return bptbl->n_ent;
+}
+
+int32
+bptbl_ef_idx(bptbl_t *bptbl, int frame_idx)
+{
+    if (frame_idx == -1)
+        return 0;
+    else if (frame_idx >= bptbl->n_frame)
+        return bptbl->n_ent;
+    else
+        return bptbl->ef_idx[frame_idx];
 }
 
 bp_t *

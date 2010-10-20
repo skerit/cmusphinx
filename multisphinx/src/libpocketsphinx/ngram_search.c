@@ -345,13 +345,13 @@ ngram_search_find_exit(ngram_search_t *ngs, int frame_idx, int32 *out_best_score
 
     if (frame_idx == -1 || frame_idx >= ngs->bptbl->n_frame)
         frame_idx = ngs->bptbl->n_frame - 1;
-    end_bpidx = ngs->bptbl->ef_idx[frame_idx];
+    end_bpidx = bptbl_ef_idx(ngs->bptbl, frame_idx);
 
     best_score = WORST_SCORE;
     best_exit = NO_BP;
 
     /* Scan back to find a frame with some backpointers in it. */
-    while (frame_idx >= 0 && ngs->bptbl->ef_idx[frame_idx] == end_bpidx)
+    while (frame_idx >= 0 && bptbl_ef_idx(ngs->bptbl, frame_idx) == end_bpidx)
         --frame_idx;
     /* This is NOT an error, it just means there is no hypothesis yet. */
     if (frame_idx < 0)
@@ -359,13 +359,14 @@ ngram_search_find_exit(ngram_search_t *ngs, int frame_idx, int32 *out_best_score
 
     /* Now find the entry for </s> OR the best scoring entry. */
     assert(end_bpidx < ngs->bptbl->n_alloc);
-    for (bp = ngs->bptbl->ef_idx[frame_idx]; bp < end_bpidx; ++bp) {
-        if (ngs->bptbl->ent[bp].wid == ps_search_finish_wid(ngs)
-            || ngs->bptbl->ent[bp].score BETTER_THAN best_score) {
-            best_score = ngs->bptbl->ent[bp].score;
+    for (bp = bptbl_ef_idx(ngs->bptbl, frame_idx); bp < end_bpidx; ++bp) {
+        bp_t *ent = bptbl_ent(ngs->bptbl, bp);
+        if (ent->wid == ps_search_finish_wid(ngs)
+            || ent->score BETTER_THAN best_score) {
+            best_score = ent->score;
             best_exit = bp;
         }
-        if (ngs->bptbl->ent[bp].wid == ps_search_finish_wid(ngs))
+        if (ent->wid == ps_search_finish_wid(ngs))
             break;
     }
 
@@ -924,7 +925,8 @@ static ps_latnode_t *
 find_end_node(ngram_search_t *ngs, ps_lattice_t *dag, float32 lwf)
 {
     ps_latnode_t *node;
-    int32 ef, bestbp, bp, bestscore;
+    int32 ef, bp, bestscore;
+    bp_t *bestent;
 
     /* Find final node </s>.last_frame; nothing can follow this node */
     for (node = dag->nodes; node; node = node->next) {
@@ -939,9 +941,7 @@ find_end_node(ngram_search_t *ngs, ps_lattice_t *dag, float32 lwf)
     /* It is quite likely that no </s> exited in the last frame.  So,
      * find the node corresponding to the best exit. */
     /* Find the last frame containing a word exit. */
-    for (ef = dag->n_frames - 1;
-         ef >= 0 && ngs->bptbl->ef_idx[ef] == ngs->bptbl->n_ent;
-         --ef);
+    for (ef = dag->n_frames - 1; ef >= 0 && bptbl_ef_count(ngs->bptbl, ef) == 0; --ef);
     if (ef < 0) {
         E_ERROR("Empty backpointer table: can not build DAG.\n");
         return NULL;
@@ -949,35 +949,38 @@ find_end_node(ngram_search_t *ngs, ps_lattice_t *dag, float32 lwf)
 
     /* Find best word exit in that frame. */
     bestscore = WORST_SCORE;
-    bestbp = NO_BP;
-    for (bp = ngs->bptbl->ef_idx[ef]; bp < ngs->bptbl->ef_idx[ef + 1]; ++bp) {
+    bestent = NULL;
+    for (bp = bptbl_ef_idx(ngs->bptbl, ef);
+         bp < bptbl_ef_idx(ngs->bptbl, ef + 1); ++bp) {
         int32 n_used, l_scr, wid, prev_wid;
+        bp_t *ent = bptbl_ent(ngs->bptbl, bp);
         
-        wid = ngs->bptbl->ent[bp].real_wid;
-        prev_wid = ngs->bptbl->ent[bp].prev_real_wid;
-        l_scr = ngram_tg_score(ngs->lmset, ps_search_finish_wid(ngs), wid, prev_wid, &n_used);
+        wid = ent->real_wid;
+        prev_wid = ent->prev_real_wid;
+        l_scr = ngram_tg_score(ngs->lmset, ps_search_finish_wid(ngs),
+                               wid, prev_wid, &n_used);
         l_scr = l_scr * lwf;
-        if (ngs->bptbl->ent[bp].score + l_scr BETTER_THAN bestscore) {
-            bestscore = ngs->bptbl->ent[bp].score + l_scr;
-            bestbp = bp;
+        if (ent->score + l_scr BETTER_THAN bestscore) {
+            bestscore = ent->score + l_scr;
+            bestent = ent;
         }
     }
-    if (bestbp == NO_BP) {
+    if (bestent == NULL) {
         E_ERROR("No word exits found in last frame (%d), assuming no recognition\n", ef);
         return NULL;
     }
     E_WARN("</s> not found in last frame, using %s instead\n",
-           dict_basestr(ps_search_dict(ngs), ngs->bptbl->ent[bestbp].wid));
+           dict_basestr(ps_search_dict(ngs), bestent->wid));
 
     /* Now find the node that corresponds to it. */
     for (node = dag->nodes; node; node = node->next) {
-        if (node->lef == bestbp)
+        if (node->lef == bptbl_idx(ngs->bptbl, bestent))
             return node;
     }
 
     /* FIXME: This seems to happen a lot! */
     E_ERROR("Failed to find DAG node corresponding to %s\n",
-           dict_basestr(ps_search_dict(ngs), ngs->bptbl->ent[bestbp].wid));
+           dict_basestr(ps_search_dict(ngs), bestent->wid));
     return NULL;
 }
 

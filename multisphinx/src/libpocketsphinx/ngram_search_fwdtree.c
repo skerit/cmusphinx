@@ -486,7 +486,6 @@ ngram_fwdtree_start(ngram_search_t *ngs)
     /* Reset other stuff. */
     for (i = 0; i < n_words; i++)
         ngs->last_ltrans[i].sf = -1;
-    ngs->bptbl->n_frame = 0;
 
     /* Clear the hypothesis string. */
     ckd_free(base->hyp_str);
@@ -899,7 +898,7 @@ prune_nonroot_chan(ngram_search_t *ngs, int frame_idx)
 static void
 last_phone_transition(ngram_search_t *ngs, int frame_idx)
 {
-    int32 i, j, k, nf, bp, bplast, w;
+    int32 i, j, k, nf, bp, w;
     lastphn_cand_t *candp;
     int32 *nawl;
     int32 thresh;
@@ -981,16 +980,17 @@ last_phone_transition(ngram_search_t *ngs, int frame_idx)
 
     /* Compute best LM score and bp for new cands entered in the sorted lists above */
     for (i = 0; i < n_cand_sf; i++) {
+        int32 bpend;
         /* This is the last frame that contains end-sorted
          * backpointers.  Luckily by the definition of window_sf it's
          * not possible to have any candidates that fail this
          * assertion. */
         assert(ngs->cand_sf[i].bp_ef >= ngs->bptbl->active_sf);
         /* For the i-th unique end frame... */
-        bp = ngs->bptbl->ef_idx[ngs->cand_sf[i].bp_ef];
-        bplast = ngs->bptbl->ef_idx[ngs->cand_sf[i].bp_ef + 1] - 1;
+        bp = bptbl_ef_idx(ngs->bptbl, ngs->cand_sf[i].bp_ef);
+        bpend = bptbl_ef_idx(ngs->bptbl, ngs->cand_sf[i].bp_ef + 1);
 
-        for (bpe = &(ngs->bptbl->ent[bp]); bp <= bplast; bp++, bpe++) {
+        for (bpe = bptbl_ent(ngs->bptbl, bp); bp < bpend; bp++, bpe++) {
             if (!bpe->valid)
                 continue;
             /* For each candidate at the start frame find bp->cand transition-score */
@@ -1237,8 +1237,9 @@ bptable_maxwpf(ngram_search_t *ngs, int frame_idx)
     bestscr = (int32) 0x80000000;
     bestbpe = NULL;
     n = 0;
-    for (bp = ngs->bptbl->ef_idx[frame_idx]; bp < ngs->bptbl->n_ent; bp++) {
-        bpe = &(ngs->bptbl->ent[bp]);
+    for (bp = bptbl_ef_idx(ngs->bptbl, frame_idx);
+         bp < bptbl_ef_idx(ngs->bptbl, frame_idx + 1); bp++) {
+        bpe = bptbl_ent(ngs->bptbl, bp);
         if (dict_filler_word(ps_search_dict(ngs), bpe->wid)) {
             if (bpe->score BETTER_THAN bestscr) {
                 bestscr = bpe->score;
@@ -1255,14 +1256,14 @@ bptable_maxwpf(ngram_search_t *ngs, int frame_idx)
     }
 
     /* Allow up to maxwpf best entries to survive; mark the remaining with valid = 0 */
-    n = (ngs->bptbl->n_ent
-         - ngs->bptbl->ef_idx[frame_idx]) - n;  /* No. of entries after limiting fillers */
+    n = bptbl_ef_count(ngs->bptbl, frame_idx) - n; /* No. of entries after limiting fillers */
     for (; n > ngs->maxwpf; --n) {
         /* Find worst BPTable entry */
         worstscr = (int32) 0x7fffffff;
         worstbpe = NULL;
-        for (bp = ngs->bptbl->ef_idx[frame_idx]; (bp < ngs->bptbl->n_ent); bp++) {
-            bpe = &(ngs->bptbl->ent[bp]);
+        for (bp = bptbl_ef_idx(ngs->bptbl, frame_idx);
+             bp < bptbl_ef_idx(ngs->bptbl, frame_idx + 1); bp++) {
+            bpe = bptbl_ent(ngs->bptbl, bp);
             if (bpe->valid && (bpe->score WORSE_THAN worstscr)) {
                 worstscr = bpe->score;
                 worstbpe = bpe;
@@ -1300,8 +1301,9 @@ word_transition(ngram_search_t *ngs, int frame_idx)
     pls = (phone_loop_search_t *)ps_search_lookahead(ngs);
     /* Ugh, this is complicated.  Scan all word exits for this frame
      * (they have already been created by prune_word_chan()). */
-    for (bp = ngs->bptbl->ef_idx[frame_idx]; bp < ngs->bptbl->n_ent; bp++) {
-        bpe = &(ngs->bptbl->ent[bp]);
+    for (bp = bptbl_ef_idx(ngs->bptbl, frame_idx);
+         bp < bptbl_ef_idx(ngs->bptbl, frame_idx + 1); bp++) {
+        bpe = bptbl_ent(ngs->bptbl, bp);
         ngs->bptbl->word_idx[bpe->wid] = NO_BP;
 
         /* No transitions from the finish word for obvious reasons. */
@@ -1376,7 +1378,8 @@ word_transition(ngram_search_t *ngs, int frame_idx)
         w = ngs->single_phone_wid[i];
         ngs->last_ltrans[w].dscr = (int32) 0x80000000;
     }
-    for (bp = ngs->bptbl->ef_idx[frame_idx]; bp < ngs->bptbl->n_ent; bp++) {
+    for (bp = bptbl_ef_idx(ngs->bptbl, frame_idx);
+         bp < bptbl_ef_idx(ngs->bptbl, frame_idx + 1); bp++) {
         bpe = &(ngs->bptbl->ent[bp]);
         if (!bpe->valid)
             continue;
@@ -1534,7 +1537,6 @@ ngram_fwdtree_search(ngram_search_t *ngs, int frame_idx)
     /* Deactivate pruned HMMs. */
     deactivate_channels(ngs, frame_idx);
 
-    ++ngs->bptbl->n_frame;
     /* Return the number of frames processed. */
     return 1;
 }
