@@ -70,7 +70,7 @@ sync_array_init(size_t n_ent, size_t ent_size)
     sa->data = garray_init(n_ent, ent_size);
     sa->count = garray_init(n_ent, 1);
     sa->mtx = sbmtx_init();
-    sa->evt = sbevent_init();
+    sa->evt = sbevent_init(FALSE);
     sa->final_next_idx = (size_t)-1;
 
     return sa;

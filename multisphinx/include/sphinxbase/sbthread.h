@@ -192,7 +192,7 @@ void sbmtx_free(sbmtx_t *mtx);
  * Initialize an event.
  */
 SPHINXBASE_EXPORT
-sbevent_t *sbevent_init(void);
+sbevent_t *sbevent_init(int manual_reset);
 
 /**
  * Free an event.
@@ -205,6 +205,12 @@ void sbevent_free(sbevent_t *evt);
  */
 SPHINXBASE_EXPORT
 int sbevent_signal(sbevent_t *evt);
+
+/**
+ * Reset a manual-reset event.
+ */
+SPHINXBASE_EXPORT
+int sbevent_reset(sbevent_t *evt);
 
 /**
  * Wait for an event to be signalled.

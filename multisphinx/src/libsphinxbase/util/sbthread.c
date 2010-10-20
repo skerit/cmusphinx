@@ -151,12 +151,12 @@ cond_timed_wait(HANDLE cond, int sec, int nsec)
 
 /* Silvio Moioli: updated to use Unicode */
 sbevent_t *
-sbevent_init(void)
+sbevent_init(int manual_reset)
 {
     sbevent_t *evt;
 
     evt = ckd_calloc(1, sizeof(*evt));
-    evt->evt = CreateEventW(NULL, FALSE, FALSE, NULL);
+    evt->evt = CreateEventW(NULL, manual_reset, FALSE, NULL);
     if (evt->evt == NULL) {
         ckd_free(evt);
         return NULL;
@@ -175,6 +175,12 @@ int
 sbevent_signal(sbevent_t *evt)
 {
     return SetEvent(evt->evt) ? 0 : -1;
+}
+
+int
+sbevent_reset(sbevent_t *evt)
+{
+    return ResetEvent(evt->evt) ? 0 : -1;
 }
 
 int
@@ -385,7 +391,11 @@ struct sbmsgq_s {
 struct sbevent_s {
     pthread_mutex_t mtx;
     pthread_cond_t cond;
-    int signalled;
+    /* These are protected by mutexes so they don't need to be atomic
+     * types (just sayin' this in case there are any DEC Alpha
+     * enthusiasts left in the world...) */
+    int16 signalled;
+    int16 manual_reset;
 };
 
 struct sbmtx_s {
@@ -608,7 +618,7 @@ sbmsgq_wait(sbmsgq_t *q, size_t *out_len, int sec, int nsec)
 }
 
 sbevent_t *
-sbevent_init(void)
+sbevent_init(int manual_reset)
 {
     sbevent_t *evt;
     int rv;
@@ -625,6 +635,7 @@ sbevent_init(void)
         ckd_free(evt);
         return NULL;
     }
+    evt->manual_reset = manual_reset;
     return evt;
 }
 
@@ -649,6 +660,16 @@ sbevent_signal(sbevent_t *evt)
 }
 
 int
+sbevent_reset(sbevent_t *evt)
+{
+    pthread_mutex_lock(&evt->mtx);
+    evt->signalled = FALSE;
+    pthread_mutex_unlock(&evt->mtx);
+
+    return 0;
+}
+
+int
 sbevent_wait(sbevent_t *evt, int sec, int nsec)
 {
     int rv = 0;
@@ -659,7 +680,7 @@ sbevent_wait(sbevent_t *evt, int sec, int nsec)
     if (!evt->signalled)
         rv = cond_timed_wait(&evt->cond, &evt->mtx, sec, nsec);
     /* Set its state to unsignalled if we were successful. */
-    if (rv == 0)
+    if (rv == 0 && !evt->manual_reset)
         evt->signalled = FALSE;
     /* And unlock its mutex. */
     pthread_mutex_unlock(&evt->mtx);
