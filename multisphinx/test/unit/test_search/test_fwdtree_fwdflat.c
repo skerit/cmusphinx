@@ -22,6 +22,7 @@ main(int argc, char *argv[])
 	int nfr, i;
 	char const *hyp;
 	int32 score;
+	int ftfr, fffr;
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
@@ -48,11 +49,18 @@ main(int argc, char *argv[])
 	ps_search_start(fwdflat);
 	/* Turn this on for now so that we can pass arbitrary frames to fwdflat. */
 	acmod_set_grow(acmod, TRUE);
+	ftfr = fffr = 0;
 	for (i = 0; i < 200; ++i) {
 		acmod_process_feat(acmod, feat[i]);
-		ps_search_step(fwdtree, acmod->output_frame);
-		ps_search_step(fwdflat, acmod->output_frame);
-		acmod_advance(acmod);
+		while (acmod->n_feat_frame > 0) {
+			nfr = ps_search_step(fwdtree, ftfr);
+			ftfr += nfr;
+			//E_INFO("fwdtree searched %d frames => %d\n", nfr, ftfr);
+			//nfr = ps_search_step(fwdflat, fffr);
+			//fffr += nfr;
+			//E_INFO("fwdflat searched %d frames => %d\n", nfr, fffr);
+			acmod_advance(acmod);
+		}
 	}
 	ps_search_finish(fwdtree);
 	hyp = ps_search_hyp(fwdtree, &score);

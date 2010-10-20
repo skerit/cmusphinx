@@ -869,56 +869,30 @@ fwdflat_dump_active_words(fwdflat_search_t *ffs)
 static int
 fwdflat_update_active_words(fwdflat_search_t *ffs, int frame_idx)
 {
-    bpidx_t i, new_first_bp;
-    int old_first_sf, new_last_sf;
+    int new_first_sf, new_last_sf;
+    bpidx_t i;
 
     /* Check if there are new backpointers to be scanned. */
-    /* FIXME: Need an API for this, not mucking around in the internals. */
     if (ffs->input_bptbl->first_invert_bp == ffs->input_last_bp)
         return 0;
 
-    /* Scan through newly available backpointers to find the last
-     * start frame and adjusting exit counts. */
-    new_last_sf = ffs->input_last_sf;
+    
+    new_first_sf = 999999;
+    new_last_sf = 0;
     for (i = ffs->input_last_bp; i < ffs->input_bptbl->first_invert_bp; ++i) {
         int sf = bptbl_sf(ffs->input_bptbl, i);
-        bp_t *bpe = bptbl_ent(ffs->input_bptbl, i);
         if (sf > new_last_sf)
             new_last_sf = sf;
-        ffs->input_words[bpe->wid]++;
+        if (sf < new_first_sf)
+            new_first_sf = sf;
+        E_INFO("bp %i sf %d\n", i, sf);
     }
-    /* Update first_sf if the window has grown too large. */
-    old_first_sf = ffs->input_first_sf;
-    if (new_last_sf - ffs->input_first_sf > ffs->max_sf_win) {
-        ffs->input_first_sf = new_last_sf - ffs->max_sf_win;
-    }
-
-    /* Scan backpointers, adjusting exit counts for expired ones. */
-    new_first_bp = ffs->input_bptbl->first_invert_bp;
-    for (i = ffs->input_first_bp; i < ffs->input_bptbl->first_invert_bp; ++i) {
-        int sf = bptbl_sf(ffs->input_bptbl, i);
-        if (sf >= ffs->input_first_sf) {
-            /* Update input_first_bp once. */
-            if (i < new_first_bp)
-                new_first_bp = i;
-        }
-        else {
-            /* Expire this word. */
-            bp_t *bpe = bptbl_ent(ffs->input_bptbl, i);
-            ffs->input_words[bpe->wid]--;
-        }
-    }
-
-    /* Update pointers. */
-    E_INFO("Update window bpidx %d:%d => %d:%d sf %d:%d => %d:%d\n",
-           ffs->input_first_bp, ffs->input_last_bp,
-           new_first_bp, ffs->input_bptbl->first_invert_bp,
-           old_first_sf, ffs->input_last_sf,
-           ffs->input_first_sf, new_last_sf);
-
-    ffs->input_first_bp = new_first_bp;
-    ffs->input_last_bp = ffs->input_bptbl->first_invert_bp;
+    E_INFO("start frames %d:%d => %d:%d\n",
+           ffs->input_first_sf, ffs->input_last_sf,
+           new_first_sf, new_last_sf);
+    ffs->input_first_sf = new_first_sf;
     ffs->input_last_sf = new_last_sf;
+    ffs->input_last_bp = ffs->input_bptbl->first_invert_bp;
 
     fwdflat_dump_active_words(ffs);
     return 0;
