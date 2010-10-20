@@ -541,8 +541,6 @@ bptbl_find_exit(bptbl_t *bptbl, int32 wid)
     if (bptbl->n_ent == 0)
         return NULL;
 
-    bptbl_dump(bptbl);
-
     /* We always take the last available frame, no matter what it
      * happens to be.  So take the last entry and scan backwards to
      * find the extents of its frame. */
@@ -752,7 +750,7 @@ bptbl_hyp(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
             E_ERROR("No word exits in last frame: recognition failure?\n");
             return NULL;
         }
-        E_WARN("No %s found in last frame, using %d instead\n",
+        E_WARN("No %s found in last frame, using %s instead\n",
                dict_wordstr(bptbl->d2p->dict, finish_wid),
                dict_wordstr(bptbl->d2p->dict, exit->wid));
     }
