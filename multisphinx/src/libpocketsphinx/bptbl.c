@@ -328,6 +328,9 @@ bptbl_compact(bptbl_t *bptbl, int eidx)
 #endif /* MOVE_BSCORE */
     if (eidx == bptbl->n_ent)
         bptbl->n_ent = dest;
+    E_INFO("Retired %d bps (%d to %d)\n",
+           dest - bptbl->first_invert_bp,
+           bptbl->first_invert_bp, dest);
     return dest;
 }
 
@@ -506,9 +509,9 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     bptbl->n_frame = frame_idx + 1;
     bptbl_gc(bptbl, oldest_bp, frame_idx);
     if (bptbl->first_invert_bp > 0 && bptbl->ef_idx[0] > bptbl->first_invert_bp) {
-        E_INFO("Retired bps from 0 to %d Empty %d to %d Active %d to %d\n",
-               bptbl->first_invert_bp - 1, bptbl->first_invert_bp,
-               bptbl->ef_idx[0] - 1, bptbl->ef_idx[0], bptbl->n_ent);
+        E_INFO("%d active bps (%d to %d)\n",
+               bptbl->n_ent - bptbl->ef_idx[0],
+               bptbl->ef_idx[0], bptbl->n_ent);
         assert(bptbl->ent[bptbl->first_invert_bp - 1].valid == TRUE);
         assert(bptbl->ent[bptbl->first_invert_bp].valid == FALSE);
         assert(bptbl->ent[bptbl->ef_idx[0] - 1].valid == FALSE);
