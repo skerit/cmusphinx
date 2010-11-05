@@ -43,27 +43,71 @@
 
 #include "ngram_trie.h"
 
+#include <sphinxbase/garray.h>
+
+#define MIN_LOGPROB 1e-20
+
+/**
+ * N-Gram trie.
+ */
 struct ngram_trie_s {
     int refcount;
-    dict_t *dict;
-    logmath_t *lmath;
+    dict_t *dict;      /**< Dictionary which maps words to IDs. */
+    logmath_t *lmath;  /**< Log-math used for input/output. */
+    int shift;         /**< Shift applied internally to log values. */
+    int zero;          /**< Minimum allowable log value. */
+    int n;             /**< Maximum N-Gram order. */
+
+    garray_t *nodes;       /**< Flat array of nodes. */
+    garray_t *successors;  /**< Flat array of successor pointers. */
 };
 
+/**
+ * N-Gram structure (8 bytes in memory/on disk).
+ */
 struct ngram_trie_node_s {
+    int32 word;
+    int16 log_prob;
+    int16 log_bowt;
+    int32 history;    /**< Index of parent node. */
+    int32 successors; /**< Index of child nodes. */
 };
 
+/**
+ * Iterator over N-Grams in a trie.
+ */
 struct ngram_trie_iter_s {
+    ngram_trie_t *t; /**< Parent trie. */
 };
 
 ngram_trie_t *
 ngram_trie_init(dict_t *d, logmath_t *lmath)
 {
+    ngram_trie_node_t *root;
     ngram_trie_t *t;
 
     t = ckd_calloc(1, sizeof(*t));
     t->refcount = 1;
     t->dict = dict_retain(d);
     t->lmath = logmath_retain(lmath);
+
+    /* Determine proper shift to fit min_logprob in 16 bits. */
+    t->zero = logmath_log(lmath, MIN_LOGPROB);
+    while (t->zero < -32768) {
+        t->zero >>= 1;
+        ++t->shift;
+    }
+
+    /* Create arrays and add the root node. */
+    t->nodes = garray_init(1, sizeof(ngram_trie_node_t));
+    t->successors = garray_init(0, sizeof(int32));
+
+    root = garray_ptr(t->nodes, ngram_trie_node_t, 0);
+    root->word = -1;
+    root->log_prob = 0;
+    root->log_bowt = 0;
+    root->history = -1;
+    root->successors = 0; /* No successors yet. */
 
     return t;
 }
@@ -84,6 +128,8 @@ ngram_trie_free(ngram_trie_t *t)
         return t->refcount;
     dict_free(t->dict);
     logmath_free(t->lmath);
+    garray_free(t->nodes);
+    garray_free(t->successors);
     ckd_free(t);
     return 0;
 }
@@ -101,22 +147,87 @@ ngram_trie_write_arpa(ngram_trie_t *t, FILE *arpafile)
 }
 
 ngram_trie_node_t *
-ngram_trie_ngram(ngram_trie_t *t, int32 w, ...)
+ngram_trie_root(ngram_trie_t *t)
 {
-    return NULL;
+    return garray_ptr(t->nodes, ngram_trie_node_t, 0);
+}
+
+ngram_trie_node_t *
+ngram_trie_ngram(ngram_trie_t *t, char const *w, ...)
+{
+    ngram_trie_node_t *node;
+    char const *h;
+    va_list args;
+    int n_hist;
+    int32 *hist;
+    int32 wid;
+
+    wid = dict_wordid(t->dict, w);
+    va_start(args, w);
+    n_hist = 0;
+    while ((h = va_arg(args, char const *)) != NULL)
+        ++n_hist;
+    va_end(args);
+    hist = ckd_calloc(n_hist, sizeof(*hist));
+    va_start(args, w);
+    n_hist = 0;
+    while ((h = va_arg(args, char const *)) != NULL) {
+        hist[n_hist] = dict_wordid(t->dict, h);
+        ++n_hist;
+    }
+    va_end(args);
+
+    node = ngram_trie_ngram_v(t, wid, hist, n_hist);
+    ckd_free(hist);
+    return node;
 }
 
 ngram_trie_node_t *
 ngram_trie_ngram_v(ngram_trie_t *t, int32 w,
                    int32 *hist, int32 n_hist)
 {
-    return NULL;
+    ngram_trie_node_t *node;
+
+    node = ngram_trie_root(t);
+    if (n_hist > t->n - 1)
+        n_hist = t->n - 1;
+    while (n_hist > 0) {
+        int32 nextwid = hist[n_hist - 1];
+        if ((node = ngram_trie_successor(t, node, nextwid)) == NULL)
+            return NULL;
+    }
+
+    return ngram_trie_successor(t, node, w);
 }
 
 int32
-ngram_trie_prob(ngram_trie_t *t, int *n_used, int32 w, ...)
+ngram_trie_prob(ngram_trie_t *t, int *n_used, char const *w, ...)
 {
-    return 0;
+    char const *h;
+    va_list args;
+    int n_hist;
+    int32 *hist;
+    int32 wid;
+    int32 prob;
+
+    wid = dict_wordid(t->dict, w);
+    va_start(args, w);
+    n_hist = 0;
+    while ((h = va_arg(args, char const *)) != NULL)
+        ++n_hist;
+    va_end(args);
+    hist = ckd_calloc(n_hist, sizeof(*hist));
+    va_start(args, w);
+    n_hist = 0;
+    while ((h = va_arg(args, char const *)) != NULL) {
+        hist[n_hist] = dict_wordid(t->dict, h);
+        ++n_hist;
+    }
+    va_end(args);
+
+    prob = ngram_trie_prob_v(t, n_used, wid, hist, n_hist);
+    ckd_free(hist);
+    return prob;
 }
 
 int32
@@ -133,31 +244,32 @@ ngram_trie_ngrams(ngram_trie_t *t, int n)
 }
 
 ngram_trie_iter_t *
-ngram_trie_successors(ngram_trie_node_t *h)
+ngram_trie_successors(ngram_trie_t *t, ngram_trie_node_t *h)
 {
     return NULL;
 }
 
 ngram_trie_node_t *
-ngram_trie_successor(ngram_trie_node_t *h, int32 w)
+ngram_trie_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
 {
     return NULL;
 }
 
 int
-ngram_trie_delete_successor(ngram_trie_node_t *h, int32 w)
+ngram_trie_delete_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
 {
     return 0;
 }
 
 ngram_trie_node_t *
-ngram_trie_add_successor(ngram_trie_node_t *h, int32 w)
+ngram_trie_add_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
 {
     return NULL;
 }
 
 int
-ngram_trie_add_successor_ngram(ngram_trie_node_t *h,
+ngram_trie_add_successor_ngram(ngram_trie_t *t,
+                               ngram_trie_node_t *h,
                                ngram_trie_node_t *w)
 {
     return 0;

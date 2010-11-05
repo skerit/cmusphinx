@@ -85,12 +85,17 @@ int ngram_trie_read_arpa(ngram_trie_t *t, FILE *arpafile);
 int ngram_trie_write_arpa(ngram_trie_t *t, FILE *arpafile);
 
 /**
- * Look up an N-Gram in the trie.
+ * Get the root node of the trie.
  */
-ngram_trie_node_t *ngram_trie_ngram(ngram_trie_t *t, int32 w, ...); 
+ngram_trie_node_t *ngram_trie_root(ngram_trie_t *t);
 
 /**
- * Look up an N-Gram in the trie.
+ * Look up an N-Gram in the trie by strings.
+ */
+ngram_trie_node_t *ngram_trie_ngram(ngram_trie_t *t, char const *w, ...); 
+
+/**
+ * Look up an N-Gram in the trie by numeric IDs.
  */
 ngram_trie_node_t *ngram_trie_ngram_v(ngram_trie_t *t, int32 w,
 				      int32 *hist, int32 n_hist);
@@ -98,7 +103,7 @@ ngram_trie_node_t *ngram_trie_ngram_v(ngram_trie_t *t, int32 w,
 /**
  * Get model probability (with backoff) for a word with history.
  */
-int32 ngram_trie_prob(ngram_trie_t *t, int *n_used, int32 w, ...);
+int32 ngram_trie_prob(ngram_trie_t *t, int *n_used, char const *w, ...);
 
 /**
  * Get model probability (with backoff) for a word with history.
@@ -114,27 +119,29 @@ ngram_trie_iter_t *ngram_trie_ngrams(ngram_trie_t *t, int n);
 /**
  * Get an iterator over all successors to an N-Gram.
  */
-ngram_trie_iter_t *ngram_trie_successors(ngram_trie_node_t *h);
+ngram_trie_iter_t *ngram_trie_successors(ngram_trie_t *t, ngram_trie_node_t *h);
 
 /**
  * Look up a successor to an N-Gram.
  */
-ngram_trie_node_t *ngram_trie_successor(ngram_trie_node_t *h, int32 w);
+ngram_trie_node_t *ngram_trie_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w);
 
 /**
  * Delete a successor to an N-Gram
  */
-int ngram_trie_delete_successor(ngram_trie_node_t *h, int32 w);
+int ngram_trie_delete_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w);
 
 /**
  * Add a new successor to an N-Gram
  */
-ngram_trie_node_t *ngram_trie_add_successor(ngram_trie_node_t *h, int32 w);
+ngram_trie_node_t *ngram_trie_add_successor(ngram_trie_t *t,
+                                            ngram_trie_node_t *h, int32 w);
 
 /**
  * Add a new successor to an N-Gram
  */
-int ngram_trie_add_successor_ngram(ngram_trie_node_t *h,
+int ngram_trie_add_successor_ngram(ngram_trie_t *t, 
+                                   ngram_trie_node_t *h,
 				   ngram_trie_node_t *w);
 
 /**
