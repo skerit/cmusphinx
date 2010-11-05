@@ -205,7 +205,6 @@ ps_init(cmd_ln_t *config)
      * (would require good posterior probability calculation). */
     if ((ps->acmod = acmod_init(ps->config, ps->lmath, ps->fb)) == NULL)
         goto error_out;
-    acmod2 = acmod_copy(ps->acmod);
 
     /* For the time being we share a single dict (and dict2pid)
      * between search passes, but this will change in the future. */
@@ -215,21 +214,24 @@ ps_init(cmd_ln_t *config)
         goto error_out;
 
     ps->fwdtree = fwdtree_search_init(config, ps->acmod, dict, d2p);
-    if (cmd_ln_str_r(config, "-fwdtreelm") != NULL) {
-        ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-                                          fwdtree_search_bptbl(ps->fwdtree),
-                                          NULL);
-    }
-    else {
-        ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-                                          fwdtree_search_bptbl(ps->fwdtree),
-                                          fwdtree_search_lmset(ps->fwdtree));
-    }
+    if (cmd_ln_boolean_r(config, "-fwdflat")) {
+        acmod2 = acmod_copy(ps->acmod);
+        if (cmd_ln_str_r(config, "-fwdtreelm") != NULL) {
+            ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
+                                              fwdtree_search_bptbl(ps->fwdtree),
+                                              NULL);
+        }
+        else {
+            ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
+                                              fwdtree_search_bptbl(ps->fwdtree),
+                                              fwdtree_search_lmset(ps->fwdtree));
+        }
+        acmod_free(acmod2);
+    }        
 
     /* Release pointers to things now owned by the searches. */
     dict_free(dict);
     dict2pid_free(d2p);
-    acmod_free(acmod2);
 
     /* Initialize performance timer (but each search has its own). */
     ps->perf.name = "decode";
@@ -237,7 +239,8 @@ ps_init(cmd_ln_t *config)
 
     /* Start search threads. */
     ps_search_run(ps->fwdtree);
-    ps_search_run(ps->fwdflat);
+    if (ps->fwdflat)
+        ps_search_run(ps->fwdflat);
 
     return ps;
 error_out:
@@ -436,7 +439,7 @@ ps_get_hyp(ps_decoder_t *ps, int32 *out_best_score, char const **out_uttid)
     char const *hyp;
 
     ptmr_start(&ps->perf);
-    hyp = ps_search_hyp(ps->fwdflat, out_best_score);
+    hyp = ps_search_hyp(ps->fwdflat ? ps->fwdflat : ps->fwdtree, out_best_score);
     if (out_uttid)
         *out_uttid = ps->uttid;
     ptmr_stop(&ps->perf);
@@ -455,7 +458,7 @@ ps_seg_iter(ps_decoder_t *ps, int32 *out_best_score)
     ps_seg_t *itor;
 
     ptmr_start(&ps->perf);
-    itor = ps_search_seg_iter(ps->fwdflat, out_best_score);
+    itor = ps_search_seg_iter(ps->fwdflat ? ps->fwdflat : ps->fwdtree, out_best_score);
     ptmr_stop(&ps->perf);
     return itor;
 }
