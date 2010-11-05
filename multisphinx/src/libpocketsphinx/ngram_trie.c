@@ -67,6 +67,10 @@ struct ngram_trie_s {
     int n;             /**< Maximum N-Gram order. */
     garray_t *counts;  /**< N-Gram counts. */
 
+    int32 start_wid;   /**< Word ID for special word <s> (a non-event) */
+    int32 finish_wid;  /**< Word ID for special word </s> (has no valid
+                          successors) */
+
     ngram_trie_node_t *root;
     listelem_alloc_t *node_alloc;
 };
@@ -137,10 +141,14 @@ ngram_trie_init(dict_t *d, logmath_t *lmath)
     if (d) {
         t->dict = dict_retain(d);
         t->gendict = FALSE;
+        t->start_wid = dict_wordid(d, S3_START_WORD);
+        t->finish_wid = dict_wordid(d, S3_FINISH_WORD);
     }
     else {
         t->dict = dict_init(NULL, NULL);
         t->gendict = TRUE;
+        t->start_wid = dict_add_word(d, S3_START_WORD, NULL, 0);
+        t->finish_wid = dict_add_word(d, S3_FINISH_WORD, NULL, 0);
     }
     t->lmath = logmath_retain(lmath);
 
@@ -204,6 +212,13 @@ ngram_trie_logmath(ngram_trie_t *t)
 {
     return t->lmath;
 }
+
+int32
+ngram_trie_zero(ngram_trie_t *t)
+{
+    return t->zero;
+}
+
 
 ngram_trie_node_t *
 ngram_trie_root(ngram_trie_t *t)
@@ -610,7 +625,8 @@ ngram_trie_node_get_word_hist(ngram_trie_t *t,
 
     n_hist = 0;
     for (h = ng->history; h->word != -1; h = h->history) {
-        out_hist[n_hist] = h->word;
+        if (out_hist)
+            out_hist[n_hist] = h->word;
         ++n_hist;
     }
 
@@ -715,6 +731,7 @@ ngram_trie_successor_prob(ngram_trie_t *t,
     hist[0] = h->word;
     
     prob = ngram_trie_prob_v(t, NULL, w, hist, n_hist);
+    ckd_free(hist);
     return prob;
 }
 
@@ -739,11 +756,24 @@ ngram_trie_calc_bowt(ngram_trie_t *t, ngram_trie_node_t *h)
     }
 
     if (nom == 0) {
-        return logmath_log10_to_log(t->lmath, -99);
+        /* Backoff is futile. */
+        return t->zero;
     }
+    else if (h->word == t->finish_wid) {
+        /* Backoff is impossible. */
+        return 0;
+    }
+#if 0
+    else if (h->word == t->start_wid) {
+        /* Not an event, so backoff is irrelevant. */
+        return 0;
+    }
+#endif
     else if (nom < 0 || dnom <= 0) {
-        E_ERROR("Bad backoff weight in FIXME: %f / %f\n",
-                nom, dnom);
+        /* Oh, something is actually wrong. */
+        E_ERROR("Bad backoff weight for ");
+        ngram_trie_node_print(t, h, err_get_logfp());
+        E_INFOCONT(": %f / %f\n", nom, dnom);
         return -1;
     }
 
@@ -767,9 +797,9 @@ ngram_trie_node_validate(ngram_trie_t *t, ngram_trie_node_t *h)
     }
     if (fabs(tprob - 1.0) > MY_EPSILON) {
         E_ERROR("Validation failed, P(.|H) = %f\n", tprob);
-        return FALSE;
+        return 1;
     }
-    return TRUE;
+    return logmath_log(t->lmath, tprob);
 }
 
 static int
@@ -1020,6 +1050,24 @@ ngram_trie_read_arpa(ngram_trie_t *t, FILE *arpafile)
     return 0;
 }
 
+int ngram_trie_node_print(ngram_trie_t *t,
+                          ngram_trie_node_t *ng,
+                          FILE *outfh)
+{
+    int32 *wids;
+    int n_wids;
+
+    n_wids = ngram_trie_node_get_word_hist(t, ng, NULL) + 1;
+    wids = ckd_calloc(n_wids, sizeof(*wids));
+    wids[0] = ng->word;
+    n_wids = ngram_trie_node_get_word_hist(t, ng, wids + 1) + 1;
+    fprintf(outfh, "%s", dict_wordstr(t->dict, wids[--n_wids]));
+    for (--n_wids; n_wids >= 0; --n_wids)
+        fprintf(outfh, " %s", dict_wordstr(t->dict, wids[n_wids]));
+    ckd_free(wids);
+    return 0;
+}
+
 int
 ngram_trie_write_arpa(ngram_trie_t *t, FILE *arpafile)
 {
@@ -1045,11 +1093,13 @@ ngram_trie_write_arpa(ngram_trie_t *t, FILE *arpafile)
             wids[0] = ng->word;
             n_wids = ngram_trie_node_get_word_hist(t, ng, wids + 1) + 1;
             assert(n_wids == n);
-            fprintf(arpafile, "%.4f", logmath_log_to_log10(t->lmath, ng->log_prob << t->shift));
+            fprintf(arpafile, "%.4f",
+                    logmath_log_to_log10(t->lmath, ng->log_prob << t->shift));
             for (--n_wids; n_wids >= 0; --n_wids)
                 fprintf(arpafile, " %s", dict_wordstr(t->dict, wids[n_wids]));
             if (ng->log_bowt != 0)
-                fprintf(arpafile, " %.4f", logmath_log_to_log10(t->lmath, ng->log_bowt << t->shift));
+                fprintf(arpafile, " %.4f",
+                        logmath_log_to_log10(t->lmath, ng->log_bowt << t->shift));
             fprintf(arpafile, "\n");
         }
     }

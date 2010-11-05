@@ -75,6 +75,7 @@ ngram_trie_t *ngram_trie_retain(ngram_trie_t *t);
 int ngram_trie_free(ngram_trie_t *t);
 dict_t *ngram_trie_dict(ngram_trie_t *t);
 logmath_t *ngram_trie_logmath(ngram_trie_t *t);
+int32 ngram_trie_zero(ngram_trie_t *t);
 
 /**
  * Get the order of the N-Gram model.
@@ -224,5 +225,19 @@ int32 ngram_trie_calc_bowt(ngram_trie_t *t, ngram_trie_node_t *h);
  * Validate successor distribution for an N-Gram.
  */
 int32 ngram_trie_node_validate(ngram_trie_t *t, ngram_trie_node_t *h);
+
+/**
+ * Get the word history from a node.
+ */
+int32 ngram_trie_node_get_word_hist(ngram_trie_t *t,
+                                    ngram_trie_node_t *ng,
+                                    int32 *out_hist);
+
+/**
+ * Print out the words from an N-gram.
+ */
+int ngram_trie_node_print(ngram_trie_t *t,
+                          ngram_trie_node_t *ng,
+                          FILE *outfh);
 
 #endif /* __NGRAM_TRIE_H__ */

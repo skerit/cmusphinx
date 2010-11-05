@@ -7,6 +7,56 @@
 #include <stdlib.h>
 #include <string.h>
 
+static int
+check_bowts(ngram_trie_t *lm)
+{
+    ngram_trie_iter_t *ng;
+    int n;
+
+    for (n = 1; n < ngram_trie_n(lm); ++n) {
+        for (ng = ngram_trie_ngrams(lm, n); ng;
+             ng = ngram_trie_iter_next(ng)) {
+            int32 log_bowt, new_bowt;
+            ngram_trie_node_t *node = ngram_trie_iter_get(ng);
+
+            ngram_trie_node_params(lm, node, NULL, &log_bowt);
+            new_bowt = ngram_trie_calc_bowt(lm, node);
+	    ngram_trie_node_print(lm, node, stdout);
+	    printf(": %d %d\n", log_bowt, new_bowt);
+	    if (new_bowt != 0 && new_bowt != ngram_trie_zero(lm))
+		    TEST_ASSERT(abs(log_bowt - new_bowt) < 1000);
+        }
+    }
+    return 0;
+}
+
+static int
+validate(ngram_trie_t *lm)
+{
+    ngram_trie_iter_t *ng;
+    int n;
+
+    for (n = 1; n < ngram_trie_n(lm); ++n) {
+        for (ng = ngram_trie_ngrams(lm, n); ng;
+             ng = ngram_trie_iter_next(ng)) {
+            ngram_trie_node_t *node = ngram_trie_iter_get(ng);
+            int32 logsum = ngram_trie_node_validate(lm, node);
+	    ngram_trie_node_print(lm, node, stdout);
+	    printf(": %d\n", logsum);
+        }
+    }
+    return TRUE;
+}
+
+
+static int
+test_validation(ngram_trie_t *t)
+{
+	check_bowts(t);
+	validate(t);
+	return 0;
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -30,7 +80,7 @@ main(int argc, char *argv[])
 	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));
 	dict = dict_init(config, mdef);
 
-#if 1 /* Test memory consumption with reasonably sized LMs - still needs some work. */
+#if 0 /* Test memory consumption with reasonably sized LMs - still needs some work. */
 	t = ngram_trie_init(NULL, lmath);
 	arpafh = popen("bzip2 -dc '"TESTDATADIR "/bn.40000.arpa.bz2'", "r");
 	ngram_trie_read_arpa(t, arpafh);
@@ -42,6 +92,8 @@ main(int argc, char *argv[])
 	arpafh = fopen(TESTDATADIR "/bn10000.3g.arpa", "r");
 	ngram_trie_read_arpa(t, arpafh);
 	fclose(arpafh);
+
+	test_validation(t);
 
 	/* Test 1, 2, 3-gram probs without backoff. */
 	prob = ngram_trie_prob(t, &n_used, "THREE", "POINT", "ZERO", NULL);
