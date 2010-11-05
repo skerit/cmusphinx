@@ -173,14 +173,15 @@ size_t garray_find_first(garray_t *gar, void *ent);
 void garray_heapify(garray_t *gar);
 
 /**
- * Sort an array in-place.  Uses heapsort.
+ * Sort an array in-place using heapsort.
  */
 void garray_sort(garray_t *gar);
 
 /**
- * Return a sorted copy of an array.  Uses mergesort.
+ * Sort an array in-place using mergesort.
  */
-garray_t *garray_sorted(garray_t *gar);
+void garray_mergesort(garray_t *gar);
+
 
 /**
  * Remove elements from the end of the array.

@@ -75,7 +75,7 @@ test_sorting(void)
 		"potatoes",
 		"pie"
 	};
-	garray_t *gar, *gar2;
+	garray_t *gar;
 	int i;
 
 	gar = garray_init(0, sizeof(char const *));
@@ -91,13 +91,7 @@ test_sorting(void)
 				   garray_ent(gar, char const *, i)) <= 0);
 	}
 	printf("%s\n", garray_ent(gar, char const *, 8));
-
-	gar2 = garray_sorted(gar);
-	/* Test the strings themselves not the pointers since heapsort
-	 * is not stable while mergesort is. */
-	for (i = 0; i < 9; ++i)
-		TEST_ASSERT(0 == strcmp(garray_ent(gar, char const *, i),
-					garray_ent(gar2, char const *, i)));
+	garray_free(gar);
 	return 0;
 }
 
