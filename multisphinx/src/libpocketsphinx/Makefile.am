@@ -32,6 +32,7 @@ libpocketsphinx_la_SOURCES =			\
 	state_align_search.c			\
 	tmat.c					\
 	vector.c				\
+	vocab_map.c				\
 	pocketsphinx.c
 
 noinst_HEADERS =				\

@@ -122,6 +122,14 @@ void *garray_append(garray_t *gar, void const *ent);
 void *garray_insert(garray_t *gar, size_t idx, void const *ent);
 
 /**
+ * Set an element in the array.
+ *
+ * If the specified index is past the end of the array or before the
+ * base index of the array, this operation will fail.
+ */
+void *garray_put(garray_t *gar, size_t idx, void const *ent);
+
+/**
  * Comparison function for bisect operations.
  */
 typedef int (*garray_cmp_t)(garray_t *gar,
