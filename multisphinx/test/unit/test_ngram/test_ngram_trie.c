@@ -43,6 +43,7 @@ validate(ngram_trie_t *lm)
             int32 logsum = ngram_trie_node_validate(lm, node);
 	    ngram_trie_node_print(lm, node, stdout);
 	    printf(": %d\n", logsum);
+	    TEST_ASSERT(logsum > -100);
         }
     }
     return TRUE;

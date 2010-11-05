@@ -187,11 +187,13 @@ merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
         else if (garray_size(word_succ) == 1) {
             i32p_t sent = garray_ent(word_succ, i32p_t, 0);
             ngram_trie_node_t *pseudo_succ;
-            /* Remove node, rename it and re-insert. */
             pseudo_succ = ngram_trie_successor(lm, node, sent.a);
-            ngram_trie_node_set_word(lm, pseudo_succ, pseudo_wid);
-            ngram_trie_delete_successor(lm, node, sent.a);
-            ngram_trie_add_successor_ngram(lm, node, pseudo_succ);
+            E_INFO("Renaming ");
+            ngram_trie_node_print(lm, pseudo_succ, err_get_logfp());
+            ngram_trie_rename_successor(lm, node, pseudo_succ, pseudo_wid);
+            E_INFOCONT(" to ");
+            ngram_trie_node_print(lm, pseudo_succ, err_get_logfp());
+            E_INFOCONT("\n");
         }
         else {
             ngram_trie_node_t *pseudo_succ;
@@ -284,7 +286,7 @@ main(int argc, char *argv[])
         return 1;
     fclose(fh);
 
-    /* Add new pseudo-words to the dictionary. */
+    /* Add new pseudo-words to the LM dictionary. */
     dict = ngram_trie_dict(lm);
     vdict = vocab_map_dict(vm);
     for (vi = vocab_map_mappings(vm); vi;
@@ -296,6 +298,14 @@ main(int argc, char *argv[])
         /* FIXME: No pronunciation for now. */
         dict_add_word(dict, pseudo_word, NULL, 0);
     }
+    /* Now re-read the vocab map with this updated dictionary. */
+    vocab_map_free(vm);
+    vm = vocab_map_init(dict);
+    if ((fh = fopen(cmd_ln_str_r(config, "-vmap"), "r")) == NULL)
+        E_FATAL_SYSTEM("Failed to open %s", cmd_ln_str_r(config, "-vmap"));
+    if (vocab_map_read(vm, fh) < 0)
+        return 1;
+    fclose(fh);
 
     seen = bitvec_alloc(dict_size(dict));
     if (merge_homos(lm, ngram_trie_root(lm), vm, seen) < 0)

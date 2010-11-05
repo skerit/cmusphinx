@@ -309,7 +309,7 @@ garray_delete(garray_t *gar, size_t start, size_t end)
     n_move = gar->n_ent + gar->base_idx - end;
     rv = garray_move(gar, start, end, n_move);
     assert(rv == n_move);
-    garray_pop(gar, start + n_move);
+    garray_pop(gar, end - start);
     return 0;
 }
 

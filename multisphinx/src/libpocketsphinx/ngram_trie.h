@@ -205,6 +205,14 @@ int ngram_trie_add_successor_ngram(ngram_trie_t *t,
 				   ngram_trie_node_t *w);
 
 /**
+ * Change the head word of a successor N-Gram.
+ */
+int ngram_trie_rename_successor(ngram_trie_t *t,
+                                ngram_trie_node_t *h,
+                                ngram_trie_node_t *w,
+                                int32 new_wid);
+
+/**
  * Get the backoff N-gram (one fewer element of history) for an N-Gram.
  */
 ngram_trie_node_t *ngram_trie_backoff(ngram_trie_t *t,

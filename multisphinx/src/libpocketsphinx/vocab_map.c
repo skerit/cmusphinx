@@ -146,8 +146,10 @@ vocab_map_read(vocab_map_t *vm, FILE *fh)
         for (i = 1; i < nwords; ++i) {
             i32p_t word;
 
-            word.a = dict_wordid(vm->dict, wptr[i]);
-            if (word.a == -1) {
+            if ((word.a = dict_wordid(vm->dict, wptr[i])) == BAD_S3WID)
+                if (vm->gendict)
+                    word.a = dict_add_word(vm->dict, wptr[i], NULL, 0);
+            if (word.a == BAD_S3WID) {
                 E_ERROR("Skipping unknown word %s\n", wptr[i]);
                 continue;
             }

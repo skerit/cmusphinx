@@ -83,6 +83,7 @@ struct ngram_trie_node_s {
     int16 log_prob;
     int16 log_bowt;
     ngram_trie_node_t *history;
+    ngram_trie_node_t *backoff;
     garray_t *successors;
 };
 
@@ -121,6 +122,7 @@ ngram_trie_node_alloc(ngram_trie_t *t)
     node->log_bowt = 0;
     node->history = NULL;
     node->successors = NULL; /* Allocate lazily */
+    node->backoff = (ngram_trie_node_t *)-1; /* Calculate lazily */
     return node;
 }
 
@@ -147,8 +149,8 @@ ngram_trie_init(dict_t *d, logmath_t *lmath)
     else {
         t->dict = dict_init(NULL, NULL);
         t->gendict = TRUE;
-        t->start_wid = dict_add_word(d, S3_START_WORD, NULL, 0);
-        t->finish_wid = dict_add_word(d, S3_FINISH_WORD, NULL, 0);
+        t->start_wid = dict_add_word(t->dict, S3_START_WORD, NULL, 0);
+        t->finish_wid = dict_add_word(t->dict, S3_FINISH_WORD, NULL, 0);
     }
     t->lmath = logmath_retain(lmath);
 
@@ -374,6 +376,9 @@ ngram_trie_successors(ngram_trie_t *t, ngram_trie_node_t *h)
 {
     ngram_trie_iter_t *itor;
 
+    if (h->successors == NULL)
+        return NULL;
+
     /* Create an iterator with nostop=FALSE */
     itor = ckd_calloc(1, sizeof(*itor));
     itor->cur = h;
@@ -510,8 +515,8 @@ ngram_trie_node_set_params(ngram_trie_t *t,
                            int32 log_prob,
                            int32 log_bowt)
 {
-    node->log_prob = log_prob;
-    node->log_bowt = log_bowt;
+    node->log_prob = log_prob >> t->shift;
+    node->log_bowt = log_bowt >> t->shift;
 }
 
 static size_t
@@ -574,6 +579,7 @@ ngram_trie_add_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
     ng = ngram_trie_node_alloc(t);
     ng->word = w;
     ng->history = h;
+    assert(ng->word >= 0);
     if (h->successors == NULL) {
         h->successors = garray_init(1, sizeof(ngram_trie_node_t *));
         garray_set_cmp(h->successors, &ngram_trie_nodeptr_cmp, t);
@@ -591,13 +597,15 @@ ngram_trie_add_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
     return ng;
 }
 
+
 int
 ngram_trie_add_successor_ngram(ngram_trie_t *t,
                                ngram_trie_node_t *h,
                                ngram_trie_node_t *w)
 {
     /* FIXME: Increase t->n if needed */
-
+    assert(w->word >= 0);
+    assert(w->log_prob <= 0);
     if (h->successors == NULL) {
         h->successors = garray_init(1, sizeof(ngram_trie_node_t *));
         garray_set_cmp(h->successors, &ngram_trie_nodeptr_cmp, t);
@@ -614,6 +622,35 @@ ngram_trie_add_successor_ngram(ngram_trie_t *t,
 
     return 0;
 }
+
+int
+ngram_trie_rename_successor(ngram_trie_t *t,
+                            ngram_trie_node_t *h,
+                            ngram_trie_node_t *w,
+                            int32 new_wid)
+{
+
+    size_t pos;
+
+    assert(w->word >= 0);
+    assert(new_wid >= 0);
+    assert(w->log_prob <= 0);
+
+    pos = garray_bisect_left(h->successors, &w);
+    if (pos == garray_next_idx(h->successors)) {
+        E_ERROR("Could not find successor to rename\n");
+        return -1;
+    }
+    assert(w == garray_ent(h->successors, ngram_trie_node_t *, pos));
+    garray_delete(h->successors, pos, pos + 1);
+
+    w->word = new_wid;
+    pos = garray_bisect_right(h->successors, &w);
+    garray_insert(h->successors, pos, &w);
+
+    return 0;
+}
+
 
 int32
 ngram_trie_node_get_word_hist(ngram_trie_t *t,
@@ -641,6 +678,9 @@ ngram_trie_backoff(ngram_trie_t *t,
     int32 *hist;
     int32 n_hist;
 
+    if (ng->backoff != (ngram_trie_node_t *)-1)
+        return ng->backoff;
+
     /* Extract word IDs from ng's history. */
     n_hist = ngram_trie_node_get_word_hist(t, ng, NULL);
     hist = ckd_calloc(n_hist, sizeof(*hist));
@@ -650,6 +690,7 @@ ngram_trie_backoff(ngram_trie_t *t,
     bong = ngram_trie_ngram_v(t, ng->word, hist, n_hist - 1);
     ckd_free(hist);
 
+    ng->backoff = bong;
     return bong;
 }
 
