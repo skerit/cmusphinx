@@ -352,7 +352,6 @@ bptbl_retire(bptbl_t *bptbl, int n_retired, int eidx)
         }
         garray_pop_from(bptbl->rc, active_dest_s_idx);
     }
-    sbmtx_unlock(bptbl->mtx);
     return dest;
 }
 
@@ -378,7 +377,6 @@ bptbl_remap(bptbl_t *bptbl, int first_retired_bp,
     int last_retired_bp;
     int i;
 
-    sbmtx_lock(bptbl->mtx);
     last_retired_bp = bptbl_retired_idx(bptbl);
     E_DEBUG(2,("remapping %d:%d from %d to %d and %d to %d\n",
                first_retired_bp, last_remapped_bp,
@@ -417,7 +415,6 @@ bptbl_remap(bptbl_t *bptbl, int first_retired_bp,
         if (bpe->bp < bptbl->oldest_bp)
             bptbl->oldest_bp = bpe->bp;
     }
-    sbmtx_unlock(bptbl->mtx);
 }
 
 /**
@@ -508,6 +505,7 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp)
 {
     int frame_idx = bptbl->n_frame;
 
+    sbmtx_lock(bptbl->mtx);
     E_DEBUG(2,("pushing frame %d, oldest bp %d in frame %d\n",
                frame_idx, oldest_bp,
                oldest_bp == NO_BP
@@ -521,6 +519,7 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp)
     garray_ent(bptbl->ef_idx, bpidx_t, frame_idx) = bptbl_end_idx(bptbl);
     bptbl->n_frame = frame_idx + 1;
     bptbl_gc(bptbl, oldest_bp, frame_idx);
+    sbmtx_unlock(bptbl->mtx);
     return frame_idx;
 }
 

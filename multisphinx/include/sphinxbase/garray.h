@@ -111,7 +111,76 @@ size_t garray_expand_to(garray_t *gar, size_t next_idx);
 /**
  * Append an element to the array, resizing if necessary.
  */
-void *garray_append(garray_t *gar, void *ent);
+void *garray_append(garray_t *gar, void const *ent);
+
+/**
+ * Insert an element in the array.
+ *
+ * If the specified index is past the end of the array or before the
+ * base index of the array, this operation will fail.
+ */
+void *garray_insert(garray_t *gar, size_t idx, void const *ent);
+
+/**
+ * Comparison function for bisect operations.
+ */
+typedef int (*garray_cmp_t)(garray_t *gar,
+                            void const *a, void const *b,
+                            void *udata);
+
+/**
+ * Standard comparison function for 32-bit integers.
+ */
+int garray_cmp_int32(garray_t *gar, void const *a, void const *b, void *udata);
+
+/**
+ * Standard comparison function for strings.
+ */
+int garray_cmp_str(garray_t *gar, void const *a, void const *b, void *udata);
+
+/**
+ * Set the comparison function to be used for bisect operations.
+ */
+void garray_set_cmp(garray_t *gar, garray_cmp_t cmp, void *udata);
+
+/**
+ * Find the leftmost position for inserting an element in a sorted array.
+ */
+size_t garray_bisect_left(garray_t *gar, void *ent);
+
+/**
+ * Find the rightmost position for inserting an element in a sorted array.
+ *
+ * It is recommended to use this for element insertion since this may
+ * result in less memory being moved.
+ */
+size_t garray_bisect_right(garray_t *gar, void *ent);
+
+/**
+ * Find the first matching element in a sorted array.
+ *
+ * If no matching element is found, this function will return the next
+ * available index in the array, as returned by garray_next_idx()
+ */
+size_t garray_find_first(garray_t *gar, void *ent);
+
+/**
+ * Heapify an array in-place.
+ *
+ * Note that contrary to the Python version, this creates a max-heap,
+ * where gar[0] is the greatest value in the heap.
+ */
+void garray_heapify(garray_t *gar);
+
+/**
+ * Sort an array in-place.  Uses heapsort.
+ */
+void garray_sort(garray_t *gar);
+
+/**
+ * Return a sorted copy of an array.  Uses mergesort.
+ */
+garray_t *garray_sorted(garray_t *gar);
 
 /**
  * Remove elements from the end of the array.

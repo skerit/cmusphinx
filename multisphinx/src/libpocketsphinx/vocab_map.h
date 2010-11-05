@@ -44,22 +44,49 @@
 #ifndef __VOCAB_MAP_H__
 #define __VOCAB_MAP_H__
 
+#include <stdio.h>
+
+#include "dict.h"
+
+/**
+ * Vocabulary mapping object.
+ */
 typedef struct vocab_map_s vocab_map_t;
 
 /**
  * Create a new vocabulary map.
  */
+vocab_map_t *vocab_map_init(dict_t *dict);
 
 /**
  * Retain a pointer to a vocabulary map.
  */
+vocab_map_t *vocab_map_retain(vocab_map_t *vm);
 
 /**
  * Release a pointer to a vocabulary map.
  */
+int vocab_map_free(vocab_map_t *vm);
 
 /**
- * Map a single word ID
+ * Read a vocabulary map from a file.
  */
+int vocab_map_read(vocab_map_t *vm, FILE *fh);
+
+/**
+ * Write a vocabulary map to a file.
+ */
+int vocab_map_write(vocab_map_t *vm, FILE *fh);
+
+/**
+ * Map a word to a corresponding pseudo word, if any.
+ */
+int32 vocab_map_map(vocab_map_t *vm, int32 wid);
+
+/**
+ * Map a pseudo word to its constituents.
+ */
+int32 const *vocab_map_unmap(vocab_map_t *vm, int32 pseudo_wid,
+                             int32 *out_n_mapped);
 
 #endif /* __VOCAB_MAP_H__ */

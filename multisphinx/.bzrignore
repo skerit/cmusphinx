@@ -119,3 +119,6 @@ test/unit/test_acmod/test_acmod
 gmon.out
 src/programs/multisphinx_batch
 test/unit/test_search/test_fwdtree_multiple
+test/data/bn.*.arpa.*
+test/data/bn.5000.arpa
+test/unit/test_vocab_map/test_vocab_map

@@ -10,8 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-int
-main(int argc, char *argv[])
+static int
+test_indexing(void)
 {
 	garray_t *gar, *gar2;
 	size_t n;
@@ -22,6 +22,13 @@ main(int argc, char *argv[])
 		garray_ent(gar, int, i) = i + 42;
 	for (i = 0; i < 10; ++i)
 		TEST_ASSERT(garray_ent(gar, int, i) == i + 42);
+
+	garray_set_cmp(gar, garray_cmp_int32, NULL);
+	i = 45;
+	n = garray_find_first(gar, &i);
+	TEST_ASSERT(garray_ent(gar, int, n) == 45);
+	TEST_ASSERT(n == 3);
+
 	gar2 = garray_retain(gar);
 	garray_free(gar);
 
@@ -49,6 +56,55 @@ main(int argc, char *argv[])
 
 	TEST_ASSERT(garray_set_base(gar, 68) == 0);
 	TEST_ASSERT(garray_ent(gar, int, 72) == 9);
+
 	garray_free(gar);
+	return 0;
+}
+
+static int
+test_sorting(void)
+{
+	static char const *data[] = {
+		"eggs",
+		"spam",
+		"bacon",
+		"eggs",
+		"spam",
+		"spam",
+		"SPAM",
+		"potatoes",
+		"pie"
+	};
+	garray_t *gar, *gar2;
+	int i;
+
+	gar = garray_init(0, sizeof(char const *));
+	for (i = 0; i < 9; ++i)
+		garray_append(gar, &data[i]);
+
+	garray_set_cmp(gar, garray_cmp_str, NULL);
+	garray_sort(gar);
+
+	for (i = 0; i < 8; ++i) {
+		printf("%s\n", garray_ent(gar, char const *, i));
+		TEST_ASSERT(strcmp(garray_ent(gar, char const *, i),
+				   garray_ent(gar, char const *, i)) <= 0);
+	}
+	printf("%s\n", garray_ent(gar, char const *, 8));
+
+	gar2 = garray_sorted(gar);
+	/* Test the strings themselves not the pointers since heapsort
+	 * is not stable while mergesort is. */
+	for (i = 0; i < 9; ++i)
+		TEST_ASSERT(0 == strcmp(garray_ent(gar, char const *, i),
+					garray_ent(gar2, char const *, i)));
+	return 0;
+}
+
+int
+main(int argc, char *argv[])
+{
+	test_indexing();
+	test_sorting();
 	return 0;
 }

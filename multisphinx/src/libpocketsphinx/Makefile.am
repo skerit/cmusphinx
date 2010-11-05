@@ -32,6 +32,7 @@ libpocketsphinx_la_SOURCES =			\
 	state_align_search.c			\
 	tmat.c					\
 	vector.c				\
+	vocab_map.c				\
 	pocketsphinx.c
 
 noinst_HEADERS =				\
@@ -59,6 +60,7 @@ noinst_HEADERS =				\
 	s3types.h				\
 	tied_mgau_common.h			\
 	tmat.h					\
+	vocab_map.h				\
 	vector.h
 
 INCLUDES = -I$(top_srcdir)/include \
