@@ -21,15 +21,16 @@ main(int argc, char *argv[])
 	acmod_t *acmod, *acmod2;
 	featbuf_t *fb;
 	ps_search_t *fwdtree, *fwdflat;
-	mfcc_t ***feat;
-	int nfr, i;
+	FILE *rawfh;
+	int16 buf[2048];
+	size_t nsamp;
 	char const *hyp;
 	int32 score;
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
-			     "-lm", TESTDATADIR "/hub4.5000.DMP",
-			     "-dict", TESTDATADIR "/hub4.5000.dic",
+			     "-lm", TESTDATADIR "/bn.40000.arpa.DMP",
+			     "-dict", TESTDATADIR "/cmu07a.dic",
 			     "-maxwpf", "50",
 			     "-latsize", "512",
 			     NULL);
@@ -53,17 +54,15 @@ main(int argc, char *argv[])
 	ps_search_run(fwdtree);
 	ps_search_run(fwdflat);
 
-	/* Feed it a bunch of data. */
-	nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
-			      ".mfc", 0, -1, NULL, -1);
-	feat = feat_array_alloc(acmod->fcb, nfr);
-	if ((nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
-				   ".mfc", 0, -1, feat, -1)) < 0)
-		E_FATAL("Failed to read mfc file\n");
-
+	/* Feed them a bunch of data. */
+	if ((rawfh = fopen(TESTDATADIR "/i960711p.raw", "rb")) == NULL) {
+		E_FATAL_SYSTEM("Failed to open "TESTDATADIR"/i960711p.raw");
+		return 1;
+	}
 	featbuf_start_utt(fb);
-	for (i = 0; i < nfr; ++i)
-		featbuf_process_feat(fb, feat[i]);
+	while ((nsamp = fread(buf, 2, 2048, rawfh)) > 0)
+		featbuf_process_raw(fb, buf, nsamp, FALSE);
+	fclose(rawfh);
 
 	/* This will wait for search to complete. */
 	E_INFO("Waiting for end of utt\n");
@@ -86,7 +85,6 @@ main(int argc, char *argv[])
 	dict_free(dict);
 	bin_mdef_free(mdef);
 	dict2pid_free(d2p);
-	feat_array_free(feat);
 	logmath_free(lmath);
 	cmd_ln_free_r(config);
 
