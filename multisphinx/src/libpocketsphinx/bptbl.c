@@ -509,7 +509,7 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp)
     E_DEBUG(2,("pushing frame %d, oldest bp %d in frame %d\n",
                frame_idx, oldest_bp,
                oldest_bp == NO_BP
-               ? -1 : bptbl_ent(bptbl, oldest_bp)->frame));
+               ? -1 : bptbl_ent_internal(bptbl, oldest_bp)->frame));
     garray_expand_to(bptbl->ef_idx, frame_idx + 1);
     if (frame_idx - bptbl_active_frame(bptbl) >= bptbl->n_frame_alloc) {
         assert(bptbl->n_frame_alloc != 0);

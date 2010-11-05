@@ -258,6 +258,17 @@ garray_base(garray_t *gar)
 }
 
 void *
+garray_put(garray_t *gar, size_t idx, void const *ent)
+{
+    if (idx < gar->base_idx)
+        return NULL;
+    if ((idx - gar->base_idx) >= gar->n_ent)
+        return NULL;
+    memcpy(garray_void(gar, idx), ent, gar->ent_size);
+    return garray_void(gar, idx);
+}
+
+void *
 garray_insert(garray_t *gar, size_t idx, void const *ent)
 {
     size_t n_move, rv;
@@ -415,7 +426,35 @@ garray_merge(garray_t *dest, size_t outpos,
              garray_t *left, size_t ls, size_t le,
              garray_t *right, size_t rs, size_t re)
 {
-    
+    void *lp, *rp, *lpe, *rpe;
+
+    lp = garray_void(left, ls + left->base_idx);
+    lpe = garray_void(left, le + left->base_idx);
+    rp = garray_void(right, rs + right->base_idx);
+    rpe = garray_void(right, re + right->base_idx);
+
+    while (lp < lpe && rp < rpe) {
+        int cmp = (*dest->cmp)(left, lp, rp, left->udata);
+        if (cmp < 0) {
+            garray_put(dest, outpos, lp);
+            lp = (char *)lp + left->ent_size;
+        }
+        else {
+            garray_put(dest, outpos, rp);
+            rp = (char *)rp + right->ent_size;
+        }
+        ++outpos;
+    }
+    while (lp < lpe) {
+        garray_put(dest, outpos, lp);
+        lp = (char *)lp + left->ent_size;
+        ++outpos;
+    }
+    while (rp < rpe) {
+        garray_put(dest, outpos, rp);
+        rp = (char *)rp + right->ent_size;
+        ++outpos;
+    }
 }
 
 static void
@@ -432,12 +471,13 @@ garray_merge_sort(garray_t *dest, size_t outpos,
                (endpos - startpos) * src->ent_size);
         return;
     }
-    garray_merge_sort(scratch, 0, dest, src, startpos, middle);
-    garray_merge_sort(scratch, middle - startpos,
+    garray_merge_sort(scratch, startpos,
+                      dest, src, startpos, middle);
+    garray_merge_sort(scratch, middle,
                       dest, src, middle, endpos);
-    garray_merge(dest, 0,
-                 scratch, 0, middle - startpos,
-                 scratch, middle - startpos, endpos - middle);
+    garray_merge(dest, startpos,
+                 scratch, startpos, middle,
+                 scratch, middle, endpos);
 }
 
 garray_t *
@@ -445,15 +485,23 @@ garray_sorted(garray_t *gar)
 {
     garray_t *newgar = garray_init(gar->n_ent, gar->ent_size);
     /* Not actually necessary, we hope */
-    garray_t *scratch = garray_init(gar->n_ent, gar->ent_size);
+    garray_t *scratch;
 
     newgar->base_idx = gar->base_idx;
+    newgar->cmp = gar->cmp;
+    newgar->udata = gar->udata;
     if (gar->n_ent < 2) {
         memcpy(newgar->ent, gar->ent, newgar->n_ent * newgar->ent_size);
         return newgar;
     }
 
+    scratch = garray_init(gar->n_ent, gar->ent_size);
+    scratch->base_idx = gar->base_idx;
+    scratch->cmp = gar->cmp;
+    scratch->udata = gar->udata;
+
     garray_merge_sort(newgar, 0, scratch, gar, 0, gar->n_ent);
     garray_free(scratch);
+
     return newgar;
 }
