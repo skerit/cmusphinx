@@ -43,6 +43,7 @@
 #define __ARC_BUFFER_H__
 
 /* SphinxBase headers. */
+#include <sphinxbase/garray.h>
 
 /* Local headers. */
 #include "bptbl.h"
@@ -55,14 +56,100 @@ typedef struct arc_s {
 } arc_t;
 
 typedef struct arc_buffer_s {
-    
+    int refcount;
+    garray_t *arcs;
+    garray_t *sf_idx;
+    int active_sf; /**< First frame of incoming arcs. */
+    int next_sf;   /**< First frame not containing arcs (last frame + 1)
+                      (FIXME: same as garray_next_ent(sf_idx)). */
+    int active_arc; /**< First incoming arc. */
 } arc_buffer_t;
 
-arc_buffer_t *arc_buffer_init();
-arc_buffer_t *arc_buffer_retain(arc_buffer_t *ab);
-int arc_buffer_free(arc_buffer_t *ab);
+/**
+ * Create a new arc buffer.
+ */
+arc_buffer_t *arc_buffer_init(void);
 
+/**
+ * Retain a pointer to an arc buffer.
+ */
+arc_buffer_t *arc_buffer_retain(arc_buffer_t *fab);
 
+/**
+ * Release a pointer to an arc buffer.
+ */
+int arc_buffer_free(arc_buffer_t *fab);
 
+/**
+ * Clear the contents of an arc buffer.
+ */
+void arc_buffer_reset(arc_buffer_t *fab);
+
+/**
+ * Dump contents of arc buffer for debugging.
+ */
+void arc_buffer_dump(arc_buffer_t *fab);
+
+/**
+ * Extend the arc buffer up to the given frame index.
+ *
+ * @param next_sf Index of last start frame to be added to the buffer,
+ * plus one.
+ */
+int arc_buffer_extend(arc_buffer_t *fab, int next_sf);
+
+/**
+ * Add arcs to the buffer from a bptbl.
+ *
+ * Only arcs starting in the newly extended frames will be
+ * successfully added to the buffer.
+ *
+ * @param bptbl Backpointer table to take arcs from.
+ * @param start First backpointer index to add to the buffer.
+ * @param end One past the last backpointer index to add to the buffer.
+ * @return The first backpointer index between start and end which
+ *         starts after the next active frame, i.e. the first
+ *         backpointer index which must be preserved for the next pass
+ *         of arc addition.
+ */
+bpidx_t arc_buffer_add_bps(arc_buffer_t *fab,
+                                   bptbl_t *bptbl, bpidx_t start,
+                                   bpidx_t end);
+/**
+ * Commit extended arcs to the arc buffer.
+ *
+ * This freezes in place the start frames added since the last call to
+ * arc_buffer_extend().  No more arcs with these start frames
+ * may be added to the arc buffer.
+ */
+int arc_buffer_commit(arc_buffer_t *fab);
+
+/**
+ * Iterate over arcs in the arc buffer starting at given frame.
+ *
+ * @param sf Frame to iterate over.
+ * @return First arc in frame, or NULL if frame not available.
+ */
+arc_t *arc_buffer_iter(arc_buffer_t *fab, int sf);
+
+/**
+ * Move the arc pointer forward.
+ */
+arc_t *arc_next(arc_buffer_t *fab, arc_t *ab);
+
+/**
+ * Wait until arcs for the given frame are committed.
+ *
+ * @return First arc in sf, or NULL if the utterance was terminated
+ *         before sf was reached.
+ */
+arc_t *arc_buffer_wait(arc_buffer_t *fab, int sf);
+
+/**
+ * Release old arcs from the arc buffer.
+ *
+ * This releases all arcs starting in frames before first_sf.
+ */
+int arc_buffer_release(arc_buffer_t *fab, int first_sf);
 
 #endif /* __ARC_BUFFER_H__ */

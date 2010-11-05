@@ -8,8 +8,8 @@ main(int argc, char *argv[])
 	bin_mdef_t *mdef;
 	dict2pid_t *d2p;
 	dict_t *dict;
-	fwdflat_arc_buffer_t *arcs;
-	fwdflat_arc_t *a;
+	arc_buffer_t *arcs;
+	arc_t *a;
 	cmd_ln_t *config;
 	bptbl_t *bptbl;
 	int fi, i, next_sf;
@@ -28,7 +28,7 @@ main(int argc, char *argv[])
 
 	bptbl = bptbl_init(d2p, 10, 10);
 
-	arcs = fwdflat_arc_buffer_init();
+	arcs = arc_buffer_init();
 
 	/* Enter a bunch of initial bps (like silence) */
 	fi = bptbl_push_frame(bptbl, NO_BP);
@@ -55,11 +55,11 @@ main(int argc, char *argv[])
 	bptbl_dump(bptbl);
 	next_sf = bptbl_active_sf(bptbl);
 	E_INFO("next_sf %d\n", next_sf);
-	fwdflat_arc_buffer_extend(arcs, next_sf);
-	i = fwdflat_arc_buffer_add_bps(arcs, bptbl,
+	arc_buffer_extend(arcs, next_sf);
+	i = arc_buffer_add_bps(arcs, bptbl,
 				       0, bptbl_retired_idx(bptbl));
 	E_INFO("Added %d arcs\n", i);
-	fwdflat_arc_buffer_commit(arcs);
+	arc_buffer_commit(arcs);
 
 	/* Now add a bunch of stuff to see what happens. */
 	for (i = 0; i < 6; ++i) {
@@ -74,11 +74,11 @@ main(int argc, char *argv[])
 	next_sf = bptbl_ent(bptbl,
 			    bptbl->oldest_bp)->frame + 1;
 	E_INFO("next_sf %d\n", next_sf);
-	fwdflat_arc_buffer_extend(arcs, next_sf);
-	i = fwdflat_arc_buffer_add_bps(arcs, bptbl,
+	arc_buffer_extend(arcs, next_sf);
+	i = arc_buffer_add_bps(arcs, bptbl,
 				       0, bptbl_retired_idx(bptbl));
 	E_INFO("Added %d arcs\n", i);
-	fwdflat_arc_buffer_commit(arcs);
+	arc_buffer_commit(arcs);
 
 	for (i = 0; i < 3; ++i) {
 		bp = bptbl_enter(bptbl, 420, 6, 39 + i, 0);
@@ -88,37 +88,37 @@ main(int argc, char *argv[])
 	next_sf = bptbl_ent(bptbl,
 			    bptbl->oldest_bp)->frame + 1;
 	E_INFO("next_sf %d\n", next_sf);
-	fwdflat_arc_buffer_extend(arcs, next_sf);
-	i = fwdflat_arc_buffer_add_bps(arcs, bptbl,
+	arc_buffer_extend(arcs, next_sf);
+	i = arc_buffer_add_bps(arcs, bptbl,
 				       0, bptbl_retired_idx(bptbl));
 	E_INFO("Added %d arcs\n", i);
-	fwdflat_arc_buffer_commit(arcs);
+	arc_buffer_commit(arcs);
 
-	a = fwdflat_arc_buffer_iter(arcs, 2);
+	a = arc_buffer_iter(arcs, 2);
 	TEST_ASSERT(a->wid == 69);
-	a = fwdflat_arc_next(arcs, a);
+	a = arc_next(arcs, a);
 	TEST_ASSERT(a->wid == 69);
-	a = fwdflat_arc_next(arcs, a);
-	TEST_ASSERT(a == fwdflat_arc_buffer_iter(arcs, 3));
+	a = arc_next(arcs, a);
+	TEST_ASSERT(a == arc_buffer_iter(arcs, 3));
 
-	for (a = fwdflat_arc_buffer_iter(arcs, 6);
-	     a != fwdflat_arc_buffer_iter(arcs, 8);
-	     a = fwdflat_arc_next(arcs, a)) {
+	for (a = arc_buffer_iter(arcs, 6);
+	     a != arc_buffer_iter(arcs, 8);
+	     a = arc_next(arcs, a)) {
 		TEST_ASSERT(a->wid == 42 || a->wid == 420);
-		TEST_ASSERT(a->sf >= 6 && a->sf < 8);
+		TEST_ASSERT(a->src >= 6 && a->src < 8);
 	}
 
-	fwdflat_arc_buffer_dump(arcs);
-	fwdflat_arc_buffer_release(arcs, 6);
-	for (a = fwdflat_arc_buffer_iter(arcs, 6);
-	     a != fwdflat_arc_buffer_iter(arcs, 8);
-	     a = fwdflat_arc_next(arcs, a)) {
-		printf("%d %d %d\n", a->wid, a->sf, a->ef);
+	arc_buffer_dump(arcs);
+	arc_buffer_release(arcs, 6);
+	for (a = arc_buffer_iter(arcs, 6);
+	     a != arc_buffer_iter(arcs, 8);
+	     a = arc_next(arcs, a)) {
+		printf("%d %d %d\n", a->wid, a->src, a->dest);
 		TEST_ASSERT(a->wid == 42 || a->wid == 420);
-		TEST_ASSERT(a->sf >= 6 && a->sf < 8);
+		TEST_ASSERT(a->src >= 6 && a->src < 8);
 	}
-	fwdflat_arc_buffer_dump(arcs);
-	fwdflat_arc_buffer_free(arcs);
+	arc_buffer_dump(arcs);
+	arc_buffer_free(arcs);
 	bptbl_free(bptbl);
 	dict2pid_free(d2p);
 	dict_free(dict);

@@ -169,7 +169,7 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     /* FIXME: Make this a garray_t */
     ffs->expand_word_list = ckd_calloc(ps_search_n_words(ffs),
                                       sizeof(*ffs->expand_word_list));
-    ffs->input_arcs = fwdflat_arc_buffer_init();
+    ffs->input_arcs = arc_buffer_init();
 
     ffs->bptbl = bptbl_init(d2p, cmd_ln_int32_r(config, "-latsize"), 256);
     ffs->input_bptbl = bptbl_retain(input_bptbl);
@@ -283,7 +283,7 @@ fwdflat_search_free(ps_search_t *base)
     ckd_free_2d(ffs->active_word_list);
     ckd_free(ffs->rcss);
 
-    fwdflat_arc_buffer_free(ffs->input_arcs);
+    arc_buffer_free(ffs->input_arcs);
     garray_free(ffs->word_list);
     bitvec_free(ffs->utt_vocab);
 
@@ -410,7 +410,7 @@ fwdflat_search_start(ps_search_t *base)
     int i;
 
     bptbl_reset(ffs->bptbl);
-    fwdflat_arc_buffer_reset(ffs->input_arcs);
+    arc_buffer_reset(ffs->input_arcs);
     ffs->oldest_bp = -1;
     ffs->next_idx = 0;
     for (i = 0; i < ps_search_n_words(ffs); i++)
@@ -928,14 +928,14 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
 static int
 fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
 {
-    fwdflat_arc_t *arc_start, *arc_end, *arc;
+    arc_t *arc_start, *arc_end, *arc;
     dict_t *dict = ps_search_dict(ffs);
 
-    arc_start = fwdflat_arc_buffer_iter(ffs->input_arcs, sf);
-    arc_end = fwdflat_arc_buffer_iter(ffs->input_arcs, ef);
+    arc_start = arc_buffer_iter(ffs->input_arcs, sf);
+    arc_end = arc_buffer_iter(ffs->input_arcs, ef);
     bitvec_clear_all(ffs->expand_words, ps_search_n_words(ffs));
     for (arc = arc_start; arc != arc_end;
-         arc = fwdflat_arc_next(ffs->input_arcs, arc)) {
+         arc = arc_next(ffs->input_arcs, arc)) {
         if (!bitvec_is_set(ffs->expand_words, arc->wid)
             && ngram_model_set_known_wid(ffs->lmset, dict_basewid(dict, arc->wid)))
             bitvec_set(ffs->expand_words, arc->wid);
@@ -966,14 +966,14 @@ fwdflat_search_decode(ps_search_t *base)
             break;
         next_sf = bptbl_active_sf(ffs->input_bptbl);
         /* Extend the arc buffer the appropriate number of frames. */
-        if (fwdflat_arc_buffer_extend(ffs->input_arcs, next_sf) > 0) {
+        if (arc_buffer_extend(ffs->input_arcs, next_sf) > 0) {
             E_DEBUG(2, ("oldest_bp %d next_idx %d\n",
                         ffs->input_bptbl->oldest_bp, ffs->next_idx));
             /* Add the next chunk of bps to the arc buffer. */
-            ffs->next_idx = fwdflat_arc_buffer_add_bps
+            ffs->next_idx = arc_buffer_add_bps
                 (ffs->input_arcs, ffs->input_bptbl,
                  ffs->next_idx, bptbl_retired_idx(ffs->input_bptbl));
-            fwdflat_arc_buffer_commit(ffs->input_arcs);
+            arc_buffer_commit(ffs->input_arcs);
             /* Release bps we won't need anymore. */
             E_DEBUG(2, ("oldest_bp %d next_idx %d\n",
                         ffs->input_bptbl->oldest_bp, ffs->next_idx));
@@ -998,7 +998,7 @@ fwdflat_search_decode(ps_search_t *base)
         /* Decode while we have a big enough window. */
         end_win = frame_idx + ffs->max_sf_win;
         while (final
-               || fwdflat_arc_buffer_iter(ffs->input_arcs,
+               || arc_buffer_iter(ffs->input_arcs,
                                           end_win - 1) != NULL) {
             int start_win;
 
@@ -1014,7 +1014,7 @@ fwdflat_search_decode(ps_search_t *base)
             if ((k = fwdflat_search_one_frame(ffs, frame_idx)) <= 0)
                 break;
             frame_idx += k;
-            fwdflat_arc_buffer_release(ffs->input_arcs, start_win);
+            arc_buffer_release(ffs->input_arcs, start_win);
         }
     }
     fwdflat_search_finish(ps_search_base(ffs));
@@ -1082,212 +1082,4 @@ fwdflat_search_seg_iter(ps_search_t *base, int32 *out_score)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
     return bptbl_seg_iter(ffs->bptbl, out_score, ps_search_finish_wid(ffs));
-}
-
-fwdflat_arc_buffer_t *
-fwdflat_arc_buffer_init(void)
-{
-    fwdflat_arc_buffer_t *fab;
-
-    fab = ckd_calloc(1, sizeof(*fab));
-    fab->refcount = 1;
-    fab->arcs = garray_init(0, sizeof(fwdflat_arc_t));
-    fab->sf_idx = garray_init(0, sizeof(int));
-
-    return fab;
-}
-
-fwdflat_arc_buffer_t *
-fwdflat_arc_buffer_retain(fwdflat_arc_buffer_t *fab)
-{
-    ++fab->refcount;
-    return fab;
-}
-
-int
-fwdflat_arc_buffer_free(fwdflat_arc_buffer_t *fab)
-{
-    if (fab == NULL)
-        return 0;
-    if (--fab->refcount > 0)
-        return fab->refcount;
-
-    garray_free(fab->sf_idx);
-    garray_free(fab->arcs);
-    ckd_free(fab);
-    return 0;
-}
-
-void
-fwdflat_arc_buffer_dump(fwdflat_arc_buffer_t *fab)
-{
-    size_t i, n_arcs;
-
-    n_arcs = garray_next_idx(fab->arcs);
-    E_INFO("Arc buffer %p: %d arcs:\n", fab, n_arcs);
-    for (i = garray_base(fab->arcs); i < n_arcs; ++i) {
-        fwdflat_arc_t *arc = garray_ptr(fab->arcs, fwdflat_arc_t, i);
-        E_INFO_NOFN("wid %d sf %d ef %d\n",
-                    arc->wid, arc->sf, arc->ef);
-    }
-}
-
-int
-fwdflat_arc_buffer_extend(fwdflat_arc_buffer_t *fab, int next_sf)
-{
-    if (next_sf == fab->next_sf)
-        return 0;
-    garray_expand_to(fab->sf_idx, next_sf);
-    fab->next_sf = next_sf;
-    garray_clear(fab->sf_idx, fab->active_sf, fab->next_sf - fab->active_sf);
-    return next_sf - fab->active_sf;
-}
-
-bpidx_t
-fwdflat_arc_buffer_add_bps(fwdflat_arc_buffer_t *fab,
-                           bptbl_t *bptbl, bpidx_t start,
-                           bpidx_t end)
-{
-    bpidx_t idx, next_idx;
-    int n_arcs;
-
-    n_arcs = 0;
-    next_idx = -1;
-    for (idx = start; idx < end; ++idx) {
-        fwdflat_arc_t arc;
-        bp_t *ent;
-
-        /* Convert it to an arc. */
-        ent = bptbl_ent(bptbl, idx);
-        arc.wid = ent->wid;
-        arc.sf = bptbl_sf(bptbl, idx);
-        arc.ef = ent->frame;
-        /* If it's inside the appropriate frame span, add it. */
-        if (arc.sf >= fab->active_sf && arc.sf < fab->next_sf) {
-            garray_append(fab->arcs, &arc);
-            /* Increment the frame counter for its start frame. */
-            ++garray_ent(fab->sf_idx, int, arc.sf);
-            ++n_arcs;
-        }
-        else {
-            if (arc.sf >= fab->active_sf && next_idx == -1)
-                next_idx = idx;
-        }
-    }
-
-    E_DEBUG(2,("Added bps from frame %d to %d, index %d to %d\n",
-               fab->active_sf, fab->next_sf,
-               start, end));
-    if (next_idx == -1)
-        next_idx = end;
-    return next_idx;
-}
-
-int
-fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab)
-{
-    size_t n_arcs;
-    int n_active_fr, i, prev_count;
-    garray_t *active_arc;
-    garray_t *active_sf;
-    int *sf;
-
-    /* Save frame and arc counts. */
-    n_active_fr = fab->next_sf - fab->active_sf;
-    n_arcs = garray_next_idx(fab->arcs) - fab->active_arc;
-
-    /* Nothing to do... */
-    if (n_active_fr == 0) {
-        assert(n_arcs == 0);
-        return 0;
-    }
-
-    /* Sum forward frame counters to create arc indices. */
-    sf = garray_ptr(fab->sf_idx, int, fab->active_sf);
-    prev_count = sf[0];
-    sf[0] = fab->active_arc;
-    for (i = 1; i < n_active_fr; ++i)  {
-        int tmp = sf[i];
-        sf[i] = sf[i-1] + prev_count;
-        prev_count = tmp;
-    }
-
-    if (n_arcs > 0) {
-        /* Permute incoming arcs to match frame counters */
-        active_sf = garray_slice(fab->sf_idx, fab->active_sf, n_active_fr);
-        active_arc = garray_slice(fab->arcs, fab->active_arc, n_arcs);
-
-        for (i = 0; i < n_arcs; ++i) {
-            fwdflat_arc_t *arc = garray_ptr(active_arc, fwdflat_arc_t, i);
-            int *pos = garray_ptr(active_sf, int, arc->sf - fab->active_sf);
-            /* Copy it into place. */
-            garray_ent(fab->arcs, fwdflat_arc_t, *pos) = *arc;
-            /* Increment local frame counter. */
-            *pos += 1;
-        }
-
-        garray_free(active_sf);
-        garray_free(active_arc);
-    }
-
-    /* Update frame and arc pointers. */
-    fab->active_sf += n_active_fr;
-    fab->active_arc += n_arcs;
-    return n_arcs;
-}
-
-fwdflat_arc_t *
-fwdflat_arc_buffer_iter(fwdflat_arc_buffer_t *fab, int sf)
-{
-    int idx;
-    if (sf < garray_base(fab->sf_idx) || sf >= fab->active_sf)
-        return NULL;
-    idx = garray_ent(fab->sf_idx, int, sf);
-    if (idx >= fab->active_arc)
-        return NULL;
-    return garray_ptr(fab->arcs, fwdflat_arc_t, idx);
-
-}
-
-fwdflat_arc_t *
-fwdflat_arc_next(fwdflat_arc_buffer_t *fab, fwdflat_arc_t *ab)
-{
-    ab += 1;
-    if (ab >= garray_ptr(fab->arcs, fwdflat_arc_t, fab->active_arc))
-        return NULL;
-    return ab;
-}
-
-fwdflat_arc_t *
-fwdflat_arc_buffer_wait(fwdflat_arc_buffer_t *fab, int sf)
-{
-    /* FIXME: Implement this... */
-    return NULL;
-}
-
-int
-fwdflat_arc_buffer_release(fwdflat_arc_buffer_t *fab, int first_sf)
-{
-    int next_first_arc;
-    if (first_sf == garray_base(fab->sf_idx))
-        return 0;
-
-    /* Get the new first arc. */
-    next_first_arc = garray_ent(fab->sf_idx, int, first_sf);
-    /* Shift back start frames and arcs. */
-    garray_shift_from(fab->sf_idx, first_sf);
-    garray_set_base(fab->sf_idx, first_sf);
-    garray_shift_from(fab->arcs, next_first_arc);
-    garray_set_base(fab->arcs, next_first_arc);
-
-    return 0;
-}
-
-void
-fwdflat_arc_buffer_reset(fwdflat_arc_buffer_t *fab)
-{
-    fab->active_sf = fab->next_sf = 0;
-    fab->active_arc = 0;
-    garray_reset(fab->arcs);
-    garray_reset(fab->sf_idx);
 }

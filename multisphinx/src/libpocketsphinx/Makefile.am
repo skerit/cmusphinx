@@ -11,6 +11,7 @@ libpocketsphinx_la_LIBADD = $(top_builddir)/src/libsphinxbase/libsphinxbase.la
 
 libpocketsphinx_la_SOURCES =			\
 	acmod.c					\
+	arc_buffer.c				\
 	bin_mdef.c				\
 	bptbl.c					\
 	dict.c					\
@@ -36,6 +37,7 @@ libpocketsphinx_la_SOURCES =			\
 noinst_HEADERS =				\
 	pocketsphinx_internal.h			\
 	acmod.h					\
+	arc_buffer.h				\
 	bptbl.h					\
 	bin_mdef.h				\
 	dict.h					\

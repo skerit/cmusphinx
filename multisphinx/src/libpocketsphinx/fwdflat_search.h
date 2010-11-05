@@ -47,6 +47,7 @@
 
 /* Local headers. */
 #include "bptbl.h"
+#include "arc_buffer.h"
 #include "hmm.h"
 
 /**
@@ -86,116 +87,6 @@ typedef struct first_node_s {
     int16    ci2phone;		/**< second ciphone of this node; one first HMM for each
                                    unique right context */
 } first_node_t;
-
-/**
- * Word arcs from input bptbl
- */
-typedef struct fwdflat_arc_s {
-    int32 wid;
-    int16 sf;
-    int16 ef;
-} fwdflat_arc_t;
-
-/**
- * Arc buffer, used to store word arcs for use in fast-matching
- */
-
-typedef struct fwdflat_arc_buffer_s {
-    int refcount;
-    garray_t *arcs;
-    garray_t *sf_idx;
-    int active_sf; /**< First frame of incoming arcs. */
-    int next_sf;   /**< First frame not containing arcs (last frame + 1)
-                      (FIXME: same as garray_next_ent(sf_idx)). */
-    int active_arc; /**< First incoming arc. */
-} fwdflat_arc_buffer_t;
-
-/**
- * Create a new arc buffer.
- */
-fwdflat_arc_buffer_t *fwdflat_arc_buffer_init(void);
-
-/**
- * Retain a pointer to an arc buffer.
- */
-fwdflat_arc_buffer_t *fwdflat_arc_buffer_retain(fwdflat_arc_buffer_t *fab);
-
-/**
- * Release a pointer to an arc buffer.
- */
-int fwdflat_arc_buffer_free(fwdflat_arc_buffer_t *fab);
-
-/**
- * Clear the contents of an arc buffer.
- */
-void fwdflat_arc_buffer_reset(fwdflat_arc_buffer_t *fab);
-
-/**
- * Dump contents of arc buffer for debugging.
- */
-void fwdflat_arc_buffer_dump(fwdflat_arc_buffer_t *fab);
-
-/**
- * Extend the arc buffer up to the given frame index.
- *
- * @param next_sf Index of last start frame to be added to the buffer,
- * plus one.
- */
-int fwdflat_arc_buffer_extend(fwdflat_arc_buffer_t *fab, int next_sf);
-
-/**
- * Add arcs to the buffer from a bptbl.
- *
- * Only arcs starting in the newly extended frames will be
- * successfully added to the buffer.
- *
- * @param bptbl Backpointer table to take arcs from.
- * @param start First backpointer index to add to the buffer.
- * @param end One past the last backpointer index to add to the buffer.
- * @return The first backpointer index between start and end which
- *         starts after the next active frame, i.e. the first
- *         backpointer index which must be preserved for the next pass
- *         of arc addition.
- */
-bpidx_t fwdflat_arc_buffer_add_bps(fwdflat_arc_buffer_t *fab,
-                                   bptbl_t *bptbl, bpidx_t start,
-                                   bpidx_t end);
-/**
- * Commit extended arcs to the arc buffer.
- *
- * This freezes in place the start frames added since the last call to
- * fwdflat_arc_buffer_extend().  No more arcs with these start frames
- * may be added to the arc buffer.
- */
-int fwdflat_arc_buffer_commit(fwdflat_arc_buffer_t *fab);
-
-/**
- * Iterate over arcs in the arc buffer starting at given frame.
- *
- * @param sf Frame to iterate over.
- * @return First arc in frame, or NULL if frame not available.
- */
-fwdflat_arc_t *fwdflat_arc_buffer_iter(fwdflat_arc_buffer_t *fab, int sf);
-
-/**
- * Move the arc pointer forward.
- */
-fwdflat_arc_t *fwdflat_arc_next(fwdflat_arc_buffer_t *fab, fwdflat_arc_t *ab);
-
-/**
- * Wait until arcs for the given frame are committed.
- *
- * @return First arc in sf, or NULL if the utterance was terminated
- *         before sf was reached.
- */
-fwdflat_arc_t *fwdflat_arc_buffer_wait(fwdflat_arc_buffer_t *fab, int sf);
-
-/**
- * Release old arcs from the arc buffer.
- *
- * This releases all arcs starting in frames before first_sf.
- */
-int fwdflat_arc_buffer_release(fwdflat_arc_buffer_t *fab, int first_sf);
 
 /**
  * Various statistics for profiling.
@@ -239,7 +130,7 @@ typedef struct fwdflat_search_s {
      * Arc buffer, used for input words.
      */
     bptbl_t *input_bptbl;
-    fwdflat_arc_buffer_t *input_arcs;
+    arc_buffer_t *input_arcs;
     bpidx_t next_idx;     /**< Next incoming bptbl idx to scan for arcs. */
     int max_sf_win;       /**< Window size for word entries. */
 
