@@ -42,6 +42,7 @@
  */
 
 #include <string.h>
+#include <ctype.h>
 
 #include <sphinxbase/pio.h>
 #include <sphinxbase/garray.h>
@@ -58,6 +59,7 @@
 struct ngram_trie_s {
     int refcount;
     dict_t *dict;      /**< Dictionary which maps words to IDs. */
+    int gendict;       /**< Is the dictionary generated from the unigram? */
     logmath_t *lmath;  /**< Log-math used for input/output. */
     int shift;         /**< Shift applied internally to log values. */
     int zero;          /**< Minimum allowable log value. */
@@ -98,6 +100,20 @@ struct ngram_trie_iter_s {
     int nostop;             /**< Continue to next node at same level. */
 };
 
+static int
+ngram_trie_nodeptr_cmp(garray_t *gar, void const *a, void const *b, void *udata)
+{
+    ngram_trie_node_t *na, *nb;
+    ngram_trie_t *t;
+
+    na = *(ngram_trie_node_t **)a;
+    nb = *(ngram_trie_node_t **)b;
+    t = (ngram_trie_t *)udata;
+
+    return strcmp(dict_wordstr(t->dict, na->word),
+                  dict_wordstr(t->dict, nb->word));
+}
+
 ngram_trie_node_t *
 ngram_trie_node_alloc(ngram_trie_t *t)
 {
@@ -109,6 +125,7 @@ ngram_trie_node_alloc(ngram_trie_t *t)
     node->log_bowt = 0;
     node->history = NULL;
     node->successors = garray_init(0, sizeof(ngram_trie_node_t *));
+    garray_set_cmp(node->successors, &ngram_trie_nodeptr_cmp, t);
 
     return node;
 }
@@ -120,10 +137,14 @@ ngram_trie_init(dict_t *d, logmath_t *lmath)
 
     t = ckd_calloc(1, sizeof(*t));
     t->refcount = 1;
-    if (d)
+    if (d) {
         t->dict = dict_retain(d);
-    else
+        t->gendict = FALSE;
+    }
+    else {
         t->dict = dict_init(NULL, NULL);
+        t->gendict = TRUE;
+    }
     t->lmath = logmath_retain(lmath);
 
     /* Determine proper shift to fit min_logprob in 16 bits. */
@@ -227,6 +248,14 @@ ngram_trie_ngram_v(ngram_trie_t *t, int32 w,
                    int32 const *hist, int32 n_hist)
 {
     ngram_trie_node_t *node;
+    int i;
+
+    E_INFO("Looking for N-Gram %s |",
+           dict_wordstr(t->dict, w));
+    for (i = 0; i < n_hist; ++i) {
+        E_INFOCONT(" %s", dict_wordstr(t->dict, hist[n_hist - 1 - i]));
+    }
+    E_INFOCONT("\n");
 
     node = ngram_trie_root(t);
     if (n_hist > t->n - 1)
@@ -413,7 +442,11 @@ ngram_trie_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
 {
     size_t pos;
 
+    E_INFO("Looking for successor %s in node with head word %s\n",
+           dict_wordstr(t->dict, w), h->word == -1 
+           ? "<root>" : dict_wordstr(t->dict, h->word));
     pos = ngram_trie_successor_pos(t, h, w);
+    E_INFO("pos = %lu wtf\n", pos);
     if (pos >= garray_next_idx(h->successors))
         return NULL;
     return garray_ent(h->successors, ngram_trie_node_t *, pos);
@@ -446,7 +479,10 @@ ngram_trie_add_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
     ng->word = w;
     ng->history = h;
     pos = garray_bisect_right(h->successors, &ng);
-    garray_insert(h->successors, pos, &ng);
+    if (pos == garray_next_idx(h->successors))
+        garray_append(h->successors, &ng);
+    else
+        garray_insert(h->successors, pos, &ng);
 
     return ng;
 }
@@ -459,7 +495,10 @@ ngram_trie_add_successor_ngram(ngram_trie_t *t,
     size_t pos;
 
     pos = garray_bisect_right(h->successors, &w);
-    garray_insert(h->successors, pos, &w);
+    if (pos == garray_next_idx(h->successors))
+        garray_append(h->successors, &w);
+    else
+        garray_insert(h->successors, pos, &w);
 
     return 0;
 }
@@ -605,6 +644,7 @@ read_ngram_counts(lineiter_t *li, garray_t *counts)
                 E_ERROR("Invalid N-Gram count line when reading ARPA format");
                 return -1;
             }
+            E_INFO("%s\n", li->buf);
             *c++ = '\0';
             ni = atoi(n);
             ci = atoi(c);
@@ -615,10 +655,157 @@ read_ngram_counts(lineiter_t *li, garray_t *counts)
     return garray_size(counts) - 1;
 }
 
+static ngram_trie_node_t *
+add_ngram_line(ngram_trie_t *t, char *buf, int n,
+               char **wptr, int32 *wids,
+               ngram_trie_node_t **last_history)
+{
+    int nwords = str2words(buf, NULL, 0);
+    double prob, bowt;
+    int i;
+    char *libuf = ckd_salloc(buf);
+    ngram_trie_node_t *node;
+
+    assert(nwords <= n + 2);
+    if (nwords < n + 1) {
+        E_ERROR("Expected at least %d fields for %d-Gram\n", n+1, n);
+        return NULL;
+    }
+    str2words(buf, wptr, nwords);
+
+    prob = atof_c(wptr[0]);
+    if (nwords == n + 2)
+        bowt = atof_c(wptr[n + 1]);
+    else
+        bowt = 0.0;
+
+    wids[0] = dict_wordid(t->dict, wptr[n]);
+    /* Add a unigram word to the dictionary if we are generating one. */
+    if (wids[0] == BAD_S3WID) {
+        if (t->gendict)
+            wids[0] = dict_add_word(t->dict, wptr[n], NULL, 0);
+        else {
+            E_WARN("Unknown unigram %s in ARPA file, skipping\n");
+            return NULL;
+        }
+    }
+    for (i = 1; i < n; ++i) {
+        wids[i] = dict_wordid(t->dict, wptr[n-i]);
+        if (wids[i] == BAD_S3WID) {
+            E_WARN("Unknown unigram %s in ARPA file, skipping\n");
+            return NULL;
+        }
+    }
+    E_INFO("Line is %s N-Gram is %s |",
+           libuf,
+           dict_wordstr(t->dict, wids[0]));
+    for (i = 1; i < n; ++i) {
+        E_INFOCONT(" %s", dict_wordstr(t->dict, wids[n-i]));
+    }
+    E_INFOCONT("\n");
+    ckd_free(libuf);
+
+    /* Determine if this N-Gram has the same history as the previous one. */
+    if (n == 1) {
+        /* Always the same. */
+        assert(*last_history == t->root);
+    }
+    else {
+        /* Unfortunately, we can't (well, we shouldn't) assume that
+         * the N-Grams are sorted, so we have to look up the entire
+         * history. */
+        ngram_trie_node_t *h = *last_history;
+        for (i = 1; h != NULL && i < n; ++i) {
+            if (h->word != wids[i])
+                break;
+            h = h->history;
+        }
+        /* Not an exact match, have to get a new one. */
+        if (i < n)
+            *last_history = ngram_trie_ngram_v(t, wids[1], wids + 2, n - 2);
+        if (*last_history == NULL) {
+            E_WARN("Unknown history for N-Gram: %s |",
+                   dict_wordstr(t->dict, wids[0]));
+            for (i = 1; i < n; ++i) {
+                E_INFOCONT(" %s", dict_wordstr(t->dict, wids[n-i]));
+            }
+            E_INFOCONT("\n");
+            return NULL;
+        }
+    }
+
+    /* Fall through and add a successor to last_history. */
+    node = ngram_trie_add_successor(t, *last_history, wids[0]);
+    node->log_prob = logmath_log(t->lmath, prob) >> t->shift;
+    node->log_bowt = logmath_log(t->lmath, bowt) >> t->shift;
+    node->history = *last_history;
+    return node;
+}
+
+static int
+read_ngrams(ngram_trie_t *t, lineiter_t *li, int n)
+{
+    /* Pre-allocate these. */
+    char **wptr = ckd_calloc(n + 2, sizeof(*wptr));
+    int32 *wids = ckd_calloc(n, sizeof(*wids));
+    ngram_trie_node_t *last_history;
+
+    if (n == 1)
+        last_history = t->root; /* always the same for 1-grams */
+    else
+        last_history = NULL;
+    for (;li;li = lineiter_next(li)) {
+        string_trim(li->buf, STRING_BOTH);
+        /* Skip blank lines. */
+        if (strlen(li->buf) == 0)
+            continue;
+        /* No more N-Grams to work with. */
+        if (0 == strcmp(li->buf, "\\end\\"))
+            return 0;
+        /* Look for an N-Gram start marker. */
+        if (li->buf[0] == '\\') {
+            char *c;
+            int nn;
+
+            if (!isdigit(li->buf[1])) {
+                E_ERROR("Expected an N-Gram start marker, got %s", li->buf);
+                ckd_free(wptr);
+                return -1;
+            }
+            for (c = li->buf + 1; *c && isdigit(*c); ++c)
+                ;
+            if (0 != strcmp(c, "-grams:")) {
+                E_ERROR("Expected an N-Gram start marker, got %s", li->buf);
+                ckd_free(wptr);
+                return -1;
+            }
+            nn = atoi(li->buf + 1);
+            if (nn > n) {
+                ckd_free(wptr);
+                return nn;
+            }
+            else {
+                E_INFO("%s\n", li->buf);
+                continue;
+            }
+        }
+        /* Now interpret the line as an N-Gram. */
+        if (add_ngram_line(t, li->buf, n, wptr,
+                           wids, &last_history) == NULL) {
+            ckd_free(wptr);
+            return -1;
+        }
+    }
+    ckd_free(wptr);
+    E_ERROR("Expected \\end\\ or an N-Gram marker\n");
+    return -1;
+}
+
 int
 ngram_trie_read_arpa(ngram_trie_t *t, FILE *arpafile)
 {
     lineiter_t *li;
+    int n;
 
     li = lineiter_start(arpafile);
 
@@ -631,7 +818,13 @@ ngram_trie_read_arpa(ngram_trie_t *t, FILE *arpafile)
         return -1;
 
     /* Now read each set of N-Grams for 1..n */
-    
+    n = 1;
+    while ((n = read_ngrams(t, li, n)) > 1)
+        ;
+    lineiter_free(li);
+    if (n < 0)
+        return -1;
+
     return 0;
 }
 
