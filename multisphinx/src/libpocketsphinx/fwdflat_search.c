@@ -562,12 +562,7 @@ fwdflat_search_save_bp(fwdflat_search_t *ffs, int frame_idx,
         /* Keep only the best scoring one (this is a potential source
          * of search errors...) */
         if (bpe.score WORSE_THAN score) {
-            if (bpe.bp != path) {
-                bpe.bp = path;
-                bptbl_fake_lmstate(ffs->bptbl, bp, path);
-            }
-            bpe.score = score;
-            bptbl_set_bp(ffs->bptbl, bp, &bpe);
+            bptbl_fake_lmstate(ffs->bptbl, bp, path, score);
         }
         /* But do keep track of scores for all right contexts, since
          * we need them to determine the starting path scores for any

@@ -158,10 +158,10 @@ hmm_dump(hmm_t * hmm,
     fprintf(fp, " %11d", hmm_out_score(hmm));
     fprintf(fp, "\n");
 
-    fprintf(fp, "HISTID %11d", hmm_in_history(hmm));
+    fprintf(fp, "HISTID %11d", hmm_in_history(hmm) == INT_MAX ? -1 : hmm_in_history(hmm));
     for (i = 1; i < hmm_n_emit_state(hmm); i++)
-        fprintf(fp, " %11d", hmm_history(hmm, i));
-    fprintf(fp, " %11d", hmm_out_history(hmm));
+        fprintf(fp, " %11d", hmm_history(hmm, i) == INT_MAX ? -1 : hmm_history(hmm, i));
+    fprintf(fp, " %11d", hmm_out_history(hmm) == INT_MAX ? -1 : hmm_out_history(hmm));
     fprintf(fp, "\n");
 
     if (hmm_in_score(hmm) > 0)

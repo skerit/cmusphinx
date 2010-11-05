@@ -191,25 +191,22 @@ bptbl_mark_all(bptbl_t *bptbl, int ef, int cf)
         ent->valid = TRUE;
     }
 
-    E_INFO("Marked bps %d to %d\n",
-           bptbl_ef_idx_internal(bptbl, bptbl_active_frame(bptbl)),
-           bptbl_ef_idx_internal(bptbl, ef));
+    E_DEBUG(2,("Marked bps %d to %d\n",
+               bptbl_ef_idx_internal(bptbl, bptbl_active_frame(bptbl)),
+               bptbl_ef_idx_internal(bptbl, ef)));
     for (j = 0, i = bptbl_ef_idx_internal(bptbl, bptbl_active_frame(bptbl));
          i < bptbl_ef_idx_internal(bptbl, ef); ++i) {
         bp_t *ent = garray_ptr(bptbl->ent, bp_t, i);
         assert(ent != NULL);
         if (ent->valid)
             ++j;
-        else
-            E_DEBUGCONT(2,(" %d", i));
-        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
-                    i, dict_wordstr(bptbl->d2p->dict, ent->wid),
-                    bptbl_sf_internal(bptbl, i),
-                    ent->frame,
-                    ent->score,
-                    ent->bp);
+        E_DEBUG(3,("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
+                   i, dict_wordstr(bptbl->d2p->dict, ent->wid),
+                   bptbl_sf_internal(bptbl, i),
+                   ent->frame,
+                   ent->score,
+                   ent->bp));
     }
-    E_DEBUGCONT(2,("\n"));
     return j;
 }
 
@@ -518,7 +515,7 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     garray_expand_to(bptbl->permute, bptbl_ef_idx_internal(bptbl, next_active_fr));
     garray_set_base(bptbl->permute, bptbl_active_idx(bptbl));
     /* Mark, compact, snap pointers. */
-    n_retired = bptbl_mark_all(bptbl, next_active_fr, frame_idx);
+    n_retired = bptbl_mark(bptbl, next_active_fr, frame_idx);
     E_DEBUG(2,("About to retire %d bps\n", n_retired));
     first_retired_bp = bptbl_retired_idx(bptbl);
     bptbl_retire(bptbl, n_retired,
@@ -672,7 +669,7 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
     bpidx_t base_idx;
     bp_t *ent;
 
-#if 1 /* For debugging purposes... */
+#if 0 /* For debugging purposes... */
     return 0;
 #endif
 
@@ -690,7 +687,7 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
         sbmtx_unlock(bptbl->mtx);
         return 0;
     }
-#if 1 /* For debugging purposes... */
+#if 0 /* For debugging purposes... */
     int i;
     for (i = base_idx; i < first_idx; ++i) {
         bp_t *ent = garray_ptr(bptbl->retired, bp_t, i);
@@ -1016,7 +1013,7 @@ bptbl_fake_lmstate_internal(bptbl_t *bptbl, bp_t *ent)
         }
         else {
             ent->real_wid = dict_basewid(bptbl->d2p->dict, ent->wid);
-            ent->prev_real_wid = ent->real_wid;
+            ent->prev_real_wid = BAD_S3WID;
         }
     }
     else {
@@ -1080,7 +1077,8 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
 }
 
 void
-bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp, int32 new_prev)
+bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp,
+                   bpidx_t new_prev, int32 new_score)
 {
     bp_t *ent;
 
@@ -1088,6 +1086,7 @@ bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp, int32 new_prev)
     sbmtx_lock(bptbl->mtx);
     ent = bptbl_ent_internal(bptbl, bp);
     ent->bp = new_prev;
+    ent->score = new_score;
     bptbl_fake_lmstate_internal(bptbl, ent);
     sbmtx_unlock(bptbl->mtx);
 }

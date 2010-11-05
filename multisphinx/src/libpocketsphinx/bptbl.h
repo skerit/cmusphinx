@@ -281,7 +281,8 @@ int bptbl_get_rcscores(bptbl_t *bptbl, bpidx_t bpidx, int32 *out_rcscores);
  * actually have unique LM states.  In other words this is "poor man's
  * trigram" search.
  */
-void bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp, bpidx_t new_path);
+void bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp,
+                        bpidx_t new_path, int32 new_score);
 
 /**
  * Construct a hypothesis string from the best path in bptbl.
