@@ -197,67 +197,75 @@
         "Insert filler words at each state."}
 
 /** Command-line options for statistical language models. */
-#define POCKETSPHINX_NGRAM_OPTIONS \
-{ "-lm",										\
-      ARG_STRING,									\
-      NULL,										\
-      "Word trigram language model input file" },					\
-{ "-lmctl",										\
-      ARG_STRING,									\
-      NULL,										\
-      "Specify a set of language model\n"},						\
-{ "-lmname",										\
-      ARG_STRING,									\
-      "default",									\
-      "Which language model in -lmctl to use by default"},				\
-{ "-lw",										\
-      ARG_FLOAT32,									\
-      "6.5",										\
-      "Language model probability weight" },						\
-{ "-fwdflatlw",										\
-      ARG_FLOAT32,									\
-      "8.5",										\
-      "Language model probability weight for flat lexicon (2nd pass) decoding" },	\
-{ "-bestpathlw",									\
-      ARG_FLOAT32,									\
-      "9.5",										\
-      "Language model probability weight for bestpath search" },			\
-{ "-ascale",										\
-      ARG_FLOAT32,									\
-      "20.0",										\
-      "Inverse of acoustic model scale for confidence score calculation" },		\
-{ "-wip",										\
-      ARG_FLOAT32,									\
-      "0.65",										\
-      "Word insertion penalty" },							\
-{ "-nwpen",										\
-      ARG_FLOAT32,									\
-      "1.0",										\
-      "New word transition penalty" },							\
-{ "-pip",										\
-      ARG_FLOAT32,									\
-      "1.0",										\
-      "Phone insertion penalty" },							\
-{ "-uw",										\
-      ARG_FLOAT32,									\
-      "1.0",										\
-      "Unigram weight" }, 								\
-{ "-silprob",										\
-      ARG_FLOAT32,									\
-      "0.005",										\
-      "Silence word transition probability" },						\
-{ "-fillprob",										\
-      ARG_FLOAT32,									\
-      "1e-8",										\
-        "Filler word transition probability" }, \
-{ "-bghist",   \
-      ARG_BOOLEAN, \
-      "no", \
-      "Bigram-mode: If TRUE only one BP entry/frame; else one per LM state" }, \
-{ "-lextreedump", \
-      ARG_INT32, \
-      "0", \
-      "Whether to dump the lextree structure to stderr (for debugging), 1 for Ravi's format, 2 for Dot format, Larger than 2 will be treated as Ravi's format" }
+#define POCKETSPHINX_NGRAM_OPTIONS                                      \
+    { "-lm",                                                            \
+            ARG_STRING,                                                 \
+            NULL,                                                       \
+            "Word trigram language model input file" },                 \
+{ "-lmctl",                                                             \
+        ARG_STRING,                                                     \
+        NULL,                                                           \
+        "Specify a set of language model\n"},                           \
+{ "-lmname",                                                            \
+        ARG_STRING,                                                     \
+        "default",                                                      \
+        "Which language model in -lmctl to use by default"},            \
+{ "-lw",                                                                \
+        ARG_FLOAT32,                                                    \
+        "6.5",                                                          \
+        "Language model probability weight" },                          \
+{ "-fwdtreelm",                                                         \
+        ARG_STRING,                                                     \
+        NULL,                                                           \
+        "Word trigram language model for first pass" },                 \
+{ "-vm",                                                                \
+        ARG_STRING,                                                     \
+        NULL,                                                           \
+        "Vocabulary map used to expand second pass vocabulary" },       \
+{ "-fwdflatlw",                                                         \
+        ARG_FLOAT32,                                                    \
+        "8.5",                                                          \
+        "Language model probability weight for flat lexicon (2nd pass) decoding" }, \
+{ "-bestpathlw",                                                        \
+        ARG_FLOAT32,                                                    \
+        "9.5",                                                          \
+        "Language model probability weight for bestpath search" },      \
+{ "-ascale",                                                            \
+        ARG_FLOAT32,                                                    \
+        "20.0",                                                         \
+        "Inverse of acoustic model scale for confidence score calculation" }, \
+{ "-wip",                                                               \
+        ARG_FLOAT32,                                                    \
+        "0.65",                                                         \
+        "Word insertion penalty" },                                     \
+{ "-nwpen",                                                             \
+        ARG_FLOAT32,                                                    \
+        "1.0",                                                          \
+        "New word transition penalty" },                                \
+{ "-pip",                                                               \
+        ARG_FLOAT32,                                                    \
+        "1.0",                                                          \
+        "Phone insertion penalty" },                                    \
+{ "-uw",                                                                \
+        ARG_FLOAT32,                                                    \
+        "1.0",                                                          \
+        "Unigram weight" },                                             \
+{ "-silprob",                                                           \
+        ARG_FLOAT32,                                                    \
+        "0.005",                                                        \
+        "Silence word transition probability" },                        \
+{ "-fillprob",                                                          \
+        ARG_FLOAT32,                                                    \
+        "1e-8",                                                         \
+        "Filler word transition probability" },                         \
+{ "-bghist",                                                            \
+        ARG_BOOLEAN,                                                    \
+        "no",                                                           \
+        "Bigram-mode: If TRUE only one BP entry/frame; else one per LM state" }, \
+{ "-lextreedump",                                                       \
+        ARG_INT32,                                                      \
+        "0",                                                            \
+        "Whether to dump the lextree structure to stderr (for debugging), 1 for Ravi's format, 2 for Dot format, Larger than 2 will be treated as Ravi's format" }
 
 /** Command-line options for dictionaries. */
 #define POCKETSPHINX_DICT_OPTIONS \

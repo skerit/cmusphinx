@@ -163,7 +163,9 @@ fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
             ngram_model_set_select(fts->lmset, path);
         }
     }
-    else if ((path = cmd_ln_str_r(config, "-lm"))) {
+    /* First try -fwdtreelm if it exists. */
+    else if ((path = cmd_ln_str_r(config, "-fwdtreelm"))
+             || (path = cmd_ln_str_r(config, "-lm"))) {
         static const char *name = "default";
         ngram_model_t *lm;
 

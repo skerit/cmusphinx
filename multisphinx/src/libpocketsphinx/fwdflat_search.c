@@ -220,6 +220,23 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
         goto error_out;
     }
 
+    /* Load a vocabulary map if needed. */
+    if ((path = cmd_ln_str_r(config, "-vm"))) {
+        FILE *fh;
+        int32 ispipe;
+
+        ffs->vmap = vocab_map_init(ps_search_dict(ffs));
+        if ((fh = fopen_comp(path, "r", &ispipe)) == NULL) {
+            E_ERROR_SYSTEM("Failed to open vocabulary map file\n");
+            goto error_out;
+        }
+        if (vocab_map_read(ffs->vmap, fh) < 0) {
+            E_ERROR("Failed to read vocabulary map file\n");
+            goto error_out;
+        }
+        fclose(fh);
+    }
+
     /* Create word mappings. */
     fwdflat_search_update_widmap(ffs);
 

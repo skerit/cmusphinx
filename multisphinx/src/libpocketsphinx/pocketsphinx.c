@@ -200,27 +200,31 @@ ps_init(cmd_ln_t *config)
     /* Feature buffer. */
     ps->fb = featbuf_init(ps->config);
 
-    /* FIXME: For the time being we will just clone a single acmod
-     * between search passes.  We may use different models in the
-     * future (would require good posterior probability calculation). */
+    /* For the time being we will just clone a single acmod between
+     * search passes.  We may use different models in the future
+     * (would require good posterior probability calculation). */
     if ((ps->acmod = acmod_init(ps->config, ps->lmath, ps->fb)) == NULL)
         goto error_out;
     acmod2 = acmod_copy(ps->acmod);
 
-    /* FIXME: For the time being we share a single dict (and dict2pid)
+    /* For the time being we share a single dict (and dict2pid)
      * between search passes, but this will change in the future. */
     if ((dict = dict_init(config, ps->acmod->mdef)) == NULL)
         goto error_out;
     if ((d2p = dict2pid_build(ps->acmod->mdef, dict)) == NULL)
         goto error_out;
 
-    /* FIXME: And a single language model, although this may be less
-     * likely to change (since we will use different subsets of its
-     * vocabulary) */
     ps->fwdtree = fwdtree_search_init(config, ps->acmod, dict, d2p);
-    ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-                                      fwdtree_search_bptbl(ps->fwdtree),
-                                      fwdtree_search_lmset(ps->fwdtree));
+    if (cmd_ln_str_r(config, "-fwdtreelm") != NULL) {
+        ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
+                                          fwdtree_search_bptbl(ps->fwdtree),
+                                          NULL);
+    }
+    else {
+        ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
+                                          fwdtree_search_bptbl(ps->fwdtree),
+                                          fwdtree_search_lmset(ps->fwdtree));
+    }
 
     /* Release pointers to things now owned by the searches. */
     dict_free(dict);
