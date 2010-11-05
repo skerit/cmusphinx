@@ -1,0 +1,53 @@
+NOTE: Successor arrays (unsurprisingly) account for most of the memory usage
+
+90.36% (30,712,747B) (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+->34.81% (11,831,680B) 0x4E3E8E9: garray_init (garray.c:63)
+| ->34.81% (11,831,616B) 0x50A5588: ngram_trie_node_alloc (ngram_trie.c:127)
+| | ->34.81% (11,831,552B) 0x50A6487: ngram_trie_add_successor (ngram_trie.c:512)
+| | | ->34.81% (11,831,552B) 0x50A6F81: add_ngram_line (ngram_trie.c:804)
+| | |   ->34.81% (11,831,552B) 0x50A739E: read_ngrams (ngram_trie.c:876)
+| | |     ->34.81% (11,831,552B) 0x50A7499: ngram_trie_read_arpa (ngram_trie.c:906)
+| | |       ->34.81% (11,831,552B) 0x400FDA: main (test_ngram_trie.c:35)
+| | |         
+| | ->00.00% (64B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.00% (64B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->34.35% (11,676,192B) 0x4E3E958: garray_init (garray.c:71)
+| ->34.35% (11,676,160B) 0x50A5588: ngram_trie_node_alloc (ngram_trie.c:127)
+| | ->34.35% (11,676,160B) 0x50A6487: ngram_trie_add_successor (ngram_trie.c:512)
+| | | ->34.35% (11,676,160B) 0x50A6F81: add_ngram_line (ngram_trie.c:804)
+| | |   ->34.35% (11,676,160B) 0x50A739E: read_ngrams (ngram_trie.c:876)
+| | |     ->34.35% (11,676,160B) 0x50A7499: ngram_trie_read_arpa (ngram_trie.c:906)
+| | |       ->34.35% (11,676,160B) 0x400FDA: main (test_ngram_trie.c:35)
+| | |         
+| | ->00.00% (0B) in 1+ places, all below ms_print's threshold (01.00%)
+| | 
+| ->00.00% (32B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->13.32% (4,525,680B) 0x50A554B: ngram_trie_node_alloc (ngram_trie.c:122)
+| ->13.32% (4,525,680B) 0x50A6487: ngram_trie_add_successor (ngram_trie.c:512)
+|   ->13.32% (4,525,680B) 0x50A6F81: add_ngram_line (ngram_trie.c:804)
+|     ->13.32% (4,525,680B) 0x50A739E: read_ngrams (ngram_trie.c:876)
+|       ->13.32% (4,525,680B) 0x50A7499: ngram_trie_read_arpa (ngram_trie.c:906)
+|         ->13.32% (4,525,680B) 0x400FDA: main (test_ngram_trie.c:35)
+|           
+->02.83% (962,816B) 0x4E3EADF: garray_reserve (garray.c:126)
+| ->02.83% (962,816B) 0x4E3EB19: garray_expand (garray.c:134)
+|   ->02.83% (962,816B) 0x4E3EBFB: garray_append (garray.c:157)
+|     ->02.83% (962,816B) 0x50A64E8: ngram_trie_add_successor (ngram_trie.c:517)
+|       ->02.83% (962,816B) 0x50A6F81: add_ngram_line (ngram_trie.c:804)
+|         ->02.83% (962,816B) 0x50A739E: read_ngrams (ngram_trie.c:876)
+|           ->02.83% (962,816B) 0x50A7499: ngram_trie_read_arpa (ngram_trie.c:906)
+|             ->02.83% (962,816B) 0x400FDA: main (test_ngram_trie.c:35)
+|               
+->02.28% (774,784B) 0x4E407E5: hash_table_new (hash_table.c:165)
+| ->02.26% (768,032B) 0x508F47D: dict_init (dict.c:317)
+| | ->02.26% (768,032B) 0x400FAC: main (test_ngram_trie.c:31)
+| |   
+| ->00.02% (6,752B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->01.49% (505,883B) in 36 places, all below massif's threshold (01.00%)
+| 
+->01.28% (435,712B) 0x508F3F4: dict_init (dict.c:309)
+  ->01.28% (435,712B) 0x400FAC: main (test_ngram_trie.c:31)
