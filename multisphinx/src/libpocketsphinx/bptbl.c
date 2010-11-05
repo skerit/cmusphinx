@@ -679,7 +679,7 @@ bptbl_find_exit(bptbl_t *bptbl, int32 wid)
     if (bptbl_active_idx(bptbl) == bptbl_end_idx(bptbl)) {
         bpidx_t first_retired = garray_base(bptbl->retired);
         /* Final, so it's in retired. */
-        start = end = bptbl_retired_idx(bptbl);
+        start = end = bptbl_retired_idx(bptbl) - 1;
         ef = bptbl_ent_internal(bptbl, start)->frame;
         while (start >= first_retired) {
             if (bptbl_ent_internal(bptbl, start)->frame != ef)
@@ -826,11 +826,15 @@ int
 bptbl_active_sf(bptbl_t *bptbl)
 {
     int sf;
+
     sbmtx_lock(bptbl->mtx);
     if (bptbl->oldest_bp == NO_BP)
         sf = 0;
-    else
-        sf = garray_ent(bptbl->ent, bp_t, bptbl->oldest_bp).frame + 1;
+    else {
+        bp_t *ent;
+        ent = bptbl_ent_internal(bptbl, bptbl->oldest_bp);
+        sf = ent->frame + 1;
+    }
     sbmtx_unlock(bptbl->mtx);
     return sf;
 }
