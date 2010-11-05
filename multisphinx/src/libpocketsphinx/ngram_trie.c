@@ -248,22 +248,26 @@ ngram_trie_ngram_v(ngram_trie_t *t, int32 w,
                    int32 const *hist, int32 n_hist)
 {
     ngram_trie_node_t *node;
-    int i;
-
-    E_INFO("Looking for N-Gram %s |",
-           dict_wordstr(t->dict, w));
-    for (i = 0; i < n_hist; ++i) {
-        E_INFOCONT(" %s", dict_wordstr(t->dict, hist[n_hist - 1 - i]));
-    }
-    E_INFOCONT("\n");
 
     node = ngram_trie_root(t);
     if (n_hist > t->n - 1)
         n_hist = t->n - 1;
+
+#if 0
+    E_INFO("Looking for N-Gram %s |",
+           dict_wordstr(t->dict, w));
+    int i;
+    for (i = 0; i < n_hist; ++i) {
+        E_INFOCONT(" %s", dict_wordstr(t->dict, hist[n_hist - 1 - i]));
+    }
+    E_INFOCONT("\n");
+#endif
+
     while (n_hist > 0) {
         int32 nextwid = hist[n_hist - 1];
         if ((node = ngram_trie_successor(t, node, nextwid)) == NULL)
             return NULL;
+        --n_hist;
     }
 
     return ngram_trie_successor(t, node, w);
@@ -440,16 +444,21 @@ ngram_trie_successor_pos(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
 ngram_trie_node_t *
 ngram_trie_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
 {
+    ngram_trie_node_t *node;
     size_t pos;
 
+#if 0
     E_INFO("Looking for successor %s in node with head word %s\n",
            dict_wordstr(t->dict, w), h->word == -1 
            ? "<root>" : dict_wordstr(t->dict, h->word));
+#endif
     pos = ngram_trie_successor_pos(t, h, w);
-    E_INFO("pos = %lu wtf\n", pos);
     if (pos >= garray_next_idx(h->successors))
         return NULL;
-    return garray_ent(h->successors, ngram_trie_node_t *, pos);
+    node = garray_ent(h->successors, ngram_trie_node_t *, pos);
+    if (node->word != w)
+        return NULL;
+    return node;
 }
 
 int
@@ -546,11 +555,25 @@ ngram_trie_bowt_v(ngram_trie_t *t, int32 w,
 {
     ngram_trie_node_t *ng;
 
+#if 0
+    E_INFO("Getting backoff weight for N-Gram %s |",
+           dict_wordstr(t->dict, w));
+    int i;
+    for (i = 0; i < n_hist; ++i) {
+        E_INFOCONT(" %s", dict_wordstr(t->dict, hist[n_hist - 1 - i]));
+    }
+    E_INFOCONT("\n");
+#endif
+
     if ((ng = ngram_trie_ngram_v(t, w, hist, n_hist)) != NULL)
         return ng->log_bowt << t->shift;
-    else if (n_hist > 0)
-        return ngram_trie_bowt_v(t, hist[0], hist + 1, n_hist - 1);
     else
+#if 0 /* While this seems like it would be correct, it isn't what the
+       * other LM code does. */
+        if (n_hist > 0)
+        return ngram_trie_bowt_v(t, hist[0], hist + 1, n_hist - 1);
+        else
+#endif
         return 0;
 }
 
@@ -560,9 +583,21 @@ ngram_trie_prob_v(ngram_trie_t *t, int *n_used, int32 w,
 {
     ngram_trie_node_t *ng;
 
+#if 0
+    E_INFO("Scoring N-Gram %s |",
+           dict_wordstr(t->dict, w));
+    int i;
+    for (i = 0; i < n_hist; ++i) {
+        E_INFOCONT(" %s", dict_wordstr(t->dict, hist[n_hist - 1 - i]));
+    }
+    E_INFOCONT("\n");
+#endif
+
     if (n_used) *n_used = n_hist + 1;
-    if ((ng = ngram_trie_ngram_v(t, w, hist, n_hist)) != NULL)
+    if ((ng = ngram_trie_ngram_v(t, w, hist, n_hist)) != NULL) {
+        assert(ng->word == w);
         return ng->log_prob << t->shift;
+    }
     else if (n_hist > 0) {
         int32 bong, pong;
 
@@ -696,6 +731,7 @@ add_ngram_line(ngram_trie_t *t, char *buf, int n,
             return NULL;
         }
     }
+#if 0
     E_INFO("Line is %s N-Gram is %s |",
            libuf,
            dict_wordstr(t->dict, wids[0]));
@@ -703,6 +739,7 @@ add_ngram_line(ngram_trie_t *t, char *buf, int n,
         E_INFOCONT(" %s", dict_wordstr(t->dict, wids[n-i]));
     }
     E_INFOCONT("\n");
+#endif
     ckd_free(libuf);
 
     /* Determine if this N-Gram has the same history as the previous one. */
@@ -736,8 +773,8 @@ add_ngram_line(ngram_trie_t *t, char *buf, int n,
 
     /* Fall through and add a successor to last_history. */
     node = ngram_trie_add_successor(t, *last_history, wids[0]);
-    node->log_prob = logmath_log(t->lmath, prob) >> t->shift;
-    node->log_bowt = logmath_log(t->lmath, bowt) >> t->shift;
+    node->log_prob = logmath_log10_to_log(t->lmath, prob) >> t->shift;
+    node->log_bowt = logmath_log10_to_log(t->lmath, bowt) >> t->shift;
     node->history = *last_history;
     return node;
 }
@@ -749,19 +786,24 @@ read_ngrams(ngram_trie_t *t, lineiter_t *li, int n)
     char **wptr = ckd_calloc(n + 2, sizeof(*wptr));
     int32 *wids = ckd_calloc(n, sizeof(*wids));
     ngram_trie_node_t *last_history;
+    int ngcount;
 
     if (n == 1)
         last_history = t->root; /* always the same for 1-grams */
     else
         last_history = NULL;
+    ngcount = 0;
+
     for (;li;li = lineiter_next(li)) {
         string_trim(li->buf, STRING_BOTH);
         /* Skip blank lines. */
         if (strlen(li->buf) == 0)
             continue;
         /* No more N-Grams to work with. */
-        if (0 == strcmp(li->buf, "\\end\\"))
+        if (0 == strcmp(li->buf, "\\end\\")) {
+            E_INFOCONT(" read %d N-Grams\n", ngcount);
             return 0;
+        }
         /* Look for an N-Gram start marker. */
         if (li->buf[0] == '\\') {
             char *c;
@@ -782,10 +824,11 @@ read_ngrams(ngram_trie_t *t, lineiter_t *li, int n)
             nn = atoi(li->buf + 1);
             if (nn > n) {
                 ckd_free(wptr);
+                E_INFOCONT(" read %d N-Grams\n", ngcount);
                 return nn;
             }
             else {
-                E_INFO("%s\n", li->buf);
+                E_INFO("%s", li->buf);
                 continue;
             }
         }
@@ -795,6 +838,7 @@ read_ngrams(ngram_trie_t *t, lineiter_t *li, int n)
             ckd_free(wptr);
             return -1;
         }
+        ++ngcount;
     }
     ckd_free(wptr);
     E_ERROR("Expected \\end\\ or an N-Gram marker\n");
