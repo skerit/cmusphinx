@@ -211,8 +211,9 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
     for (i = bptbl_ef_idx_internal(bptbl, ef);
          i < bptbl_ef_idx_internal(bptbl, cf); ++i) {
         bp_t *ent, *prev;
-        ent = garray_ptr(bptbl->ent, bp_t, i);
-        prev = garray_ptr(bptbl->ent, bp_t, ent->bp);
+        ent = bptbl_ent_internal(bptbl, i);
+        /* This one could be retired. */
+        prev = bptbl_ent_internal(bptbl, ent->bp);
         if (!ent->valid) /* May be invalidated by maxwpf */
             continue;
         if (prev != NULL) {
@@ -244,8 +245,8 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
                  * lattice generation algorithm) */
                 for (j = bptbl_ef_idx_internal(bptbl, i);
                      j < bptbl_ef_idx_internal(bptbl, i + 1); ++j) {
-                    bp_t *ent = garray_ptr(bptbl->ent, bp_t, j);
-                    bp_t *prev = garray_ptr(bptbl->ent, bp_t, ent->bp);
+                    bp_t *ent = bptbl_ent_internal(bptbl, j);
+                    bp_t *prev = bptbl_ent_internal(bptbl, ent->bp);
                     ent->valid = TRUE;
                     if (prev != NULL) {
                         int frame = prev->frame;
@@ -377,7 +378,6 @@ bptbl_remap(bptbl_t *bptbl, int first_retired_bp,
     int last_retired_bp;
     int i;
 
-    /* Need to protect bptbl->retired and bptbl->rc */
     sbmtx_lock(bptbl->mtx);
     last_retired_bp = bptbl_retired_idx(bptbl);
     E_DEBUG(2,("remapping %d:%d from %d to %d and %d to %d\n",
@@ -555,7 +555,6 @@ bptbl_commit(bptbl_t *bptbl)
                     bp_t *src1_ent = garray_ptr(bptbl->ent, bp_t, src + 1);
                     assert(dest_s_idx + rcsize <= src1_ent->s_idx);
                 }
-                /* Indices don't change but we still need to protect rc. */
                 garray_move(bptbl->rc, dest_s_idx, src_ent->s_idx, rcsize);
             }
             *dest_ent = *src_ent;
@@ -921,6 +920,7 @@ bptbl_get_rcscores(bptbl_t *bptbl, bpidx_t bpidx, int32 *out_rcscores)
     sbmtx_lock(bptbl->mtx);
     bpe = bptbl_ent_internal(bptbl, bpidx);
     rcsize = bptbl_rcsize(bptbl, bpe);
+    assert(bpe->s_idx < garray_next_idx(bptbl->rc));
     memcpy(out_rcscores,
            garray_ptr(bptbl->rc, int32, bpe->s_idx),
            rcsize * sizeof(int32));
