@@ -15,6 +15,7 @@ main(int argc, char *argv[])
 	bin_mdef_t *mdef;
 	logmath_t *lmath;
 	cmd_ln_t *config;
+	FILE *arpafh;
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
@@ -28,6 +29,9 @@ main(int argc, char *argv[])
 	dict = dict_init(config, mdef);
 
 	t = ngram_trie_init(dict, lmath);
+	arpafh = fopen(TESTDATADIR "/bn10000.3g.arpa", "r");
+	ngram_trie_read_arpa(t, arpafh);
+	fclose(arpafh);
 
 	ngram_trie_free(t);
 	dict_free(dict);
