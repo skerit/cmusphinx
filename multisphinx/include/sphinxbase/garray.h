@@ -122,6 +122,14 @@ void *garray_append(garray_t *gar, void const *ent);
 void *garray_insert(garray_t *gar, size_t idx, void const *ent);
 
 /**
+ * Delete one or more elements from an array.
+ *
+ * If @a end is past the end of the array, this will fail - to
+ * truncate an array use garray_pop() or garray_pop_from().
+ */
+int garray_delete(garray_t *gar, size_t start, size_t end);
+
+/**
  * Set an element in the array.
  *
  * If the specified index is past the end of the array or before the
@@ -181,7 +189,7 @@ size_t garray_find_first(garray_t *gar, void *ent);
 void garray_heapify(garray_t *gar);
 
 /**
- * Sort an array in-place using heapsort.
+pnnnnnnnnnnnnn * Sort an array in-place using heapsort.
  */
 void garray_sort(garray_t *gar);
 

@@ -95,10 +95,45 @@ test_sorting(void)
 	return 0;
 }
 
+static int
+test_insertion(void)
+{
+	garray_t *gar;
+	int i;
+
+	gar = garray_init(10, sizeof(int));
+	for (i = 0; i < 10; ++i)
+		garray_ent(gar, int, i) = i + 1;
+	i = 0;
+	garray_insert(gar, 0, &i);
+	for (i = 0; i <= 10; ++i)
+		TEST_ASSERT(i == garray_ent(gar, int, i));
+	garray_free(gar);
+	return 0;
+}
+
+static int
+test_deletion(void)
+{
+	garray_t *gar;
+	int i;
+
+	gar = garray_init(15, sizeof(int));
+	for (i = 0; i < 15; ++i)
+		garray_ent(gar, int, i) = i;
+	garray_delete(gar, 0, 5);
+	for (i = 0; i < 10; ++i)
+		TEST_ASSERT(i + 5 == garray_ent(gar, int, i));
+	garray_free(gar);
+	return 0;
+}
+
 int
 main(int argc, char *argv[])
 {
 	test_indexing();
 	test_sorting();
+	test_insertion();
+	test_deletion();
 	return 0;
 }

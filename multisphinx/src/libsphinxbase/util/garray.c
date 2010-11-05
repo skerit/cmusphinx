@@ -290,6 +290,29 @@ garray_insert(garray_t *gar, size_t idx, void const *ent)
     return garray_void(gar, idx);
 }
 
+int
+garray_delete(garray_t *gar, size_t start, size_t end)
+{
+    size_t n_move, rv;
+
+    if (end < start)
+        return -1;
+    if (end == start)
+        return 0;
+    if (start < gar->base_idx || end < gar->base_idx)
+        return -1;
+    if (start - gar->base_idx >= gar->n_ent)
+        return -1;
+    if (end - gar->base_idx >= gar->n_ent)
+        return -1;
+
+    n_move = gar->n_ent + gar->base_idx - end;
+    rv = garray_move(gar, start, end, n_move);
+    assert(rv == n_move);
+    garray_pop(gar, start + n_move);
+    return 0;
+}
+
 void
 garray_set_cmp(garray_t *gar, garray_cmp_t cmp, void *udata)
 {
