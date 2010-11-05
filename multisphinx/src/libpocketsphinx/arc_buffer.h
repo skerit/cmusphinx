@@ -88,7 +88,7 @@ void arc_buffer_reset(arc_buffer_t *fab);
 /**
  * Dump contents of arc buffer for debugging.
  */
-void arc_buffer_dump(arc_buffer_t *fab);
+void arc_buffer_dump(arc_buffer_t *fab, dict_t *dict);
 
 /**
  * Extend the arc buffer up to the given frame index.

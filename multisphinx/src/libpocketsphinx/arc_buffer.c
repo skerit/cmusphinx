@@ -75,7 +75,7 @@ arc_buffer_free(arc_buffer_t *fab)
 }
 
 void
-arc_buffer_dump(arc_buffer_t *fab)
+arc_buffer_dump(arc_buffer_t *fab, dict_t *dict)
 {
     size_t i, n_arcs;
 
@@ -83,8 +83,8 @@ arc_buffer_dump(arc_buffer_t *fab)
     E_INFO("Arc buffer %p: %d arcs:\n", fab, n_arcs);
     for (i = garray_base(fab->arcs); i < n_arcs; ++i) {
         arc_t *arc = garray_ptr(fab->arcs, arc_t, i);
-        E_INFO_NOFN("wid %d sf %d ef %d\n",
-                    arc->wid, arc->src, arc->dest);
+        E_INFO_NOFN("%s sf %d ef %d\n",
+                    dict_wordstr(dict, arc->wid), arc->src, arc->dest);
     }
 }
 
@@ -101,8 +101,8 @@ arc_buffer_extend(arc_buffer_t *fab, int next_sf)
 
 bpidx_t
 arc_buffer_add_bps(arc_buffer_t *fab,
-                           bptbl_t *bptbl, bpidx_t start,
-                           bpidx_t end)
+                   bptbl_t *bptbl, bpidx_t start,
+                   bpidx_t end)
 {
     bpidx_t idx, next_idx;
     int n_arcs;

@@ -171,6 +171,7 @@ typedef struct fwdflat_search_s {
     int32 fillpen;
     int32 silpen;
     int32 pip;
+    int32 lw;
 } fwdflat_search_t;
 
 /**

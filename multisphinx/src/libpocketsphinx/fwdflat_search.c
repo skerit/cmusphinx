@@ -46,6 +46,7 @@
 /* SphinxBase headers. */
 #include <sphinxbase/ckd_alloc.h>
 #include <sphinxbase/listelem_alloc.h>
+#include <sphinxbase/pio.h>
 #include <sphinxbase/err.h>
 
 /* Local headers. */
@@ -219,6 +220,11 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
         E_ERROR("Language model/set does not contain </s>, recognition will fail\n");
         goto error_out;
     }
+    /* Calculate extra language model weight */
+    ffs->lw = (int32)(cmd_ln_float32_r(config, "-fwdflatlw")
+                      / cmd_ln_float32_r(config, "-lw") * 32768);
+    E_INFO("Second pass language weight %f => %d\n",
+           (float)ffs->lw / 32768, ffs->lw);
 
     /* Load a vocabulary map if needed. */
     if ((path = cmd_ln_str_r(config, "-vm"))) {
@@ -733,7 +739,7 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
 
         /* Transition to all successor words. */
         for (i = 0; i < ffs->n_expand_word; ++i) {
-            int32 n_used;
+            int32 lmscore, n_used;
 
             w = ffs->expand_word_list[i];
 
@@ -745,10 +751,12 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
                 newscore = ffs->rcss[0];
             if (newscore == WORST_SCORE)
                 continue;
-            newscore += ngram_tg_score(ffs->lmset,
-                                       dict_basewid(dict, w),
-                                       ent.real_wid,
-                                       ent.prev_real_wid, &n_used)>>SENSCR_SHIFT;
+            lmscore = ngram_tg_score(ffs->lmset,
+                                     dict_basewid(dict, w),
+                                     ent.real_wid,
+                                     ent.prev_real_wid, &n_used)>>SENSCR_SHIFT;
+            lmscore = lmscore * ffs->lw / 32768;
+            newscore += lmscore;
             newscore += pip >> SENSCR_SHIFT;
 
             /* Enter the next word */
@@ -1011,18 +1019,19 @@ fwdflat_search_decode(ps_search_t *base)
         next_sf = bptbl_active_sf(ffs->input_bptbl);
         /* Extend the arc buffer the appropriate number of frames. */
         if (arc_buffer_extend(ffs->input_arcs, next_sf) > 0) {
-            E_DEBUG(2, ("oldest_bp %d next_idx %d\n",
-                        ffs->input_bptbl->oldest_bp, ffs->next_idx));
+            E_DEBUG(2,("Extending arc buffer to frame %d\n", next_sf));
             /* Add the next chunk of bps to the arc buffer. */
             ffs->next_idx = arc_buffer_add_bps
                 (ffs->input_arcs, ffs->input_bptbl,
                  ffs->next_idx, bptbl_retired_idx(ffs->input_bptbl));
             arc_buffer_commit(ffs->input_arcs);
-            /* Release bps we won't need anymore. */
-            E_DEBUG(2, ("oldest_bp %d next_idx %d\n",
-                        ffs->input_bptbl->oldest_bp, ffs->next_idx));
-            bptbl_release(ffs->input_bptbl, ffs->input_bptbl->oldest_bp);
+            /* Release bps we won't need anymore (but we have to keep
+             * oldest_bp, otherwise we don't know the start frame of
+             * anything after it!). */
+            if (ffs->input_bptbl->oldest_bp > 0)
+                bptbl_release(ffs->input_bptbl, ffs->input_bptbl->oldest_bp - 1);
         }
+        /* arc_buffer_dump(ffs->input_arcs, ps_search_dict(base)); */
         /* We do something different depending on whether the input
          * bptbl has been finalized or not.  If it has, we run out the
          * clock and finish, otherwise we only search forward as far

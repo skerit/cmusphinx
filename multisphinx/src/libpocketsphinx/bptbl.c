@@ -173,6 +173,36 @@ bptbl_dump(bptbl_t *bptbl)
 }
 
 /**
+ * Mark all active entries in the backpointer table.
+ */
+static int
+bptbl_mark_all(bptbl_t *bptbl, int ef, int cf)
+{
+    int i, j;
+
+    assert(ef > bptbl_active_frame(bptbl));
+
+    for (i = bptbl_ef_idx_internal(bptbl, ef);
+         i < bptbl_ef_idx_internal(bptbl, cf); ++i) {
+        bp_t *ent;
+        ent = bptbl_ent_internal(bptbl, i);
+        ent->valid = TRUE;
+    }
+
+    for (j = 0, i = bptbl_ef_idx_internal(bptbl, bptbl_active_frame(bptbl));
+         i < bptbl_ef_idx_internal(bptbl, ef); ++i) {
+        bp_t *ent = garray_ptr(bptbl->ent, bp_t, i);
+        assert(ent != NULL);
+        if (ent->valid)
+            ++j;
+        else
+            E_DEBUGCONT(2,(" %d", i));
+    }
+    E_DEBUGCONT(2,("\n"));
+    return j;
+}
+
+/**
  * Mark coaccessible active entries in the backpointer table.
  *
  * @param bptbl Backpointer table
@@ -185,7 +215,6 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
 {
     int i, j, n_active_fr, last_gc_fr;
 
-    assert(cf >= ef);
     assert(ef > bptbl_active_frame(bptbl));
 
     /* Invalidate all active backpointer entries up to ef. */
@@ -478,6 +507,7 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     garray_expand_to(bptbl->permute, bptbl_ef_idx_internal(bptbl, next_active_fr));
     garray_set_base(bptbl->permute, bptbl_active_idx(bptbl));
     /* Mark, compact, snap pointers. */
+    /* Or don't. */
     n_retired = bptbl_mark(bptbl, next_active_fr, frame_idx);
     E_DEBUG(2,("About to retire %d bps\n", n_retired));
     first_retired_bp = bptbl_retired_idx(bptbl);
@@ -638,18 +668,31 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
 
     sbmtx_lock(bptbl->mtx);
     if (first_idx > bptbl_retired_idx(bptbl)) {
-        E_DEBUG(2, ("%d outside retired, releasing up to %d\n",
-                    first_idx, bptbl_retired_idx(bptbl)));
+        E_DEBUG(2,("%d outside retired, releasing up to %d\n",
+                   first_idx, bptbl_retired_idx(bptbl)));
         first_idx = bptbl_retired_idx(bptbl);
     }
 
     base_idx = garray_base(bptbl->retired);
-    E_DEBUG(2, ("Releasing bptrs from %d to %d\n",
-                base_idx, first_idx));
+    E_DEBUG(2,("Releasing bptrs from %d to %d:\n",
+               base_idx, first_idx));
     if (first_idx < base_idx) {
         sbmtx_unlock(bptbl->mtx);
         return 0;
     }
+#if 0
+    int i;
+    for (i = base_idx; i < first_idx; ++i) {
+        bp_t *ent = garray_ptr(bptbl->retired, bp_t, i);
+        assert(ent->valid);
+        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
+                    i, dict_wordstr(bptbl->d2p->dict, ent->wid),
+                    bptbl_sf_internal(bptbl, i),
+                    ent->frame,
+                    ent->score,
+                    ent->bp);
+    }
+#endif
 
     ent = garray_ptr(bptbl->retired, bp_t, first_idx);
     garray_shift_from(bptbl->rc, ent->s_idx);
