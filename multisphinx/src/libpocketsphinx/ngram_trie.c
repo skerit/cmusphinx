@@ -187,6 +187,8 @@ ngram_trie_free(ngram_trie_t *t)
         return t->refcount;
     dict_free(t->dict);
     logmath_free(t->lmath);
+    listelem_alloc_free(t->node_alloc);
+    garray_free(t->counts);
 #if 0
     garray_free(t->nodes);
     garray_free(t->successors);
@@ -322,7 +324,7 @@ ngram_trie_ngrams(ngram_trie_t *t, int n)
     itor = ckd_calloc(1, sizeof(*itor));
     itor->cur = h;
     itor->pos = 0;
-    itor->nostop = FALSE;
+    itor->nostop = TRUE;
 
     return itor;
 }
@@ -364,18 +366,23 @@ ngram_trie_next_node(ngram_trie_t *t, ngram_trie_node_t *ng)
         h = ngram_trie_next_node(t, h);
         if (h == NULL)
             return NULL;
-        return garray_ent(h->successors, ngram_trie_node_t *, 0);
+        h = garray_ent(h->successors, ngram_trie_node_t *, 0);
+         return h;
     }
-    else
-        return garray_ent(h->successors, ngram_trie_node_t *, pos);
+    else {
+        h = garray_ent(h->successors, ngram_trie_node_t *, pos);
+        return h;
+    }
 }
 
 ngram_trie_iter_t *
 ngram_trie_iter_next(ngram_trie_iter_t *itor)
 {
     ++itor->pos;
+    assert(itor->cur);
     if (itor->pos >= garray_next_idx(itor->cur->successors)) {
         if (itor->nostop) {
+            assert(itor->cur);
             itor->cur = ngram_trie_next_node(itor->t, itor->cur);
             if (itor->cur == NULL) {
                 ngram_trie_iter_free(itor);
@@ -493,6 +500,8 @@ ngram_trie_add_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
     else
         garray_insert(h->successors, pos, &ng);
 
+    /* FIXME: Increase t->n if needed */
+
     return ng;
 }
 
@@ -508,6 +517,8 @@ ngram_trie_add_successor_ngram(ngram_trie_t *t,
         garray_append(h->successors, &w);
     else
         garray_insert(h->successors, pos, &w);
+
+    /* FIXME: Increase t->n if needed */
 
     return 0;
 }
@@ -822,14 +833,25 @@ read_ngrams(ngram_trie_t *t, lineiter_t *li, int n)
                 return -1;
             }
             nn = atoi(li->buf + 1);
-            if (nn > n) {
+            if (nn == n+1) {
                 ckd_free(wptr);
                 E_INFOCONT(" read %d N-Grams\n", ngcount);
+                if (ngcount != garray_ent(t->counts, int, n)) {
+                    E_WARN("Header claims %d %d-Grams, it's wrong\n",
+                           garray_ent(t->counts, int, n), n);
+                    garray_ent(t->counts, int, n) = ngcount;
+                }
                 return nn;
             }
-            else {
+            else if (nn == n) {
                 E_INFO("%s", li->buf);
                 continue;
+            }
+            else {
+                E_ERROR("Expected %d or %d-grams, got %d (%s)\n",
+                        n, n+1, nn, li->buf);
+                ckd_free(wptr);
+                return -1;
             }
         }
         /* Now interpret the line as an N-Gram. */
@@ -875,6 +897,37 @@ ngram_trie_read_arpa(ngram_trie_t *t, FILE *arpafile)
 int
 ngram_trie_write_arpa(ngram_trie_t *t, FILE *arpafile)
 {
+    int32 *wids;
+    int n;
+
+    fprintf(arpafile, "# Written by ngram_trie.c\n");
+    fprintf(arpafile, "\\data\\\n");
+
+    for (n = 1; n <= t->n; ++n)
+        fprintf(arpafile, "ngram %d=%d\n", n, garray_ent(t->counts, int, n));
+
+    wids = ckd_calloc(t->n, sizeof(*wids));
+    for (n = 1; n <= t->n; ++n) {
+        ngram_trie_iter_t *itor;
+
+        fprintf(arpafile, "\n\\%d-grams:\n", n);
+        for (itor = ngram_trie_ngrams(t, n); itor;
+             itor = ngram_trie_iter_next(itor)) {
+            ngram_trie_node_t *ng = ngram_trie_iter_get(itor);
+            int n_wids;
+
+            wids[0] = ng->word;
+            n_wids = ngram_trie_node_get_word_hist(t, ng, wids + 1) + 1;
+            assert(n_wids == n);
+            fprintf(arpafile, "%.4f", logmath_log_to_log10(t->lmath, ng->log_prob << t->shift));
+            for (--n_wids; n_wids >= 0; --n_wids)
+                fprintf(arpafile, " %s", dict_wordstr(t->dict, wids[n_wids]));
+            if (ng->log_bowt != 0)
+                fprintf(arpafile, " %.4f", logmath_log_to_log10(t->lmath, ng->log_bowt << t->shift));
+            fprintf(arpafile, "\n");
+        }
+    }
+    fprintf(arpafile, "\n\\end\\\n");
+    ckd_free(wids);
     return 0;
 }
-
