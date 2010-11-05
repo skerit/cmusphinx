@@ -47,21 +47,111 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#inculde "dict.h"
+#include <sphinxbase/logmath.h>
 
-typedef struct ngram_trie_iter_s ngram_trie_iter_t;
+#include "dict.h"
+
+/**
+ * Trie-based N-Gram model structure.
+ */
 typedef struct ngram_trie_s ngram_trie_t;
 
-ngram_trie_t *ngram_trie_init(dict_t *d);
+/**
+ * Node (individual N-Gram) in the trie.
+ */
+typedef struct ngram_trie_node_s ngram_trie_node_t;
 
+/**
+ * Iterator over N-Grams in a trie.
+ */
+typedef struct ngram_trie_iter_s ngram_trie_iter_t;
+
+/**
+ * Initialize an empty N-Gram trie.
+ */
+ngram_trie_t *ngram_trie_init(dict_t *d, logmath_t *lmath);
+
+ngram_trie_t *ngram_trie_retain(ngram_trie_t *t);
+int ngram_trie_free(ngram_trie_t *t);
+
+/**
+ * Read N-Grams from an ARPA text format file.
+ */
 int ngram_trie_read_arpa(ngram_trie_t *t, FILE *arpafile);
+
+/**
+ * Write N-Grams to an ARPA text format file.
+ */
 int ngram_trie_write_arpa(ngram_trie_t *t, FILE *arpafile);
 
-ngram_trie_iter_t *ngram_trie_ngram(ngram_trie_t *t, int32 w, ...); 
-ngram_trie_iter_t *ngram_trie_ngram_v(ngram_trie_t *t, int32 w,
+/**
+ * Look up an N-Gram in the trie.
+ */
+ngram_trie_node_t *ngram_trie_ngram(ngram_trie_t *t, int32 w, ...); 
+
+/**
+ * Look up an N-Gram in the trie.
+ */
+ngram_trie_node_t *ngram_trie_ngram_v(ngram_trie_t *t, int32 w,
 				      int32 *hist, int32 n_hist);
 
+/**
+ * Get model probability (with backoff) for a word with history.
+ */
+int32 ngram_trie_prob(ngram_trie_t *t, int *n_used, int32 w, ...);
+
+/**
+ * Get model probability (with backoff) for a word with history.
+ */
+int32 ngram_trie_prob_v(ngram_trie_t *t, int *n_used, int32 w,
+			int32 *hist, int32 n_hist);
+
+/**
+ * Get an iterator over all N-Grams of a given order in the trie.
+ */
 ngram_trie_iter_t *ngram_trie_ngrams(ngram_trie_t *t, int n);
 
+/**
+ * Get an iterator over all successors to an N-Gram.
+ */
+ngram_trie_iter_t *ngram_trie_successors(ngram_trie_node_t *h);
+
+/**
+ * Look up a successor to an N-Gram.
+ */
+ngram_trie_node_t *ngram_trie_successor(ngram_trie_node_t *h, int32 w);
+
+/**
+ * Delete a successor to an N-Gram
+ */
+int ngram_trie_delete_successor(ngram_trie_node_t *h, int32 w);
+
+/**
+ * Add a new successor to an N-Gram
+ */
+ngram_trie_node_t *ngram_trie_add_successor(ngram_trie_node_t *h, int32 w);
+
+/**
+ * Add a new successor to an N-Gram
+ */
+int ngram_trie_add_successor_ngram(ngram_trie_node_t *h,
+				   ngram_trie_node_t *w);
+
+/**
+ * Get the backoff N-gram (one fewer element of history) for an N-Gram.
+ */
+ngram_trie_node_t *ngram_trie_backoff(ngram_trie_t *t,
+				      ngram_trie_node_t *ng);
+
+/**
+ * Get the model probability (with backoff) for a successor.
+ */
+int32 ngram_trie_successor_prob(ngram_trie_t *t,
+				ngram_trie_node_t *h, int32 w);
+
+/**
+ * Calculate the backoff weight for an N-Gram.
+ */
+int32 ngram_trie_calc_bowt(ngram_trie_t *t, ngram_trie_node_t *h);
 
 #endif /* __NGRAM_TRIE_H__ */
