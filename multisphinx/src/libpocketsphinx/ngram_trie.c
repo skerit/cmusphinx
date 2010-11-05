@@ -41,10 +41,14 @@
  * @author David Huggins-Daines <dhuggins@cs.cmu.edu>
  */
 
-#include "ngram_trie.h"
+#include <string.h>
 
+#include <sphinxbase/pio.h>
 #include <sphinxbase/garray.h>
+#include <sphinxbase/strfuncs.h>
 #include <sphinxbase/listelem_alloc.h>
+
+#include "ngram_trie.h"
 
 #define MIN_LOGPROB 1e-20
 
@@ -58,6 +62,7 @@ struct ngram_trie_s {
     int shift;         /**< Shift applied internally to log values. */
     int zero;          /**< Minimum allowable log value. */
     int n;             /**< Maximum N-Gram order. */
+    garray_t *counts;  /**< N-Gram counts. */
 
     ngram_trie_node_t *root;
     listelem_alloc_t *node_alloc;
@@ -93,8 +98,8 @@ struct ngram_trie_iter_s {
     int nostop;             /**< Continue to next node at same level. */
 };
 
-static ngram_trie_node_t *
-ngram_trie_alloc_node(ngram_trie_t *t)
+ngram_trie_node_t *
+ngram_trie_node_alloc(ngram_trie_t *t)
 {
     ngram_trie_node_t *node;
 
@@ -115,7 +120,10 @@ ngram_trie_init(dict_t *d, logmath_t *lmath)
 
     t = ckd_calloc(1, sizeof(*t));
     t->refcount = 1;
-    t->dict = dict_retain(d);
+    if (d)
+        t->dict = dict_retain(d);
+    else
+        t->dict = dict_init(NULL, NULL);
     t->lmath = logmath_retain(lmath);
 
     /* Determine proper shift to fit min_logprob in 16 bits. */
@@ -125,20 +133,19 @@ ngram_trie_init(dict_t *d, logmath_t *lmath)
         ++t->shift;
     }
 
+    t->counts = garray_init(0, sizeof(int));
+    t->node_alloc = listelem_alloc_init(sizeof(ngram_trie_node_t));
+
 #if 0
     /* Create arrays and add the root node. */
     t->nodes = garray_init(1, sizeof(ngram_trie_node_t));
     t->successors = garray_init(0, sizeof(int32));
     t->root = garray_ptr(t->nodes, ngram_trie_node_t, 0);
-    t->root->word = -1;
-    t->root->log_prob = 0;
-    t->root->log_bowt = 0;
     t->root->history = -1;
     t->root->successors = 0; /* No successors yet. */
+#else
+    t->root = ngram_trie_node_alloc(t);
 #endif
-
-    t->node_alloc = listelem_alloc_init(sizeof(ngram_trie_node_t));
-    t->root = ngram_trie_alloc_node(t);
 
     return t;
 }
@@ -167,16 +174,16 @@ ngram_trie_free(ngram_trie_t *t)
     return 0;
 }
 
-int
-ngram_trie_read_arpa(ngram_trie_t *t, FILE *arpafile)
+dict_t *
+ngram_trie_dict(ngram_trie_t *t)
 {
-    return 0;
+    return t->dict;
 }
 
-int
-ngram_trie_write_arpa(ngram_trie_t *t, FILE *arpafile)
+logmath_t *
+ngram_trie_lmath(ngram_trie_t *t)
 {
-    return 0;
+    return t->lmath;
 }
 
 ngram_trie_node_t *
@@ -217,7 +224,7 @@ ngram_trie_ngram(ngram_trie_t *t, char const *w, ...)
 
 ngram_trie_node_t *
 ngram_trie_ngram_v(ngram_trie_t *t, int32 w,
-                   int32 *hist, int32 n_hist)
+                   int32 const *hist, int32 n_hist)
 {
     ngram_trie_node_t *node;
 
@@ -261,13 +268,6 @@ ngram_trie_prob(ngram_trie_t *t, int *n_used, char const *w, ...)
     prob = ngram_trie_prob_v(t, n_used, wid, hist, n_hist);
     ckd_free(hist);
     return prob;
-}
-
-int32
-ngram_trie_prob_v(ngram_trie_t *t, int *n_used, int32 w,
-                  int32 *hist, int32 n_hist)
-{
-    return 0;
 }
 
 ngram_trie_iter_t *
@@ -440,14 +440,15 @@ ngram_trie_node_t *
 ngram_trie_add_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
 {
     ngram_trie_node_t *ng;
+    size_t pos;
 
-    /* Create a new node. */
-    ng = listelem_malloc(t->node_alloc);
+    ng = ngram_trie_node_alloc(t);
+    ng->word = w;
+    ng->history = h;
+    pos = garray_bisect_right(h->successors, &ng);
+    garray_insert(h->successors, pos, &ng);
 
-    /* Bisect the successor array. */
-
-    /* Insert it.*/
-    return NULL;
+    return ng;
 }
 
 int
@@ -455,31 +456,104 @@ ngram_trie_add_successor_ngram(ngram_trie_t *t,
                                ngram_trie_node_t *h,
                                ngram_trie_node_t *w)
 {
-    /* Bisect the successor array. */
+    size_t pos;
 
-    /* Update w->history. */
+    pos = garray_bisect_right(h->successors, &w);
+    garray_insert(h->successors, pos, &w);
 
-    /* Insert it.*/
     return 0;
+}
+
+int32
+ngram_trie_node_get_word_hist(ngram_trie_t *t,
+                              ngram_trie_node_t *ng,
+                              int32 *out_hist)
+{
+    ngram_trie_node_t *h;
+    int32 n_hist;
+
+    n_hist = 0;
+    for (h = ng->history; h->word != -1; h = h->history) {
+        out_hist[n_hist] = h->word;
+        ++n_hist;
+    }
+
+    return n_hist;
 }
 
 ngram_trie_node_t *
 ngram_trie_backoff(ngram_trie_t *t,
                    ngram_trie_node_t *ng)
 {
+    ngram_trie_node_t *bong;
+    int32 *hist;
+    int32 n_hist;
+
     /* Extract word IDs from ng's history. */
+    n_hist = ngram_trie_node_get_word_hist(t, ng, NULL);
+    hist = ckd_calloc(n_hist, sizeof(*hist));
+    ngram_trie_node_get_word_hist(t, ng, hist);
 
     /* Look up the backoff N-Gram. */
-    return NULL;
+    bong = ngram_trie_ngram_v(t, ng->word, hist, n_hist - 1);
+    ckd_free(hist);
+
+    return bong;
+}
+
+int32
+ngram_trie_bowt_v(ngram_trie_t *t, int32 w,
+                  int32 const *hist, int32 n_hist)
+{
+    ngram_trie_node_t *ng;
+
+    if ((ng = ngram_trie_ngram_v(t, w, hist, n_hist)) != NULL)
+        return ng->log_bowt << t->shift;
+    else if (n_hist > 0)
+        return ngram_trie_bowt_v(t, hist[0], hist + 1, n_hist - 1);
+    else
+        return 0;
+}
+
+int32
+ngram_trie_prob_v(ngram_trie_t *t, int *n_used, int32 w,
+                  int32 const *hist, int32 n_hist)
+{
+    ngram_trie_node_t *ng;
+
+    if (n_used) *n_used = n_hist + 1;
+    if ((ng = ngram_trie_ngram_v(t, w, hist, n_hist)) != NULL)
+        return ng->log_prob << t->shift;
+    else if (n_hist > 0) {
+        int32 bong, pong;
+
+        if (n_used) --*n_used;
+        bong = ngram_trie_prob_v(t, n_used, w, hist, n_hist - 1);
+        pong = ngram_trie_bowt_v(t, hist[0], hist + 1, n_hist - 1);
+        return bong + pong;
+    }
+    else {
+        if (n_used) *n_used = 0;
+        return t->zero << t->shift;
+    }
 }
 
 int32
 ngram_trie_successor_prob(ngram_trie_t *t,
                           ngram_trie_node_t *h, int32 w)
 {
+    int32 prob;
+    int32 *hist;
+    int32 n_hist;
+
     /* Extract word IDs from ng's history. */
-    /* Call ngram_trie_prob_v */
-    return 0;
+    n_hist = ngram_trie_node_get_word_hist(t, h, NULL) + 1;
+    hist = ckd_calloc(n_hist, sizeof(*hist));
+    ngram_trie_node_get_word_hist(t, h, hist + 1);
+    hist[0] = h->word;
+    
+    prob = ngram_trie_prob_v(t, NULL, w, hist, n_hist);
+    return prob;
 }
 
 int32
@@ -487,3 +561,83 @@ ngram_trie_calc_bowt(ngram_trie_t *t, ngram_trie_node_t *h)
 {
     return 0;
 }
+
+static int
+skip_arpa_header(lineiter_t *li)
+{
+    while (li) {
+        string_trim(li->buf, STRING_BOTH);
+        if (0 == strcmp(li->buf, "\\data\\")) {
+            break;
+        }
+        li = lineiter_next(li);
+    }
+    if (li == NULL) {
+        E_ERROR("Unexpected end of file when reading ARPA format");
+        return -1;
+    }
+    return 0;
+}
+
+static int
+read_ngram_counts(lineiter_t *li, garray_t *counts)
+{
+    int one = 1;
+
+    /* Reset and add the number of zerograms (there is one of them) */
+    garray_reset(counts);
+    garray_append(counts, &one);
+
+    for (;li;li = lineiter_next(li)) {
+        string_trim(li->buf, STRING_BOTH);
+        if (strlen(li->buf) == 0)
+            break;
+        if (0 == strncmp(li->buf, "ngram ", 6)) {
+            char *n, *c;
+            int ni, ci;
+            n = li->buf + 6;
+            if (n == NULL) {
+                E_ERROR("Invalid N-Gram count line when reading ARPA format");
+                return -1;
+            }
+            c = strchr(n, '=');
+            if (c == NULL || c[1] == '\0') {
+                E_ERROR("Invalid N-Gram count line when reading ARPA format");
+                return -1;
+            }
+            *c++ = '\0';
+            ni = atoi(n);
+            ci = atoi(c);
+            garray_expand_to(counts, ni + 1);
+            garray_put(counts, ni, &ci);
+        }
+    }
+    return garray_size(counts) - 1;
+}
+
+int
+ngram_trie_read_arpa(ngram_trie_t *t, FILE *arpafile)
+{
+    lineiter_t *li;
+
+    li = lineiter_start(arpafile);
+
+    /* Skip header text. */
+    if (skip_arpa_header(li) < 0)
+        return -1;
+
+    /* Read N-Gram counts. */
+    if ((t->n = read_ngram_counts(li, t->counts)) < 0)
+        return -1;
+
+    /* Now read each set of N-Grams for 1..n */
+    
+    return 0;
+}
+
+int
+ngram_trie_write_arpa(ngram_trie_t *t, FILE *arpafile)
+{
+    return 0;
+}
+

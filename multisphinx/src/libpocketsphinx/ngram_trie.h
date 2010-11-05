@@ -73,6 +73,8 @@ ngram_trie_t *ngram_trie_init(dict_t *d, logmath_t *lmath);
 
 ngram_trie_t *ngram_trie_retain(ngram_trie_t *t);
 int ngram_trie_free(ngram_trie_t *t);
+dict_t *ngram_trie_dict(ngram_trie_t *t);
+logmath_t *ngram_trie_lmath(ngram_trie_t *t);
 
 /**
  * Read N-Grams from an ARPA text format file.
@@ -98,7 +100,7 @@ ngram_trie_node_t *ngram_trie_ngram(ngram_trie_t *t, char const *w, ...);
  * Look up an N-Gram in the trie by numeric IDs.
  */
 ngram_trie_node_t *ngram_trie_ngram_v(ngram_trie_t *t, int32 w,
-				      int32 *hist, int32 n_hist);
+				      int32 const *hist, int32 n_hist);
 
 /**
  * Get model probability (with backoff) for a word with history.
@@ -109,7 +111,7 @@ int32 ngram_trie_prob(ngram_trie_t *t, int *n_used, char const *w, ...);
  * Get model probability (with backoff) for a word with history.
  */
 int32 ngram_trie_prob_v(ngram_trie_t *t, int *n_used, int32 w,
-			int32 *hist, int32 n_hist);
+			int32 const *hist, int32 n_hist);
 
 /**
  * Get an iterator over all N-Grams of a given order in the trie.
