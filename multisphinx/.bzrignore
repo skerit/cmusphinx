@@ -117,3 +117,5 @@ test/unit/test_acmod/test_sync_array
 test/unit/test_acmod/test_featbuf
 test/unit/test_acmod/test_acmod
 gmon.out
+src/programs/multisphinx_batch
+test/unit/test_search/test_fwdtree_multiple

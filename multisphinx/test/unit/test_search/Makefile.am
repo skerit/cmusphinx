@@ -2,7 +2,8 @@ check_PROGRAMS = \
 	test_bptbl \
 	test_arc_buffer \
 	test_fwdtree \
-	test_fwdtree_fwdflat
+	test_fwdtree_fwdflat \
+	test_fwdtree_multiple
 
 TESTS = $(check_PROGRAMS)
 

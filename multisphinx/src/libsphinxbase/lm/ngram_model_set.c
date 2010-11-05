@@ -640,7 +640,7 @@ ngram_model_set_map_words(ngram_model_t *base,
                           int32 n_words)
 {
     ngram_model_set_t *set = (ngram_model_set_t *)base;
-    int32 i;
+    int32 i, maxmap, *nmap, *unkwids;
 
     /* Recreate the word mapping. */
     if (base->writable) {
@@ -654,6 +654,10 @@ ngram_model_set_map_words(ngram_model_t *base,
     base->n_words = base->n_1g_alloc = n_words;
     base->word_str = ckd_calloc(n_words, sizeof(*base->word_str));
     set->widmap = (int32 **)ckd_calloc_2d(n_words, set->n_models, sizeof(**set->widmap));
+    unkwids = ckd_calloc(set->n_models, sizeof(*unkwids));
+    nmap = ckd_calloc(set->n_models, sizeof(*nmap));
+    for (i = 0; i < set->n_models; ++i)
+        unkwids[i] = ngram_unknown_wid(set->lms[i]);
     hash_table_empty(base->wid);
     for (i = 0; i < n_words; ++i) {
         int32 j;
@@ -661,8 +665,23 @@ ngram_model_set_map_words(ngram_model_t *base,
         (void)hash_table_enter_int32(base->wid, base->word_str[i], i);
         for (j = 0; j < set->n_models; ++j) {
             set->widmap[i][j] = ngram_wid(set->lms[j], base->word_str[i]);
+            if (set->widmap[i][j] != unkwids[j])
+                ++nmap[j];
         }
     }
+    E_INFO("Number of word mappings:");
+    maxmap = 0;
+    for (i = 0; i < set->n_models; ++i) {
+        E_INFOCONT(" %d", nmap[i]);
+        if (nmap[i] > maxmap) maxmap = nmap[i];
+    }
+    E_INFOCONT("\n");
+    if (maxmap <= 2)
+        E_ERROR("No word mappings in any language model - case mismatch?\n");
+    else if (set->cur != -1 && nmap[set->cur] <= 2)
+        E_WARN("No word mappings for current language model - case mismatch?\n");
+    ckd_free(unkwids);
+    ckd_free(nmap);
 }
 
 static int
