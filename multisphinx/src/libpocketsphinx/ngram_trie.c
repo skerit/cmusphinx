@@ -77,10 +77,6 @@ struct ngram_trie_node_s {
     int32 word;
     int16 log_prob;
     int16 log_bowt;
-#if 0 /* Future memory-optimized version... */
-    int32 history;    /**< Index of parent node. */
-    int32 successors; /**< Index of child nodes. */
-#endif
     ngram_trie_node_t *history;
     garray_t *successors;
 };

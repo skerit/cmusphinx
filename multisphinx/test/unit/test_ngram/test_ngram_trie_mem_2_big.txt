@@ -4,6 +4,17 @@ explicitly allocating only one element in them helps too.
 The garray_t type still has a lot of overhead as you can see
 below... (in garray_init at line 63)
 
+in terms of raw memory usage we have 51% nodes, 23% successor arrays,
+18% garray_t overhead.
+
+Nodes are currently 24 bytes each, the largest part of which is the
+history and successor pointers (8 bytes each).  The history pointer is
+not strictly necessary, it exists to speed up operations like finding
+the backoff node and iteration over N-grams.
+
+Finding the backoff node is so common that we probably want to
+optimize it further.
+
 --------------------------------------------------------------------------------
   n        time(i)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
 --------------------------------------------------------------------------------
