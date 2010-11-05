@@ -48,6 +48,7 @@ ps_search_init(ps_search_t *search, ps_searchfuncs_t *vt,
                cmd_ln_t *config, acmod_t *acmod, dict_t *dict,
                dict2pid_t *d2p)
 {
+    ptmr_init(&search->t);
     search->vt = vt;
     search->config = cmd_ln_retain(config);
     search->acmod = acmod_retain(acmod);
@@ -73,6 +74,14 @@ ps_search_init(ps_search_t *search, ps_searchfuncs_t *vt,
 int
 ps_search_free(ps_search_t *search)
 {
+    if (search == NULL)
+        return 0;
+
+    ptmr_stop(&search->t);
+    E_INFO("TOTAL %s %.3f wall %.3f xRT\n",
+           search->vt->name, search->t.t_tot_elapsed,
+           search->t.t_tot_elapsed / search->total_frames
+           * cmd_ln_int32_r(search->config, "-frate"));
     /* Call the search free function. */
     (*search->vt->free)(search);
     /* Clean up common stuff. */
@@ -94,8 +103,16 @@ ps_search_main(sbthread_t *thr)
 
     E_INFO("Waiting to start utt\n");
     while (acmod_start_utt(search->acmod, -1) == 0) {
+        ptmr_reset(&search->t);
         (*search->vt->decode)(search);
         acmod_end_utt(search->acmod);
+        search->total_frames += search->acmod->output_frame;
+        E_INFO("TOTAL %s %f wall %.2f xRT\n",
+               search->vt->name,
+               search->t.t_elapsed,
+               search->t.t_elapsed / search->acmod->output_frame
+               * cmd_ln_int32_r(search->config, "-frate"));
+
     }
     return 0;
 }

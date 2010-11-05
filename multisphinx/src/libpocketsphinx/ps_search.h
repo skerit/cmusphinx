@@ -80,6 +80,8 @@ struct ps_search_s {
     ps_searchfuncs_t *vt;  /**< V-table of search methods. */
     sbthread_t *thr;       /**< Thread in which this search runs. */
     sbmtx_t *mtx;          /**< Lock for this search. */
+    ptmr_t t;              /**< Overall performance timer for this search. */
+    int32 total_frames;    /**< Total number of frames processed. */
 
     cmd_ln_t *config;      /**< Configuration. */
     acmod_t *acmod;        /**< Acoustic model. */

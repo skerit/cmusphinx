@@ -50,6 +50,7 @@
 #include <sphinxbase/err.h>
 #include <sphinxbase/garray.h>
 #include <sphinxbase/sbthread.h>
+#include <sphinxbase/profile.h>
 
 /* Local headers. */
 #include "pocketsphinx_internal.h"
@@ -84,6 +85,8 @@ typedef struct bp_s {
 typedef struct bptbl_s {
     int refcount;        /**< Reference count. */
     dict2pid_t *d2p;     /**< Tied state mapping. */
+
+    ptmr_t t_bptbl;      /**< Performance timer. */
 
     garray_t *retired;   /**< Retired backpointer entries. */
     garray_t *ent;       /**< Active backpointer entries. */

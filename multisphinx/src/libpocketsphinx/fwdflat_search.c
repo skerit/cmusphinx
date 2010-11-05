@@ -1011,6 +1011,7 @@ fwdflat_search_decode(ps_search_t *base)
          * referenced by active backpointers. */
         if (bptbl_wait(ffs->input_bptbl, -1) < 0)
             break;
+        ptmr_start(&ffs->base.t);
         next_sf = bptbl_active_sf(ffs->input_bptbl);
         /* Extend the arc buffer the appropriate number of frames. */
         if (arc_buffer_extend(ffs->input_arcs, next_sf) > 0) {
@@ -1043,6 +1044,7 @@ fwdflat_search_decode(ps_search_t *base)
         else
             timeout = 0;  /* Don't wait for results, we will block on
                            * input_bptbl instead. */
+        ptmr_stop(&ffs->base.t);
         /* Decode while we have a big enough window. */
         end_win = frame_idx + ffs->max_sf_win;
         while (final
@@ -1052,6 +1054,7 @@ fwdflat_search_decode(ps_search_t *base)
 
             if ((frame_idx = acmod_wait(acmod, timeout)) < 0)
                 break;
+            ptmr_start(&ffs->base.t);
             end_win = frame_idx + ffs->max_sf_win;
             start_win = frame_idx - ffs->max_sf_win;
             if (start_win < 0) start_win = 0;
@@ -1063,9 +1066,12 @@ fwdflat_search_decode(ps_search_t *base)
                 break;
             frame_idx += k;
             arc_buffer_release(ffs->input_arcs, start_win);
+            ptmr_stop(&ffs->base.t);
         }
     }
+    ptmr_start(&ffs->base.t);
     fwdflat_search_finish(ps_search_base(ffs));
+    ptmr_stop(&ffs->base.t);
     return frame_idx;
 }
 

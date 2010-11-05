@@ -43,6 +43,7 @@
 #define __FWDTREE_SEARCH_H__
 
 /* SphinxBase headers. */
+#include <sphinxbase/profile.h>
 
 /* Local headers. */
 #include "bptbl.h"

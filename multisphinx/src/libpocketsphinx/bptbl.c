@@ -66,6 +66,20 @@ static int bptbl_ef_count_internal(bptbl_t *bptbl, int frame_idx);
 #define E_DEBUGCONT(level,x) E_INFOCONT x
 #endif
 
+static void
+bptbl_lock(bptbl_t *bptbl)
+{
+    sbmtx_lock(bptbl->mtx);
+    ptmr_start(&bptbl->t_bptbl);
+}
+
+static void
+bptbl_unlock(bptbl_t *bptbl)
+{
+    ptmr_stop(&bptbl->t_bptbl);
+    sbmtx_unlock(bptbl->mtx);
+}
+
 bptbl_t *
 bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
 {
@@ -85,7 +99,7 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
     bptbl->valid_fr = bitvec_alloc(bptbl->n_frame_alloc);
     bptbl->rc = garray_init(0, sizeof(int32));
     garray_reserve(bptbl->rc, n_alloc * 20); /* 20 = guess at average number of rcs/word */
-
+    ptmr_init(&bptbl->t_bptbl);
     bptbl->evt = sbevent_init(FALSE);
     bptbl->mtx = sbmtx_init();
     return bptbl;
@@ -106,6 +120,8 @@ bptbl_free(bptbl_t *bptbl)
     if (--bptbl->refcount > 0)
         return bptbl->refcount;
 
+    E_INFO("TOTAL bptbl %f CPU %f wall\n",
+           bptbl->t_bptbl.t_tot_cpu, bptbl->t_bptbl.t_tot_elapsed);
     dict2pid_free(bptbl->d2p);
     garray_free(bptbl->ent);
     garray_free(bptbl->retired);
@@ -132,6 +148,7 @@ bptbl_reset(bptbl_t *bptbl)
     bptbl->dest_s_idx = 0;
     bptbl->n_frame = 0;
     bptbl->oldest_bp = NO_BP;
+    ptmr_reset(&bptbl->t_bptbl);
     sbmtx_unlock(bptbl->mtx);
 }
 
@@ -542,7 +559,7 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp)
 {
     int frame_idx = bptbl->n_frame;
 
-    sbmtx_lock(bptbl->mtx);
+    bptbl_lock(bptbl);
     E_DEBUG(2,("pushing frame %d, oldest bp %d in frame %d\n",
                frame_idx, oldest_bp,
                oldest_bp == NO_BP
@@ -556,7 +573,7 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp)
     garray_ent(bptbl->ef_idx, bpidx_t, frame_idx) = bptbl_end_idx(bptbl);
     bptbl->n_frame = frame_idx + 1;
     bptbl_gc(bptbl, oldest_bp, frame_idx);
-    sbmtx_unlock(bptbl->mtx);
+    bptbl_unlock(bptbl);
     return frame_idx;
 }
 
@@ -567,14 +584,14 @@ bptbl_commit(bptbl_t *bptbl)
     int frame_idx, dest_s_idx;
 
     /* This is the frame we're working on and its bps. */
-    sbmtx_lock(bptbl->mtx);
+    bptbl_lock(bptbl);
     frame_idx = bptbl->n_frame - 1;
     dest = bptbl_ef_idx_internal(bptbl, frame_idx);
     dest_s_idx = garray_ent(bptbl->ent, bp_t, dest).s_idx;
     eidx = bptbl_end_idx(bptbl);
     E_DEBUG(4,("compacting %d bps\n", eidx - dest));
     if (eidx == dest) {
-        sbmtx_unlock(bptbl->mtx);
+        bptbl_unlock(bptbl);
         return 0;
     }
     /* Remove invalid bps and their rc entries. */
@@ -606,7 +623,7 @@ bptbl_commit(bptbl_t *bptbl)
     /* Truncate active arrays. */
     garray_pop_from(bptbl->rc, dest_s_idx);
     garray_pop_from(bptbl->ent, dest);
-    sbmtx_unlock(bptbl->mtx);
+    bptbl_unlock(bptbl);
 
     return dest - src;
 }
@@ -616,12 +633,12 @@ bptbl_finalize(bptbl_t *bptbl)
 {
     int n_retired, first_retired_bp;
 
-    sbmtx_lock(bptbl->mtx);
+    bptbl_lock(bptbl);
     E_DEBUG(2,("Final GC from frame %d to %d\n",
                bptbl_active_frame(bptbl), bptbl->n_frame));
     /* If there is nothing to GC then finish up. */
     if (bptbl_end_idx(bptbl) == bptbl_active_idx(bptbl)) {
-        sbmtx_unlock(bptbl->mtx);
+        bptbl_unlock(bptbl);
         return 0;
     }
     /* Expand the permutation table if necessary (probably). */
@@ -659,7 +676,10 @@ bptbl_finalize(bptbl_t *bptbl)
     E_INFO("Allocated %d permutation entries and %d end frame entries\n",
            garray_alloc_size(bptbl->permute), garray_alloc_size(bptbl->ef_idx));
     sbevent_signal(bptbl->evt);
-    sbmtx_unlock(bptbl->mtx);
+    bptbl_unlock(bptbl);
+    E_INFO("bptbl %f CPU %f wall %f xRT\n",
+           bptbl->t_bptbl.t_cpu, bptbl->t_bptbl.t_elapsed,
+           bptbl->t_bptbl.t_elapsed / bptbl->n_frame * 100);
     return n_retired;
 }
 
@@ -673,7 +693,7 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
     return 0;
 #endif
 
-    sbmtx_lock(bptbl->mtx);
+    bptbl_lock(bptbl);
     if (first_idx > bptbl_retired_idx(bptbl)) {
         E_DEBUG(2,("%d outside retired, releasing up to %d\n",
                    first_idx, bptbl_retired_idx(bptbl)));
@@ -684,7 +704,7 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
     E_DEBUG(2,("Releasing bptrs from %d to %d:\n",
                base_idx, first_idx));
     if (first_idx < base_idx) {
-        sbmtx_unlock(bptbl->mtx);
+        bptbl_unlock(bptbl);
         return 0;
     }
 #if 0 /* For debugging purposes... */
@@ -707,7 +727,7 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
     garray_shift_from(bptbl->retired, first_idx);
     garray_set_base(bptbl->retired, first_idx);
 
-    sbmtx_unlock(bptbl->mtx);
+    bptbl_unlock(bptbl);
     return first_idx - base_idx;
 }
 
@@ -883,7 +903,7 @@ bptbl_active_sf(bptbl_t *bptbl)
         ent = bptbl_ent_internal(bptbl, bptbl->oldest_bp);
         sf = ent->frame + 1;
     }
-    sbmtx_unlock(bptbl->mtx);
+    bptbl_unlock(bptbl);
     return sf;
 }
 
@@ -1039,7 +1059,7 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
         return NO_BP;
     }
 
-    sbmtx_lock(bptbl->mtx);
+    bptbl_lock(bptbl);
     /* Append a new backpointer. */
     memset(&be, 0, sizeof(be));
     be.wid = w;
@@ -1072,7 +1092,7 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
                bptbl->n_frame - 1, bss_head, bptbl_active_frame(bptbl)));
     assert(bptbl_sf_internal(bptbl, bptbl_end_idx(bptbl) - 1)
            >= bptbl_active_frame(bptbl));
-    sbmtx_unlock(bptbl->mtx);
+    bptbl_unlock(bptbl);
     return bpidx;
 }
 

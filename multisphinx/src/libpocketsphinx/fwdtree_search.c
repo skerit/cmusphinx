@@ -610,6 +610,9 @@ int
 fwdtree_search_free(ps_search_t *base)
 {
     fwdtree_search_t *fts = (fwdtree_search_t *)base;
+    int cf;
+
+    cf = acmod_frame(ps_search_acmod(fts));
 
     /* Reset non-root channels. */
     reinit_search_tree(fts);
@@ -1707,13 +1710,16 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     if ((frame_idx = acmod_wait(acmod, -1)) == -1)
         return 0;
     E_DEBUG(2,("Searching frame %d\n", frame_idx));
+    ptmr_start(&fts->base.t);
     /* Activate our HMMs for the current frame if need be. */
     if (!acmod->compallsen)
         compute_sen_active(fts, frame_idx);
 
     /* Compute GMM scores for the current frame. */
-    if ((senscr = acmod_score(acmod, frame_idx)) == NULL)
+    if ((senscr = acmod_score(acmod, frame_idx)) == NULL) {
+        ptmr_stop(&fts->base.t);
         return 0;
+    }
     fts->st.n_senone_active_utt += acmod->n_senone_active;
 
     /* Mark backpointer table for current frame. */
@@ -1722,8 +1728,11 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
 
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
-    if (fts->best_score == WORST_SCORE || fts->best_score WORSE_THAN WORST_SCORE)
+    if (fts->best_score == WORST_SCORE
+        || fts->best_score WORSE_THAN WORST_SCORE) {
+        ptmr_stop(&fts->base.t);
         return 0;
+    }
     /* Renormalize if necessary */
     if (fts->best_score + (2 * fts->beam) WORSE_THAN WORST_SCORE) {
         E_INFO("Renormalizing Scores at frame %d, best score %d\n",
@@ -1747,6 +1756,7 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     acmod_release(acmod, frame_idx);
 
     /* Return the number of frames processed. */
+    ptmr_stop(&fts->base.t);
     return 1;
 }
 
@@ -1758,6 +1768,7 @@ fwdtree_search_finish(ps_search_t *base)
     root_node_t *rhmm;
     nonroot_node_t *hmm, **acl;
 
+    ptmr_start(&fts->base.t);
     /* This is the number of frames processed. */
     cf = acmod_frame(ps_search_acmod(fts));
     /* Finalize the backpointer table. */
@@ -1788,6 +1799,7 @@ fwdtree_search_finish(ps_search_t *base)
             continue;
         fwdtree_search_free_all_rc(fts, w);
     }
+    ptmr_stop(&fts->base.t);
 
     /*
      * The previous search code did a postprocessing of the
