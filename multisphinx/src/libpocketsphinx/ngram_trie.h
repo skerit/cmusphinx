@@ -122,6 +122,31 @@ ngram_trie_iter_t *ngram_trie_ngrams(ngram_trie_t *t, int n);
 ngram_trie_iter_t *ngram_trie_successors(ngram_trie_t *t, ngram_trie_node_t *h);
 
 /**
+ * Move iterator forward.
+ */
+ngram_trie_iter_t *ngram_trie_iter_next(ngram_trie_iter_t *itor);
+
+/**
+ * Move iterator up one level.
+ */
+ngram_trie_iter_t *ngram_trie_iter_up(ngram_trie_iter_t *itor);
+
+/**
+ * Move iterator down one level.
+ */
+ngram_trie_iter_t *ngram_trie_iter_down(ngram_trie_iter_t *itor);
+
+/**
+ * Get the node pointed to by an iterator.
+ */
+ngram_trie_node_t *ngram_trie_iter_get(ngram_trie_iter_t *itor);
+
+/**
+ * Get the parent of the node pointed to by an iterator.
+ */
+ngram_trie_node_t *ngram_trie_iter_get_parent(ngram_trie_iter_t *itor);
+
+/**
  * Look up a successor to an N-Gram.
  */
 ngram_trie_node_t *ngram_trie_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w);

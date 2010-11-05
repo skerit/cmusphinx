@@ -44,6 +44,7 @@
 #include "ngram_trie.h"
 
 #include <sphinxbase/garray.h>
+#include <sphinxbase/listelem_alloc.h>
 
 #define MIN_LOGPROB 1e-20
 
@@ -58,32 +59,58 @@ struct ngram_trie_s {
     int zero;          /**< Minimum allowable log value. */
     int n;             /**< Maximum N-Gram order. */
 
+    ngram_trie_node_t *root;
+    listelem_alloc_t *node_alloc;
+
+#if 0 /* Future memory-optimized version... */
     garray_t *nodes;       /**< Flat array of nodes. */
     garray_t *successors;  /**< Flat array of successor pointers. */
+#endif
 };
 
 /**
- * N-Gram structure (8 bytes in memory/on disk).
+ * N-Gram structure
  */
 struct ngram_trie_node_s {
     int32 word;
     int16 log_prob;
     int16 log_bowt;
+#if 0 /* Future memory-optimized version... */
     int32 history;    /**< Index of parent node. */
     int32 successors; /**< Index of child nodes. */
+#endif
+    ngram_trie_node_t *history;
+    garray_t *successors;
 };
 
 /**
  * Iterator over N-Grams in a trie.
  */
 struct ngram_trie_iter_s {
-    ngram_trie_t *t; /**< Parent trie. */
+    ngram_trie_t *t;        /**< Parent trie. */
+    ngram_trie_node_t *cur; /**< Current node (in this successor array). */
+    int32 pos;              /**< Position in cur->successors. */
+    int nostop;             /**< Continue to next node at same level. */
 };
+
+static ngram_trie_node_t *
+ngram_trie_alloc_node(ngram_trie_t *t)
+{
+    ngram_trie_node_t *node;
+
+    node = listelem_malloc(t->node_alloc);
+    node->word = -1;
+    node->log_prob = 0;
+    node->log_bowt = 0;
+    node->history = NULL;
+    node->successors = garray_init(0, sizeof(ngram_trie_node_t *));
+
+    return node;
+}
 
 ngram_trie_t *
 ngram_trie_init(dict_t *d, logmath_t *lmath)
 {
-    ngram_trie_node_t *root;
     ngram_trie_t *t;
 
     t = ckd_calloc(1, sizeof(*t));
@@ -98,16 +125,20 @@ ngram_trie_init(dict_t *d, logmath_t *lmath)
         ++t->shift;
     }
 
+#if 0
     /* Create arrays and add the root node. */
     t->nodes = garray_init(1, sizeof(ngram_trie_node_t));
     t->successors = garray_init(0, sizeof(int32));
+    t->root = garray_ptr(t->nodes, ngram_trie_node_t, 0);
+    t->root->word = -1;
+    t->root->log_prob = 0;
+    t->root->log_bowt = 0;
+    t->root->history = -1;
+    t->root->successors = 0; /* No successors yet. */
+#endif
 
-    root = garray_ptr(t->nodes, ngram_trie_node_t, 0);
-    root->word = -1;
-    root->log_prob = 0;
-    root->log_bowt = 0;
-    root->history = -1;
-    root->successors = 0; /* No successors yet. */
+    t->node_alloc = listelem_alloc_init(sizeof(ngram_trie_node_t));
+    t->root = ngram_trie_alloc_node(t);
 
     return t;
 }
@@ -128,8 +159,10 @@ ngram_trie_free(ngram_trie_t *t)
         return t->refcount;
     dict_free(t->dict);
     logmath_free(t->lmath);
+#if 0
     garray_free(t->nodes);
     garray_free(t->successors);
+#endif
     ckd_free(t);
     return 0;
 }
@@ -149,7 +182,7 @@ ngram_trie_write_arpa(ngram_trie_t *t, FILE *arpafile)
 ngram_trie_node_t *
 ngram_trie_root(ngram_trie_t *t)
 {
-    return garray_ptr(t->nodes, ngram_trie_node_t, 0);
+    return t->root;
 }
 
 ngram_trie_node_t *
@@ -240,30 +273,180 @@ ngram_trie_prob_v(ngram_trie_t *t, int *n_used, int32 w,
 ngram_trie_iter_t *
 ngram_trie_ngrams(ngram_trie_t *t, int n)
 {
-    return NULL;
+    ngram_trie_iter_t *itor;
+    ngram_trie_node_t *h;
+    int i;
+
+    /* Find first N-1-Gram */
+    h = t->root;
+    for (i = 1; i < n; ++i) {
+        h = garray_ent(h->successors, ngram_trie_node_t *, 0);
+        if (h == NULL)
+            return NULL;
+    }
+
+    /* Create an iterator with nostop=TRUE */
+    itor = ckd_calloc(1, sizeof(*itor));
+    itor->cur = h;
+    itor->pos = 0;
+    itor->nostop = FALSE;
+
+    return itor;
 }
 
 ngram_trie_iter_t *
 ngram_trie_successors(ngram_trie_t *t, ngram_trie_node_t *h)
 {
-    return NULL;
+    ngram_trie_iter_t *itor;
+
+    /* Create an iterator with nostop=FALSE */
+    itor = ckd_calloc(1, sizeof(*itor));
+    itor->cur = h;
+    itor->pos = 0;
+    itor->nostop = FALSE;
+
+    return itor;
+}
+
+void
+ngram_trie_iter_free(ngram_trie_iter_t *itor)
+{
+    ckd_free(itor);
+}
+
+static ngram_trie_node_t *
+ngram_trie_next_node(ngram_trie_t *t, ngram_trie_node_t *ng)
+{
+    ngram_trie_node_t *h = ng->history;
+    size_t pos;
+
+    if (h == NULL)
+        return NULL;
+    /* Locate ng in h->successors. */
+    pos = garray_bisect_left(h->successors, &ng);
+    assert(pos < garray_next_idx(h->successors));
+    assert(ng == garray_ent(h->successors, ngram_trie_node_t *, pos));
+    ++pos;
+    if (pos == garray_next_idx(h->successors)) {
+        h = ngram_trie_next_node(t, h);
+        if (h == NULL)
+            return NULL;
+        return garray_ent(h->successors, ngram_trie_node_t *, 0);
+    }
+    else
+        return garray_ent(h->successors, ngram_trie_node_t *, pos);
+}
+
+ngram_trie_iter_t *
+ngram_trie_iter_next(ngram_trie_iter_t *itor)
+{
+    ++itor->pos;
+    if (itor->pos >= garray_next_idx(itor->cur->successors)) {
+        if (itor->nostop) {
+            itor->cur = ngram_trie_next_node(itor->t, itor->cur);
+            if (itor->cur == NULL) {
+                ngram_trie_iter_free(itor);
+                return NULL;
+            }
+            itor->pos = 0;
+        }
+        else  {
+            ngram_trie_iter_free(itor);
+            return NULL;
+        }
+    }
+    return itor;
+}
+
+ngram_trie_iter_t *
+ngram_trie_iter_up(ngram_trie_iter_t *itor)
+{
+    itor->cur = itor->cur->history;
+    if (itor->cur == NULL) {
+        ngram_trie_iter_free(itor);
+        return NULL;
+    }
+    return itor;
+}
+
+ngram_trie_iter_t *
+ngram_trie_iter_down(ngram_trie_iter_t *itor)
+{
+    itor->cur = garray_ent(itor->cur->successors,
+                           ngram_trie_node_t *, itor->pos);
+    assert(itor->cur != NULL);
+    if (garray_next_idx(itor->cur->successors) == 0) {
+        ngram_trie_iter_free(itor);
+        return NULL;
+    }
+    itor->pos = 0;
+    return itor;
+}
+
+ngram_trie_node_t *
+ngram_trie_iter_get(ngram_trie_iter_t *itor)
+{
+    if (itor->pos >= garray_next_idx(itor->cur->successors))
+        return NULL;
+    else
+        return garray_ent(itor->cur->successors,
+                          ngram_trie_node_t *, itor->pos);
+}
+
+ngram_trie_node_t *
+ngram_trie_iter_get_parent(ngram_trie_iter_t *itor)
+{
+    return itor->cur;
+}
+
+static size_t
+ngram_trie_successor_pos(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
+{
+    ngram_trie_node_t *png, ng;
+    ng.word = w;
+    png = &ng;
+    return garray_bisect_left(h->successors, &png);
 }
 
 ngram_trie_node_t *
 ngram_trie_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
 {
-    return NULL;
+    size_t pos;
+
+    pos = ngram_trie_successor_pos(t, h, w);
+    if (pos >= garray_next_idx(h->successors))
+        return NULL;
+    return garray_ent(h->successors, ngram_trie_node_t *, pos);
 }
 
 int
 ngram_trie_delete_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
 {
+    ngram_trie_node_t *ng;
+    size_t pos;
+
+    /* Bisect the successor array. */
+    pos = ngram_trie_successor_pos(t, h, w);
+    if (pos >= garray_next_idx(h->successors))
+        return -1;
+    ng = garray_ent(h->successors, ngram_trie_node_t *, pos);
+    /* Delete it. */
+    listelem_free(t->node_alloc, ng);
+    garray_delete(h->successors, pos, pos+1);
     return 0;
 }
 
 ngram_trie_node_t *
 ngram_trie_add_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
 {
+    ngram_trie_node_t *ng;
+
+    /* Create a new node. */
+    ng = listelem_malloc(t->node_alloc);
+
+    /* Bisect the successor array. */
+
+    /* Insert it.*/
     return NULL;
 }
 
@@ -272,6 +455,11 @@ ngram_trie_add_successor_ngram(ngram_trie_t *t,
                                ngram_trie_node_t *h,
                                ngram_trie_node_t *w)
 {
+    /* Bisect the successor array. */
+
+    /* Update w->history. */
+
+    /* Insert it.*/
     return 0;
 }
 
@@ -279,6 +467,9 @@ ngram_trie_node_t *
 ngram_trie_backoff(ngram_trie_t *t,
                    ngram_trie_node_t *ng)
 {
+    /* Extract word IDs from ng's history. */
+
+    /* Look up the backoff N-Gram. */
     return NULL;
 }
 
@@ -286,6 +477,8 @@ int32
 ngram_trie_successor_prob(ngram_trie_t *t,
                           ngram_trie_node_t *h, int32 w)
 {
+    /* Extract word IDs from ng's history. */
+    /* Call ngram_trie_prob_v */
     return 0;
 }
 
