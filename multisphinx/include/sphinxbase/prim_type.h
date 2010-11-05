@@ -177,6 +177,12 @@ typedef double          uint64;
 #define MAX_NEG_FLOAT64		((float64) (-MAX_POS_FLOAT64))
 #define MIN_NEG_FLOAT64		((float64) (-MIN_POS_FLOAT64))
 
+/**
+ * Pair of integers, used for various things.
+ */
+typedef struct i32p_s {
+    int32 a, b;
+} i32p_t;
 
 #ifdef __cplusplus
 }

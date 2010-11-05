@@ -131,3 +131,4 @@ test/unit/test_search/foo.txt
 massif.out.*
 test/unit/test_search/test_fwdtree_multiple.hyp
 massif.txt.*
+src/programs/ngram_homos

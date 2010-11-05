@@ -199,7 +199,7 @@ ngram_trie_dict(ngram_trie_t *t)
 }
 
 logmath_t *
-ngram_trie_lmath(ngram_trie_t *t)
+ngram_trie_logmath(ngram_trie_t *t)
 {
     return t->lmath;
 }
@@ -209,6 +209,13 @@ ngram_trie_root(ngram_trie_t *t)
 {
     return t->root;
 }
+
+int
+ngram_trie_n(ngram_trie_t *t)
+{
+    return t->n;
+}
+
 
 ngram_trie_node_t *
 ngram_trie_ngram(ngram_trie_t *t, char const *w, ...)
@@ -459,6 +466,38 @@ ngram_trie_iter_get_parent(ngram_trie_iter_t *itor)
     return itor->cur;
 }
 
+int32
+ngram_trie_node_word(ngram_trie_t *t, ngram_trie_node_t *node)
+{
+    return node->word;
+}
+
+void
+ngram_trie_node_set_word(ngram_trie_t *t, ngram_trie_node_t *node, int32 wid)
+{
+    node->word = wid;
+}
+
+void
+ngram_trie_node_params(ngram_trie_t *t,
+                       ngram_trie_node_t *node,
+                       int32 *out_log_prob,
+                       int32 *out_log_bowt)
+{
+    if (out_log_prob) *out_log_prob = node->log_prob << t->shift;
+    if (out_log_bowt) *out_log_bowt = node->log_bowt << t->shift;
+}
+
+void
+ngram_trie_node_set_params(ngram_trie_t *t,
+                           ngram_trie_node_t *node,
+                           int32 log_prob,
+                           int32 log_bowt)
+{
+    node->log_prob = log_prob;
+    node->log_bowt = log_bowt;
+}
+
 static size_t
 ngram_trie_successor_pos(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
 {
@@ -682,6 +721,12 @@ int32
 ngram_trie_calc_bowt(ngram_trie_t *t, ngram_trie_node_t *h)
 {
     return 0;
+}
+
+int32
+ngram_trie_node_validate(ngram_trie_t *t, ngram_trie_node_t *h)
+{
+    return FALSE;
 }
 
 static int

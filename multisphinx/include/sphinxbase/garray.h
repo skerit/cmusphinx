@@ -155,6 +155,17 @@ int garray_cmp_int32(garray_t *gar, void const *a, void const *b, void *udata);
 int garray_cmp_str(garray_t *gar, void const *a, void const *b, void *udata);
 
 /**
+ * Standard comparison function for integer pairs.
+ */
+int garray_cmp_i32p(garray_t *gar, void const *a, void const *b, void *udata);
+
+/**
+ * Standard comparison function for the first element of integer pairs
+ */
+int garray_cmp_i32p_first(garray_t *gar, void const *a,
+                          void const *b, void *udata);
+
+/**
  * Set the comparison function to be used for bisect operations.
  */
 void garray_set_cmp(garray_t *gar, garray_cmp_t cmp, void *udata);

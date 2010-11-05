@@ -54,23 +54,11 @@
 struct vocab_map_s {
     int refcount;
     dict_t *dict;
+    int gendict;
     garray_t *pseudos; /**< Map pseudo words to words. */
     garray_t *words;   /**< Map words to pseudo words. */
     garray_t *wids;    /**< Word IDs for word sets. */
 };
-
-/**
- * Pair of integers, used for pseudos and words above.
- */
-typedef struct i32p_s {
-    int32 a, b;
-} i32p_t;
-
-static int
-i32p_cmp_first(garray_t *gar, void const *a, void const *b, void *udata)
-{
-    return ((i32p_t *)a)->a - ((i32p_t *)b)->a;
-}
 
 vocab_map_t *
 vocab_map_init(dict_t *dict)
@@ -78,15 +66,23 @@ vocab_map_init(dict_t *dict)
     vocab_map_t *vm;
     
     vm = ckd_calloc(1, sizeof(*vm));
-    vm->dict = dict_retain(dict);
     vm->refcount = 1;
+
+    if (dict) {
+        vm->dict = dict_retain(dict);
+        vm->gendict = FALSE;
+    }
+    else {
+        vm->dict = dict_init(NULL, NULL);
+        vm->gendict = TRUE;
+    }
 
     vm->pseudos = garray_init(0, sizeof(i32p_t));
     vm->words = garray_init(0, sizeof(i32p_t));
     vm->wids = garray_init(0, sizeof(int32));
 
-    garray_set_cmp(vm->pseudos, i32p_cmp_first, NULL);
-    garray_set_cmp(vm->words, i32p_cmp_first, NULL);
+    garray_set_cmp(vm->pseudos, garray_cmp_i32p_first, NULL);
+    garray_set_cmp(vm->words, garray_cmp_i32p_first, NULL);
 
     return vm;
 }
@@ -113,6 +109,12 @@ vocab_map_free(vocab_map_t *vm)
     return 0;
 }
 
+dict_t *
+vocab_map_dict(vocab_map_t *vm)
+{
+    return vm->dict;
+}
+
 int
 vocab_map_read(vocab_map_t *vm, FILE *fh)
 {
@@ -129,8 +131,10 @@ vocab_map_read(vocab_map_t *vm, FILE *fh)
         wptr = ckd_calloc(nwords, sizeof(*wptr));
         str2words(li->buf, wptr, nwords);
 
-        pseudo.a = dict_wordid(vm->dict, wptr[0]);
-        if (pseudo.a == -1) {
+        if ((pseudo.a = dict_wordid(vm->dict, wptr[0])) == BAD_S3WID)
+            if (vm->gendict)
+                pseudo.a = dict_add_word(vm->dict, wptr[0], NULL, 0);
+        if (pseudo.a == BAD_S3WID) {
             E_ERROR("Skipping unknown pseudo-word %s\n", wptr[0]);
             goto next_line;
         }
@@ -211,4 +215,49 @@ vocab_map_unmap(vocab_map_t *vm, int32 pseudo_wid,
     if (out_n_mapped)
         *out_n_mapped = garray_ent(vm->wids, int32, ent.b);
     return garray_ptr(vm->wids, int32, ent.b + 1);
+}
+
+struct vocab_map_iter_s {
+    vocab_map_t *vm;
+    size_t pos;
+};
+
+vocab_map_iter_t *
+vocab_map_mappings(vocab_map_t *vm)
+{
+    vocab_map_iter_t *itor;
+
+    if (garray_next_idx(vm->pseudos) == 0)
+        return NULL;
+
+    itor = ckd_calloc(1, sizeof(*itor));
+    itor->vm = vm;
+    itor->pos = 0;
+    return itor;
+}
+
+vocab_map_iter_t *
+vocab_map_iter_next(vocab_map_iter_t *itor)
+{
+    if (++itor->pos == garray_next_idx(itor->vm->pseudos)) {
+        vocab_map_iter_free(itor);
+        return NULL;
+    }
+    return itor;
+}
+
+void
+vocab_map_iter_free(vocab_map_iter_t *itor)
+{
+    ckd_free(itor);
+}
+
+int32 const *
+vocab_map_iter_get(vocab_map_iter_t *itor,
+                   int32 *out_pseudo_wid,
+                   int32 *out_n_mapped)
+{
+    int32 pseudo_wid = garray_ent(itor->vm->pseudos, int32, itor->pos);
+    if (out_pseudo_wid) *out_pseudo_wid = pseudo_wid;
+    return vocab_map_unmap(itor->vm, pseudo_wid, out_n_mapped);
 }

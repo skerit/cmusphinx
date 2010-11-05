@@ -69,6 +69,11 @@ vocab_map_t *vocab_map_retain(vocab_map_t *vm);
 int vocab_map_free(vocab_map_t *vm);
 
 /**
+ * Get the dictionary from the vocabulary map.
+ */
+dict_t *vocab_map_dict(vocab_map_t *vm);
+
+/**
  * Read a vocabulary map from a file.
  */
 int vocab_map_read(vocab_map_t *vm, FILE *fh);
@@ -88,5 +93,33 @@ int32 vocab_map_map(vocab_map_t *vm, int32 wid);
  */
 int32 const *vocab_map_unmap(vocab_map_t *vm, int32 pseudo_wid,
                              int32 *out_n_mapped);
+
+/**
+ * Iterator over vocabulary mappings.
+ */
+typedef struct vocab_map_iter_s vocab_map_iter_t;
+
+/**
+ * Iterate over all mappings in a vocabulary map.
+ */
+vocab_map_iter_t *vocab_map_mappings(vocab_map_t *vm);
+
+/**
+ * Move the iterator forward.
+ */
+vocab_map_iter_t *vocab_map_iter_next(vocab_map_iter_t *itor);
+
+/**
+ * Free an iterator early.
+ */
+void vocab_map_iter_free(vocab_map_iter_t *itor);
+
+/**
+ * Get pseudoword and constituents from a vocab map iterator.
+ */
+int32 const *vocab_map_iter_get(vocab_map_iter_t *itor,
+                                int32 *out_pseudo_wid,
+                                int32 *out_n_mapped);
+
 
 #endif /* __VOCAB_MAP_H__ */

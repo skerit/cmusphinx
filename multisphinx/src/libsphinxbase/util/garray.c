@@ -381,6 +381,22 @@ garray_cmp_str(garray_t *gar, void const *a, void const *b, void *udata)
     return strcmp(*(char const **)a, *(char const **)b);
 }
 
+int
+garray_cmp_i32p(garray_t *gar, void const *a, void const *b, void *udata)
+{
+    int rv = ((i32p_t *)a)->a - ((i32p_t *)b)->a;
+    if (rv != 0)
+        return rv;
+    else
+        return ((i32p_t *)a)->b - ((i32p_t *)b)->b;
+}
+
+int
+garray_cmp_i32p_first(garray_t *gar, void const *a, void const *b, void *udata)
+{
+    return ((i32p_t *)a)->a - ((i32p_t *)b)->a;
+}
+
 static void
 garray_swap(garray_t *gar, void *tmp, size_t a, size_t b)
 {

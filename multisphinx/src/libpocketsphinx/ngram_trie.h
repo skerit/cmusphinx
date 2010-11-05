@@ -74,7 +74,12 @@ ngram_trie_t *ngram_trie_init(dict_t *d, logmath_t *lmath);
 ngram_trie_t *ngram_trie_retain(ngram_trie_t *t);
 int ngram_trie_free(ngram_trie_t *t);
 dict_t *ngram_trie_dict(ngram_trie_t *t);
-logmath_t *ngram_trie_lmath(ngram_trie_t *t);
+logmath_t *ngram_trie_logmath(ngram_trie_t *t);
+
+/**
+ * Get the order of the N-Gram model.
+ */
+int ngram_trie_n(ngram_trie_t *t);
 
 /**
  * Read N-Grams from an ARPA text format file.
@@ -149,6 +154,33 @@ ngram_trie_node_t *ngram_trie_iter_get(ngram_trie_iter_t *itor);
 ngram_trie_node_t *ngram_trie_iter_get_parent(ngram_trie_iter_t *itor);
 
 /**
+ * Get the word ID from a node.
+ */
+int32 ngram_trie_node_word(ngram_trie_t *t, ngram_trie_node_t *node);
+
+/**
+ * Set the word ID in a node.
+ */
+void ngram_trie_node_set_word(ngram_trie_t *t, ngram_trie_node_t *node,
+                              int32 wid);
+
+/**
+ * Get the probability and backoff weight values from a node.
+ */
+void ngram_trie_node_params(ngram_trie_t *t,
+                            ngram_trie_node_t *node,
+                            int32 *out_log_prob,
+                            int32 *out_log_bowt);
+
+/**
+ * Set the probability and backoff weight values in a node.
+ */
+void ngram_trie_node_set_params(ngram_trie_t *t,
+                                ngram_trie_node_t *node,
+                                int32 log_prob,
+                                int32 log_bowt);
+
+/**
  * Look up a successor to an N-Gram.
  */
 ngram_trie_node_t *ngram_trie_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w);
@@ -187,5 +219,10 @@ int32 ngram_trie_successor_prob(ngram_trie_t *t,
  * Calculate the backoff weight for an N-Gram.
  */
 int32 ngram_trie_calc_bowt(ngram_trie_t *t, ngram_trie_node_t *h);
+
+/**
+ * Validate successor distribution for an N-Gram.
+ */
+int32 ngram_trie_node_validate(ngram_trie_t *t, ngram_trie_node_t *h);
 
 #endif /* __NGRAM_TRIE_H__ */
