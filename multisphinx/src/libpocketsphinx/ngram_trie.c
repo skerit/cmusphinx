@@ -43,6 +43,7 @@
 
 #include <string.h>
 #include <ctype.h>
+#include <math.h>
 
 #include <sphinxbase/pio.h>
 #include <sphinxbase/garray.h>
@@ -720,13 +721,55 @@ ngram_trie_successor_prob(ngram_trie_t *t,
 int32
 ngram_trie_calc_bowt(ngram_trie_t *t, ngram_trie_node_t *h)
 {
-    return 0;
+    ngram_trie_iter_t *itor;
+    double nom, dnom;
+
+    nom = dnom = 1.0;
+    for (itor = ngram_trie_successors(t, h); itor;
+         itor = ngram_trie_iter_next(itor)) {
+        ngram_trie_node_t *ng = ngram_trie_iter_get(itor);
+        ngram_trie_node_t *bong;
+        int32 log_prob;
+        ngram_trie_node_params(t, ng, &log_prob, NULL);
+        nom -= logmath_exp(t->lmath, log_prob);
+        if ((bong = ngram_trie_backoff(t, ng)) != NULL) {
+            ngram_trie_node_params(t, bong, &log_prob, NULL);
+            dnom -= logmath_exp(t->lmath, log_prob);
+        }
+    }
+
+    if (nom == 0) {
+        return logmath_log10_to_log(t->lmath, -99);
+    }
+    else if (nom < 0 || dnom <= 0) {
+        E_ERROR("Bad backoff weight in FIXME: %f / %f\n",
+                nom, dnom);
+        return -1;
+    }
+
+    return logmath_log(t->lmath, nom / dnom);
 }
 
+#define MY_EPSILON 0.01
 int32
 ngram_trie_node_validate(ngram_trie_t *t, ngram_trie_node_t *h)
 {
-    return FALSE;
+    ngram_trie_iter_t *ui;
+    double tprob;
+
+    tprob = 0.0;
+    for (ui = ngram_trie_ngrams(t, 1); ui;
+         ui = ngram_trie_iter_next(ui)) {
+        int32 wid = ngram_trie_node_word(t, ngram_trie_iter_get(ui));
+        int32 log_prob = ngram_trie_successor_prob(t, h, wid);
+        double prob = logmath_exp(t->lmath, log_prob);
+        tprob += prob;
+    }
+    if (fabs(tprob - 1.0) > MY_EPSILON) {
+        E_ERROR("Validation failed, P(.|H) = %f\n", tprob);
+        return FALSE;
+    }
+    return TRUE;
 }
 
 static int
