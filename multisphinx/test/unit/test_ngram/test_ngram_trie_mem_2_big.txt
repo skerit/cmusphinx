@@ -1,0 +1,52 @@
+Wow, lazily allocating successor arrays makes a huge difference - also
+explicitly allocating only one element in them helps too.
+
+The garray_t type still has a lot of overhead as you can see
+below... (in garray_init at line 63)
+
+--------------------------------------------------------------------------------
+  n        time(i)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
+--------------------------------------------------------------------------------
+ 53 54,660,725,588      461,935,536      432,145,934    29,789,602            0
+93.55% (432,145,934B) (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+->51.26% (236,771,088B) 0x50A5543: ngram_trie_node_alloc (ngram_trie.c:117)
+| ->51.26% (236,771,088B) 0x50A65B6: ngram_trie_add_successor (ngram_trie.c:523)
+|   ->51.26% (236,771,088B) 0x50A7192: add_ngram_line (ngram_trie.c:828)
+|     ->51.26% (236,771,088B) 0x50A75AF: read_ngrams (ngram_trie.c:900)
+|       ->51.26% (236,771,088B) 0x50A76AA: ngram_trie_read_arpa (ngram_trie.c:930)
+|         ->51.26% (236,771,088B) 0x401029: main (test_ngram_trie.c:36)
+|           
+->22.07% (101,938,432B) 0x4E3EADF: garray_reserve (garray.c:126)
+| ->22.07% (101,938,432B) 0x4E3EB19: garray_expand (garray.c:134)
+|   ->22.07% (101,933,152B) 0x4E3EBFB: garray_append (garray.c:157)
+|   | ->22.07% (101,933,152B) 0x50A6671: ngram_trie_add_successor (ngram_trie.c:535)
+|   |   ->22.07% (101,933,152B) 0x50A7192: add_ngram_line (ngram_trie.c:828)
+|   |     ->22.07% (101,933,152B) 0x50A75AF: read_ngrams (ngram_trie.c:900)
+|   |       ->22.07% (101,933,152B) 0x50A76AA: ngram_trie_read_arpa (ngram_trie.c:930)
+|   |         ->22.07% (101,933,152B) 0x401029: main (test_ngram_trie.c:36)
+|   |           
+|   ->00.00% (5,280B) in 1+ places, all below ms_print's threshold (01.00%)
+|   
+->17.94% (82,854,592B) 0x4E3E8E9: garray_init (garray.c:63)
+| ->17.94% (82,854,528B) 0x50A65EB: ngram_trie_add_successor (ngram_trie.c:527)
+| | ->17.94% (82,854,528B) 0x50A7192: add_ngram_line (ngram_trie.c:828)
+| |   ->17.94% (82,854,528B) 0x50A75AF: read_ngrams (ngram_trie.c:900)
+| |     ->17.94% (82,854,528B) 0x50A76AA: ngram_trie_read_arpa (ngram_trie.c:930)
+| |       ->17.94% (82,854,528B) 0x401029: main (test_ngram_trie.c:36)
+| |         
+| ->00.00% (64B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->01.28% (5,904,512B) 0x4E3E958: garray_init (garray.c:71)
+| ->01.28% (5,904,480B) 0x50A65EB: ngram_trie_add_successor (ngram_trie.c:527)
+| | ->01.28% (5,904,480B) 0x50A7192: add_ngram_line (ngram_trie.c:828)
+| |   ->01.28% (5,904,480B) 0x50A75AF: read_ngrams (ngram_trie.c:900)
+| |     ->01.28% (5,904,480B) 0x50A76AA: ngram_trie_read_arpa (ngram_trie.c:930)
+| |       ->01.28% (5,904,480B) 0x401029: main (test_ngram_trie.c:36)
+| |         
+| ->00.00% (32B) in 1+ places, all below ms_print's threshold (01.00%)
+| 
+->01.01% (4,677,310B) in 40 places, all below massif's threshold (01.00%)
+
+That's still way too big for actual runtime use but it's good enough
+for training and such (it's also 75% smaller than the original
+version)

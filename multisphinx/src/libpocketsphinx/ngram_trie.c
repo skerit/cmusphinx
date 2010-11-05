@@ -68,11 +68,6 @@ struct ngram_trie_s {
 
     ngram_trie_node_t *root;
     listelem_alloc_t *node_alloc;
-
-#if 0 /* Future memory-optimized version... */
-    garray_t *nodes;       /**< Flat array of nodes. */
-    garray_t *successors;  /**< Flat array of successor pointers. */
-#endif
 };
 
 /**
@@ -124,9 +119,7 @@ ngram_trie_node_alloc(ngram_trie_t *t)
     node->log_prob = 0;
     node->log_bowt = 0;
     node->history = NULL;
-    node->successors = garray_init(0, sizeof(ngram_trie_node_t *));
-    garray_set_cmp(node->successors, &ngram_trie_nodeptr_cmp, t);
-
+    node->successors = NULL; /* Allocate lazily */
     return node;
 }
 
@@ -163,17 +156,7 @@ ngram_trie_init(dict_t *d, logmath_t *lmath)
 
     t->counts = garray_init(0, sizeof(int));
     t->node_alloc = listelem_alloc_init(sizeof(ngram_trie_node_t));
-
-#if 0
-    /* Create arrays and add the root node. */
-    t->nodes = garray_init(1, sizeof(ngram_trie_node_t));
-    t->successors = garray_init(0, sizeof(int32));
-    t->root = garray_ptr(t->nodes, ngram_trie_node_t, 0);
-    t->root->history = -1;
-    t->root->successors = 0; /* No successors yet. */
-#else
     t->root = ngram_trie_node_alloc(t);
-#endif
 
     return t;
 }
@@ -190,6 +173,8 @@ free_successor_arrays(ngram_trie_node_t *node)
 {
     size_t pos;
 
+    if (node->successors == NULL)
+        return;
     for (pos = 0; pos < garray_size(node->successors); ++pos)
         free_successor_arrays(garray_ent(node->successors, ngram_trie_node_t *, pos));
     garray_free(node->successors);
@@ -207,10 +192,6 @@ ngram_trie_free(ngram_trie_t *t)
     free_successor_arrays(t->root);
     listelem_alloc_free(t->node_alloc);
     garray_free(t->counts);
-#if 0
-    garray_free(t->nodes);
-    garray_free(t->successors);
-#endif
     ckd_free(t);
     return 0;
 }
@@ -333,9 +314,31 @@ ngram_trie_ngrams(ngram_trie_t *t, int n)
     /* Find first N-1-Gram */
     h = t->root;
     for (i = 1; i < n; ++i) {
-        h = garray_ent(h->successors, ngram_trie_node_t *, 0);
-        if (h == NULL)
+        if (h->successors == NULL) {
+            E_ERROR("Found no %d-gram successors\n", i);
             return NULL;
+        }
+        if (i == n-1) {
+            /* Just take the first one, it doesn't need to have successors */
+            h = garray_ent(h->successors, ngram_trie_node_t *, 0);
+            if (h == NULL)
+                return NULL;
+        }
+        else {
+            size_t pos;
+            for (pos = 0; pos < garray_size(h->successors); ++pos) {
+                ngram_trie_node_t *hh;
+                hh = garray_ent(h->successors, ngram_trie_node_t *, pos);
+                if (hh->successors) {
+                    h = hh;
+                    break;
+                }
+            }
+            if (pos == garray_size(h->successors)) {
+                E_ERROR("Found no %d-gram successors\n", i);
+                return NULL;
+            }
+        }
     }
 
     /* Create an iterator with nostop=TRUE */
@@ -376,11 +379,14 @@ ngram_trie_next_node(ngram_trie_t *t, ngram_trie_node_t *ng)
     if (h == NULL)
         return NULL;
     /* Locate ng in h->successors. */
-    pos = garray_bisect_left(h->successors, &ng);
-    assert(pos < garray_next_idx(h->successors));
-    assert(ng == garray_ent(h->successors, ngram_trie_node_t *, pos));
-    ++pos;
-    if (pos == garray_next_idx(h->successors)) {
+    if (h->successors != NULL) {
+        pos = garray_bisect_left(h->successors, &ng);
+        assert(pos < garray_next_idx(h->successors));
+        assert(ng == garray_ent(h->successors, ngram_trie_node_t *, pos));
+        ++pos;
+    }
+    if (h->successors == NULL
+        || pos == garray_next_idx(h->successors)) {
         h = ngram_trie_next_node(t, h);
         if (h == NULL)
             return NULL;
@@ -477,6 +483,8 @@ ngram_trie_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
            dict_wordstr(t->dict, w), h->word == -1 
            ? "<root>" : dict_wordstr(t->dict, h->word));
 #endif
+    if (h->successors == NULL)
+        return NULL;
     pos = ngram_trie_successor_pos(t, h, w);
     if (pos >= garray_next_idx(h->successors))
         return NULL;
@@ -492,6 +500,8 @@ ngram_trie_delete_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
     ngram_trie_node_t *ng;
     size_t pos;
 
+    if (h->successors == NULL)
+        return -1;
     /* Bisect the successor array. */
     pos = ngram_trie_successor_pos(t, h, w);
     if (pos >= garray_next_idx(h->successors))
@@ -507,18 +517,25 @@ ngram_trie_node_t *
 ngram_trie_add_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
 {
     ngram_trie_node_t *ng;
-    size_t pos;
+
+    /* FIXME: Increase t->n if needed */
 
     ng = ngram_trie_node_alloc(t);
     ng->word = w;
     ng->history = h;
-    pos = garray_bisect_right(h->successors, &ng);
-    if (pos == garray_next_idx(h->successors))
-        garray_append(h->successors, &ng);
-    else
-        garray_insert(h->successors, pos, &ng);
-
-    /* FIXME: Increase t->n if needed */
+    if (h->successors == NULL) {
+        h->successors = garray_init(1, sizeof(ngram_trie_node_t *));
+        garray_set_cmp(h->successors, &ngram_trie_nodeptr_cmp, t);
+        garray_put(h->successors, 0, &ng);
+    }
+    else {
+        size_t pos;
+        pos = garray_bisect_right(h->successors, &ng);
+        if (pos == garray_next_idx(h->successors))
+            garray_append(h->successors, &ng);
+        else
+            garray_insert(h->successors, pos, &ng);
+    }
 
     return ng;
 }
@@ -528,15 +545,21 @@ ngram_trie_add_successor_ngram(ngram_trie_t *t,
                                ngram_trie_node_t *h,
                                ngram_trie_node_t *w)
 {
-    size_t pos;
-
-    pos = garray_bisect_right(h->successors, &w);
-    if (pos == garray_next_idx(h->successors))
-        garray_append(h->successors, &w);
-    else
-        garray_insert(h->successors, pos, &w);
-
     /* FIXME: Increase t->n if needed */
+
+    if (h->successors == NULL) {
+        h->successors = garray_init(1, sizeof(ngram_trie_node_t *));
+        garray_set_cmp(h->successors, &ngram_trie_nodeptr_cmp, t);
+        garray_put(h->successors, 0, &w);
+    }
+    else {
+        size_t pos;
+        pos = garray_bisect_right(h->successors, &w);
+        if (pos == garray_next_idx(h->successors))
+            garray_append(h->successors, &w);
+        else
+            garray_insert(h->successors, pos, &w);
+    }
 
     return 0;
 }
