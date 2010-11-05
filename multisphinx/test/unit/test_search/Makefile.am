@@ -3,6 +3,7 @@ check_PROGRAMS = \
 	test_arc_buffer \
 	test_fwdtree \
 	test_fwdtree_fwdflat \
+	test_fwdtree_fwdflat_homos \
 	test_fwdtree_multiple
 
 TESTS = $(check_PROGRAMS)

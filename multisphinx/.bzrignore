@@ -122,3 +122,4 @@ test/unit/test_search/test_fwdtree_multiple
 test/data/bn.*.arpa.*
 test/data/bn.5000.arpa
 test/unit/test_vocab_map/test_vocab_map
+test/unit/test_search/test_fwdtree_fwdflat_homos

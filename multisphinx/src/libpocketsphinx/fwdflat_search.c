@@ -927,22 +927,47 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
     return 1;
 }
 
+static void
+fwdflat_search_add_expand_word(fwdflat_search_t *ffs, int32 wid)
+{
+    dict_t *dict = ps_search_dict(ffs);
+
+    if (!bitvec_is_set(ffs->expand_words, wid)) {
+        /* Test this after the bitvec to avoid looking up the same
+         * N-Gram repeatedly (unfortunately for unknown words that
+         * will happen anyway, which may be a problem). */
+        if (!ngram_model_set_known_wid(ffs->lmset,
+                                       dict_basewid(dict, wid)))
+            return;
+        bitvec_set(ffs->expand_words, wid);
+        build_fwdflat_word_chan(ffs, wid);
+    }
+}
+
 static int
 fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
 {
     arc_t *arc_start, *arc_end, *arc;
-    dict_t *dict = ps_search_dict(ffs);
 
     arc_start = arc_buffer_iter(ffs->input_arcs, sf);
     arc_end = arc_buffer_iter(ffs->input_arcs, ef);
     bitvec_clear_all(ffs->expand_words, ps_search_n_words(ffs));
     for (arc = arc_start; arc != arc_end;
          arc = arc_next(ffs->input_arcs, arc)) {
-        if (!bitvec_is_set(ffs->expand_words, arc->wid)
-            && ngram_model_set_known_wid(ffs->lmset, dict_basewid(dict, arc->wid)))
-            bitvec_set(ffs->expand_words, arc->wid);
-        if (!bitvec_is_set(ffs->utt_vocab, arc->wid))
-            build_fwdflat_word_chan(ffs, arc->wid);
+        /* Expand things in the vocabulary map, if we have one. */
+        if (ffs->vmap) {
+            int32 const *wids;
+            int32 nwids;
+            if ((wids = vocab_map_unmap(ffs->vmap, arc->wid,
+                                        &nwids)) != NULL) {
+                int32 i;
+                for (i = 0; i < nwids; ++i)
+                    fwdflat_search_add_expand_word(ffs, wids[i]);
+                continue;
+            }
+        }
+        /* Otherwise, just expand the word normally. */
+        fwdflat_search_add_expand_word(ffs, arc->wid);
     }
     return 0;
 }

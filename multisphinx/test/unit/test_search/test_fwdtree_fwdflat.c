@@ -29,8 +29,8 @@ main(int argc, char *argv[])
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
-			     "-lm", TESTDATADIR "/bn.40000.arpa.DMP",
-			     "-dict", TESTDATADIR "/cmu07a.dic",
+			     "-lm", TESTDATADIR "/bn10000.3g.arpa",
+			     "-dict", TESTDATADIR "/bn10000.dic",
 			     "-maxwpf", "50",
 			     "-latsize", "512",
 			     NULL);

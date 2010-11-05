@@ -48,6 +48,7 @@
 /* Local headers. */
 #include "bptbl.h"
 #include "arc_buffer.h"
+#include "vocab_map.h"
 #include "hmm.h"
 
 /**
@@ -119,6 +120,11 @@ typedef struct fwdflat_search_s {
     int32 *word_idx;     /**< BPTable index for any word in current frame;
                             cleared before each frame */
     int32 *rcss; /**< Temporary storage for right context scores. */
+
+    /**
+     * Vocabulary expansion map.
+     */
+    vocab_map_t *vmap;
 
     /**
      * Cumulative vocabulary for current utterance.
