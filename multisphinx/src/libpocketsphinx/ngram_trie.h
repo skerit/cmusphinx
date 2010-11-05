@@ -248,4 +248,10 @@ int ngram_trie_node_print(ngram_trie_t *t,
                           ngram_trie_node_t *ng,
                           FILE *outfh);
 
+/**
+ * Update the N-Gram order and counts (the add and delete functions do
+ * not do this because it is much too costly).
+ */
+int ngram_trie_update_counts(ngram_trie_t *t);
+
 #endif /* __NGRAM_TRIE_H__ */

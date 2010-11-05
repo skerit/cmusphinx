@@ -93,18 +93,37 @@ add_weighted_successors(ngram_trie_t *lm, ngram_trie_node_t *dest,
     if ((itor = ngram_trie_successors(lm, src)) == NULL)
         return 0;
 
+    lmath = ngram_trie_logmath(lm);
+    E_INFOCONT("Merging [ ");
+    ngram_trie_node_print(lm, dest, err_get_logfp());
+    E_INFOCONT(" ] <- (%f) [ ", logmath_exp(lmath, weight));
+    ngram_trie_node_print(lm, src, err_get_logfp());
+
+    dmarg = logmath_get_zero(lmath);
     for (;itor; itor = ngram_trie_iter_next(itor)) {
+        ngram_trie_node_t *ds = ngram_trie_iter_get(itor);
+        int32 ds_log_prob;
+        ngram_trie_node_params(lm, ds, &ds_log_prob, NULL);
+        dmarg = logmath_add(lmath, dmarg, ds_log_prob);
+    }
+    E_INFOCONT(" ] marginal prob %g", logmath_exp(lmath, dmarg));
+
+
+    for (itor = ngram_trie_successors(lm, src);
+         itor; itor = ngram_trie_iter_next(itor)) {
         ngram_trie_node_t *ss = ngram_trie_iter_get(itor);
         ngram_trie_node_t *ds;
         int32 ss_log_prob;
 
         ngram_trie_node_params(lm, ss, &ss_log_prob, NULL);
+
         if ((ds = ngram_trie_successor
              (lm, dest, ngram_trie_node_word(lm, ss))) != NULL) {
             int32 ds_log_prob;
             ngram_trie_node_params(lm, ds, &ds_log_prob, NULL);
             ngram_trie_node_set_params(lm, ds,
-                                       ds_log_prob + weight + ss_log_prob, 0);
+                                       logmath_add(lmath, ds_log_prob,
+                                                   weight + ss_log_prob), 0);
         }
         else {
             ngram_trie_node_set_params(lm, ss,
@@ -114,7 +133,6 @@ add_weighted_successors(ngram_trie_t *lm, ngram_trie_node_t *dest,
     }
 
     /* Verify marginal probability of destination. */
-    lmath = ngram_trie_logmath(lm);
     dmarg = logmath_get_zero(lmath);
     for (itor = ngram_trie_successors(lm, dest);
          itor; itor = ngram_trie_iter_next(itor)) {
@@ -124,6 +142,8 @@ add_weighted_successors(ngram_trie_t *lm, ngram_trie_node_t *dest,
         ngram_trie_node_params(lm, ds, &ds_log_prob, NULL);
         dmarg = logmath_add(lmath, dmarg, ds_log_prob);
     }
+    E_INFOCONT(" dest marginal prob %d = %g\n",
+               dmarg, logmath_exp(lmath, dmarg));
 
     return 0;
 }
@@ -171,11 +191,10 @@ merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
             if (bitvec_is_set(seen, basewid))
                 continue;
             bitvec_set(seen, basewid);
-            if ((succ = ngram_trie_successor
-                 (lm, node, basewid)) != NULL) {
+            if ((succ = ngram_trie_successor(lm, node, basewid)) != NULL) {
                 int32 log_prob, log_bowt;
                 i32p_t sent;
-                ngram_trie_node_params(lm, node, &log_prob, &log_bowt);
+                ngram_trie_node_params(lm, succ, &log_prob, &log_bowt);
                 sent.a = basewid;
                 sent.b = log_prob;
                 garray_append(word_succ, &sent);
@@ -188,12 +207,7 @@ merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
             i32p_t sent = garray_ent(word_succ, i32p_t, 0);
             ngram_trie_node_t *pseudo_succ;
             pseudo_succ = ngram_trie_successor(lm, node, sent.a);
-            E_INFO("Renaming ");
-            ngram_trie_node_print(lm, pseudo_succ, err_get_logfp());
             ngram_trie_rename_successor(lm, node, pseudo_succ, pseudo_wid);
-            E_INFOCONT(" to ");
-            ngram_trie_node_print(lm, pseudo_succ, err_get_logfp());
-            E_INFOCONT("\n");
         }
         else {
             ngram_trie_node_t *pseudo_succ;
@@ -210,7 +224,10 @@ merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
                     garray_free(word_succ);
                     return -1;
                 }
-                ngram_trie_delete_successor(lm, node, sent.a);
+                if (ngram_trie_delete_successor(lm, node, sent.a) < 0) {
+                    E_ERROR("Failed to delete successor\n");
+                    return -1;
+                }
             }
         }
     }
@@ -224,14 +241,16 @@ recalc_bowts(ngram_trie_t *lm)
     ngram_trie_iter_t *ng;
     int n;
 
-    for (n = 1; n <= ngram_trie_n(lm); ++n) {
+    for (n = 1; n < ngram_trie_n(lm); ++n) {
         for (ng = ngram_trie_ngrams(lm, n); ng;
              ng = ngram_trie_iter_next(ng)) {
-            int32 log_bowt, log_prob;
+            int32 old_bowt, log_bowt, log_prob;
             ngram_trie_node_t *node = ngram_trie_iter_get(ng);
 
-            ngram_trie_node_params(lm, node, &log_prob, &log_bowt);
+            ngram_trie_node_params(lm, node, &log_prob, &old_bowt);
+	    /* ngram_trie_node_print(lm, node, stdout); */
             log_bowt = ngram_trie_calc_bowt(lm, node);
+	    /* printf(": %d %d\n", old_bowt, log_bowt); */
             ngram_trie_node_set_params(lm, node, log_prob, log_bowt);
         }
     }
@@ -244,7 +263,7 @@ validate(ngram_trie_t *lm)
     ngram_trie_iter_t *ng;
     int n;
 
-    for (n = 1; n <= ngram_trie_n(lm); ++n) {
+    for (n = 1; n < ngram_trie_n(lm); ++n) {
         for (ng = ngram_trie_ngrams(lm, n); ng;
              ng = ngram_trie_iter_next(ng)) {
             ngram_trie_node_t *node = ngram_trie_iter_get(ng);
@@ -266,6 +285,7 @@ main(int argc, char *argv[])
     logmath_t *lmath;
     dict_t *dict, *vdict;
     FILE *fh;
+    int32 ispipe;
 
     config = cmd_ln_parse_r(NULL, args_def, argc, argv, TRUE);
     if (config == NULL)
@@ -273,7 +293,7 @@ main(int argc, char *argv[])
 
     lmath = logmath_init(1.0003, 0, FALSE);
     lm = ngram_trie_init(NULL, lmath);
-    if ((fh = fopen(cmd_ln_str_r(config, "-lm"), "r")) == NULL)
+    if ((fh = fopen_comp(cmd_ln_str_r(config, "-lm"), "r", &ispipe)) == NULL)
         E_FATAL_SYSTEM("Failed to open %s", cmd_ln_str_r(config, "-lm"));
     if (ngram_trie_read_arpa(lm, fh) < 0)
         return 1;
@@ -315,7 +335,7 @@ main(int argc, char *argv[])
     if (recalc_bowts(lm) < 0)
         return 1;
 
-    if ((fh = fopen(cmd_ln_str_r(config, "-outlm"), "w")) == NULL)
+    if ((fh = fopen_comp(cmd_ln_str_r(config, "-outlm"), "w", &ispipe)) == NULL)
         E_FATAL_SYSTEM("Failed to open %s", cmd_ln_str_r(config, "-outlm"));
     if (ngram_trie_write_arpa(lm, fh) < 0)
         return 1;
@@ -325,6 +345,11 @@ main(int argc, char *argv[])
     if (cmd_ln_boolean_r(config, "-validate"))
         if (!validate(lm))
             return 1;
+
+    vocab_map_free(vm);
+    ngram_trie_free(lm);
+    cmd_ln_free_r(config);
+    logmath_free(lmath);
 
     return 0;
 }

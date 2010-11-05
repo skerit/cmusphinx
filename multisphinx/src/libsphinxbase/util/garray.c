@@ -280,7 +280,7 @@ garray_insert(garray_t *gar, size_t idx, void const *ent)
     if (idx < gar->base_idx)
         return NULL;
     if ((idx - gar->base_idx) >= gar->n_ent)
-        return NULL;
+        return garray_append(gar, ent);
 
     n_move = gar->n_ent + gar->base_idx - idx;
     garray_expand(gar, gar->n_ent + 1);
@@ -303,13 +303,14 @@ garray_delete(garray_t *gar, size_t start, size_t end)
         return -1;
     if (start - gar->base_idx >= gar->n_ent)
         return -1;
-    if (end - gar->base_idx >= gar->n_ent)
+    if (end - gar->base_idx > gar->n_ent)
         return -1;
 
     n_move = gar->n_ent + gar->base_idx - end;
     rv = garray_move(gar, start, end, n_move);
     assert(rv == n_move);
     garray_pop(gar, end - start);
+    assert(gar->n_ent >= start);
     return 0;
 }
 

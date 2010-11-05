@@ -116,8 +116,12 @@ void *garray_append(garray_t *gar, void const *ent);
 /**
  * Insert an element in the array.
  *
- * If the specified index is past the end of the array or before the
- * base index of the array, this operation will fail.
+ * If the specified index is before the base index of the array, this
+ * operation will fail.
+ *
+ * To ease prototyping things in Python, if the specified index is
+ * past the end of the array, this will simply append @a ent rather
+ * than failing.
  */
 void *garray_insert(garray_t *gar, size_t idx, void const *ent);
 

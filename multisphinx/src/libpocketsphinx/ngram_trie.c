@@ -143,15 +143,14 @@ ngram_trie_init(dict_t *d, logmath_t *lmath)
     if (d) {
         t->dict = dict_retain(d);
         t->gendict = FALSE;
-        t->start_wid = dict_wordid(d, S3_START_WORD);
-        t->finish_wid = dict_wordid(d, S3_FINISH_WORD);
     }
     else {
         t->dict = dict_init(NULL, NULL);
         t->gendict = TRUE;
-        t->start_wid = dict_add_word(t->dict, S3_START_WORD, NULL, 0);
-        t->finish_wid = dict_add_word(t->dict, S3_FINISH_WORD, NULL, 0);
     }
+    t->start_wid = dict_wordid(t->dict, S3_START_WORD);
+    t->finish_wid = dict_wordid(t->dict, S3_FINISH_WORD);
+    assert(t->finish_wid != BAD_S3WID);
     t->lmath = logmath_retain(lmath);
 
     /* Determine proper shift to fit min_logprob in 16 bits. */
@@ -335,38 +334,33 @@ ngram_trie_ngrams(ngram_trie_t *t, int n)
     /* Find first N-1-Gram */
     h = t->root;
     for (i = 1; i < n; ++i) {
+        size_t pos;
         if (h->successors == NULL) {
             E_ERROR("Found no %d-gram successors\n", i);
             return NULL;
         }
-        if (i == n-1) {
-            /* Just take the first one, it doesn't need to have successors */
-            h = garray_ent(h->successors, ngram_trie_node_t *, 0);
-            if (h == NULL)
-                return NULL;
+        for (pos = 0; pos < garray_size(h->successors); ++pos) {
+            ngram_trie_node_t *hh;
+            hh = garray_ent(h->successors, ngram_trie_node_t *, pos);
+            if (hh->successors) {
+                h = hh;
+                break;
+            }
         }
-        else {
-            size_t pos;
-            for (pos = 0; pos < garray_size(h->successors); ++pos) {
-                ngram_trie_node_t *hh;
-                hh = garray_ent(h->successors, ngram_trie_node_t *, pos);
-                if (hh->successors) {
-                    h = hh;
-                    break;
-                }
-            }
-            if (pos == garray_size(h->successors)) {
-                E_ERROR("Found no %d-gram successors\n", i);
-                return NULL;
-            }
+        if (pos == garray_size(h->successors)) {
+            E_ERROR("Found no %d-gram successors\n", i);
+            return NULL;
         }
     }
 
     /* Create an iterator with nostop=TRUE */
     itor = ckd_calloc(1, sizeof(*itor));
+    itor->t = t;
     itor->cur = h;
     itor->pos = 0;
     itor->nostop = TRUE;
+
+    assert(itor->cur->successors);
 
     return itor;
 }
@@ -376,11 +370,12 @@ ngram_trie_successors(ngram_trie_t *t, ngram_trie_node_t *h)
 {
     ngram_trie_iter_t *itor;
 
-    if (h->successors == NULL)
+    if (h->successors == NULL || garray_size(h->successors) == 0)
         return NULL;
 
     /* Create an iterator with nostop=FALSE */
     itor = ckd_calloc(1, sizeof(*itor));
+    itor->t = t;
     itor->cur = h;
     itor->pos = 0;
     itor->nostop = FALSE;
@@ -403,19 +398,22 @@ ngram_trie_next_node(ngram_trie_t *t, ngram_trie_node_t *ng)
     if (h == NULL)
         return NULL;
     /* Locate ng in h->successors. */
-    if (h->successors != NULL) {
-        pos = garray_bisect_left(h->successors, &ng);
-        assert(pos < garray_next_idx(h->successors));
-        assert(ng == garray_ent(h->successors, ngram_trie_node_t *, pos));
-        ++pos;
-    }
-    if (h->successors == NULL
-        || pos == garray_next_idx(h->successors)) {
+    assert(h->successors != NULL);
+    pos = garray_bisect_left(h->successors, &ng);
+    assert(pos < garray_next_idx(h->successors));
+    assert(ng == garray_ent(h->successors, ngram_trie_node_t *, pos));
+    ++pos;
+    if (pos == garray_next_idx(h->successors)) {
         h = ngram_trie_next_node(t, h);
         if (h == NULL)
             return NULL;
+        while (h->successors == NULL) {
+            h = ngram_trie_next_node(t, h);
+            if (h == NULL)
+                return NULL;
+        }
         h = garray_ent(h->successors, ngram_trie_node_t *, 0);
-         return h;
+        return h;
     }
     else {
         h = garray_ent(h->successors, ngram_trie_node_t *, pos);
@@ -427,14 +425,21 @@ ngram_trie_iter_t *
 ngram_trie_iter_next(ngram_trie_iter_t *itor)
 {
     ++itor->pos;
-    assert(itor->cur);
+    assert(itor->cur != NULL);
     if (itor->pos >= garray_next_idx(itor->cur->successors)) {
         if (itor->nostop) {
-            assert(itor->cur);
             itor->cur = ngram_trie_next_node(itor->t, itor->cur);
             if (itor->cur == NULL) {
                 ngram_trie_iter_free(itor);
                 return NULL;
+            }
+            /* Have to advance to the next one with successors. */
+            while (itor->cur->successors == NULL) {
+                itor->cur = ngram_trie_next_node(itor->t, itor->cur);
+                if (itor->cur == NULL) {
+                    ngram_trie_iter_free(itor);
+                    return NULL;
+                }
             }
             itor->pos = 0;
         }
@@ -474,6 +479,7 @@ ngram_trie_iter_down(ngram_trie_iter_t *itor)
 ngram_trie_node_t *
 ngram_trie_iter_get(ngram_trie_iter_t *itor)
 {
+    assert(itor->cur != NULL);
     if (itor->pos >= garray_next_idx(itor->cur->successors))
         return NULL;
     else
@@ -505,6 +511,7 @@ ngram_trie_node_params(ngram_trie_t *t,
                        int32 *out_log_prob,
                        int32 *out_log_bowt)
 {
+    assert(node != NULL);
     if (out_log_prob) *out_log_prob = node->log_prob << t->shift;
     if (out_log_bowt) *out_log_bowt = node->log_bowt << t->shift;
 }
@@ -515,6 +522,7 @@ ngram_trie_node_set_params(ngram_trie_t *t,
                            int32 log_prob,
                            int32 log_bowt)
 {
+    assert(node != NULL);
     node->log_prob = log_prob >> t->shift;
     node->log_bowt = log_bowt >> t->shift;
 }
@@ -565,7 +573,9 @@ ngram_trie_delete_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
     ng = garray_ent(h->successors, ngram_trie_node_t *, pos);
     /* Delete it. */
     ngram_trie_node_free(t, ng);
-    garray_delete(h->successors, pos, pos+1);
+    if (garray_delete(h->successors, pos, pos+1) < 0)
+        return -1;
+
     return 0;
 }
 
@@ -573,8 +583,6 @@ ngram_trie_node_t *
 ngram_trie_add_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
 {
     ngram_trie_node_t *ng;
-
-    /* FIXME: Increase t->n if needed */
 
     ng = ngram_trie_node_alloc(t);
     ng->word = w;
@@ -588,10 +596,7 @@ ngram_trie_add_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
     else {
         size_t pos;
         pos = garray_bisect_right(h->successors, &ng);
-        if (pos == garray_next_idx(h->successors))
-            garray_append(h->successors, &ng);
-        else
-            garray_insert(h->successors, pos, &ng);
+        garray_insert(h->successors, pos, &ng);
     }
 
     return ng;
@@ -603,7 +608,6 @@ ngram_trie_add_successor_ngram(ngram_trie_t *t,
                                ngram_trie_node_t *h,
                                ngram_trie_node_t *w)
 {
-    /* FIXME: Increase t->n if needed */
     assert(w->word >= 0);
     assert(w->log_prob <= 0);
     if (h->successors == NULL) {
@@ -614,11 +618,10 @@ ngram_trie_add_successor_ngram(ngram_trie_t *t,
     else {
         size_t pos;
         pos = garray_bisect_right(h->successors, &w);
-        if (pos == garray_next_idx(h->successors))
-            garray_append(h->successors, &w);
-        else
-            garray_insert(h->successors, pos, &w);
+        garray_insert(h->successors, pos, &w);
     }
+    w->history = h;
+    w->backoff = (ngram_trie_node_t *)-1;
 
     return 0;
 }
@@ -660,13 +663,14 @@ ngram_trie_node_get_word_hist(ngram_trie_t *t,
     ngram_trie_node_t *h;
     int32 n_hist;
 
+    if (ng->history == NULL)
+        return -1;
     n_hist = 0;
     for (h = ng->history; h->word != -1; h = h->history) {
         if (out_hist)
             out_hist[n_hist] = h->word;
         ++n_hist;
     }
-
     return n_hist;
 }
 
@@ -782,6 +786,7 @@ ngram_trie_calc_bowt(ngram_trie_t *t, ngram_trie_node_t *h)
     ngram_trie_iter_t *itor;
     double nom, dnom;
 
+    assert(t->finish_wid != BAD_S3WID);
     nom = dnom = 1.0;
     for (itor = ngram_trie_successors(t, h); itor;
          itor = ngram_trie_iter_next(itor)) {
@@ -804,12 +809,6 @@ ngram_trie_calc_bowt(ngram_trie_t *t, ngram_trie_node_t *h)
         /* Backoff is impossible. */
         return 0;
     }
-#if 0
-    else if (h->word == t->start_wid) {
-        /* Not an event, so backoff is irrelevant. */
-        return 0;
-    }
-#endif
     else if (nom < 0 || dnom <= 0) {
         /* Oh, something is actually wrong. */
         E_ERROR("Bad backoff weight for ");
@@ -983,7 +982,6 @@ add_ngram_line(ngram_trie_t *t, char *buf, int n,
     node = ngram_trie_add_successor(t, *last_history, wids[0]);
     node->log_prob = logmath_log10_to_log(t->lmath, prob) >> t->shift;
     node->log_bowt = logmath_log10_to_log(t->lmath, bowt) >> t->shift;
-    node->history = *last_history;
     return node;
 }
 
@@ -1053,8 +1051,9 @@ read_ngrams(ngram_trie_t *t, lineiter_t *li, int n)
         }
         /* Now interpret the line as an N-Gram. */
         if (add_ngram_line(t, li->buf, n, wptr,
-                           wids, &last_history) == NULL)
+                           wids, &last_history) == NULL) {
             goto error_out;
+        }
         ++ngcount;
     }
     E_ERROR("Expected \\end\\ or an N-Gram marker\n");
@@ -1110,6 +1109,34 @@ int ngram_trie_node_print(ngram_trie_t *t,
 }
 
 int
+ngram_trie_update_counts(ngram_trie_t *t)
+{
+    int n;
+
+    for (n = 1; n <= t->n; ++n) {
+        ngram_trie_iter_t *itor;
+        size_t n_ngrams = 0;
+
+        for (itor = ngram_trie_ngrams(t, n); itor;
+             itor = ngram_trie_iter_next(itor)) {
+            ngram_trie_node_t *node = ngram_trie_iter_get(itor);
+            /* Detect an increased N-Gram order. */
+            if (n == t->n && node->successors != NULL) {
+                ++t->n;
+                garray_expand_to(t->counts, t->n + 1);
+                garray_ent(t->counts, int, t->n) = 0;
+            }
+            ++n_ngrams;
+        }
+        /* Detect complete deletion of all N-Grams. */
+        if (n_ngrams == 0)
+            t->n = n - 1;
+        garray_ent(t->counts, int, n) = n_ngrams;
+    }
+    return 0;
+}
+
+int
 ngram_trie_write_arpa(ngram_trie_t *t, FILE *arpafile)
 {
     int32 *wids;
@@ -1118,6 +1145,7 @@ ngram_trie_write_arpa(ngram_trie_t *t, FILE *arpafile)
     fprintf(arpafile, "# Written by ngram_trie.c\n");
     fprintf(arpafile, "\\data\\\n");
 
+    ngram_trie_update_counts(t);
     for (n = 1; n <= t->n; ++n)
         fprintf(arpafile, "ngram %d=%d\n", n, garray_ent(t->counts, int, n));
 
