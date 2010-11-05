@@ -30,6 +30,14 @@ main(int argc, char *argv[])
 	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));
 	dict = dict_init(config, mdef);
 
+#if 1 /* Test memory consumption with reasonably sized LMs - still needs some work. */
+	t = ngram_trie_init(NULL, lmath);
+	arpafh = popen("bzip2 -dc '"TESTDATADIR "/bn.40000.arpa.bz2'", "r");
+	ngram_trie_read_arpa(t, arpafh);
+	fclose(arpafh);
+	ngram_trie_free(t);
+#endif
+
 	t = ngram_trie_init(dict, lmath);
 	arpafh = fopen(TESTDATADIR "/bn10000.3g.arpa", "r");
 	ngram_trie_read_arpa(t, arpafh);
@@ -111,6 +119,7 @@ main(int argc, char *argv[])
 	dict_free(dict);
 	logmath_free(lmath);
 	bin_mdef_free(mdef);
+	cmd_ln_free_r(config);
 
 	return 0;
 }

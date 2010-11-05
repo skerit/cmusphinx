@@ -130,6 +130,13 @@ ngram_trie_node_alloc(ngram_trie_t *t)
     return node;
 }
 
+void
+ngram_trie_node_free(ngram_trie_t *t, ngram_trie_node_t *node)
+{
+    garray_free(node->successors);
+    listelem_free(t->node_alloc, node);
+}
+
 ngram_trie_t *
 ngram_trie_init(dict_t *d, logmath_t *lmath)
 {
@@ -178,6 +185,16 @@ ngram_trie_retain(ngram_trie_t *t)
     return t;
 }
 
+static void
+free_successor_arrays(ngram_trie_node_t *node)
+{
+    size_t pos;
+
+    for (pos = 0; pos < garray_size(node->successors); ++pos)
+        free_successor_arrays(garray_ent(node->successors, ngram_trie_node_t *, pos));
+    garray_free(node->successors);
+}
+
 int
 ngram_trie_free(ngram_trie_t *t)
 {
@@ -187,6 +204,7 @@ ngram_trie_free(ngram_trie_t *t)
         return t->refcount;
     dict_free(t->dict);
     logmath_free(t->lmath);
+    free_successor_arrays(t->root);
     listelem_alloc_free(t->node_alloc);
     garray_free(t->counts);
 #if 0
@@ -480,7 +498,7 @@ ngram_trie_delete_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
         return -1;
     ng = garray_ent(h->successors, ngram_trie_node_t *, pos);
     /* Delete it. */
-    listelem_free(t->node_alloc, ng);
+    ngram_trie_node_free(t, ng);
     garray_delete(h->successors, pos, pos+1);
     return 0;
 }
@@ -734,6 +752,7 @@ add_ngram_line(ngram_trie_t *t, char *buf, int n,
             E_WARN("Unknown unigram %s in ARPA file, skipping\n");
             return NULL;
         }
+        assert(wids[0] != BAD_S3WID);
     }
     for (i = 1; i < n; ++i) {
         wids[i] = dict_wordid(t->dict, wptr[n-i]);
@@ -813,6 +832,8 @@ read_ngrams(ngram_trie_t *t, lineiter_t *li, int n)
         /* No more N-Grams to work with. */
         if (0 == strcmp(li->buf, "\\end\\")) {
             E_INFOCONT(" read %d N-Grams\n", ngcount);
+            ckd_free(wids);
+            ckd_free(wptr);
             return 0;
         }
         /* Look for an N-Gram start marker. */
@@ -822,19 +843,18 @@ read_ngrams(ngram_trie_t *t, lineiter_t *li, int n)
 
             if (!isdigit(li->buf[1])) {
                 E_ERROR("Expected an N-Gram start marker, got %s", li->buf);
-                ckd_free(wptr);
-                return -1;
+                goto error_out;
             }
             for (c = li->buf + 1; *c && isdigit(*c); ++c)
                 ;
             if (0 != strcmp(c, "-grams:")) {
                 E_ERROR("Expected an N-Gram start marker, got %s", li->buf);
-                ckd_free(wptr);
-                return -1;
+                goto error_out;
             }
             nn = atoi(li->buf + 1);
             if (nn == n+1) {
                 ckd_free(wptr);
+                ckd_free(wids);
                 E_INFOCONT(" read %d N-Grams\n", ngcount);
                 if (ngcount != garray_ent(t->counts, int, n)) {
                     E_WARN("Header claims %d %d-Grams, it's wrong\n",
@@ -850,20 +870,19 @@ read_ngrams(ngram_trie_t *t, lineiter_t *li, int n)
             else {
                 E_ERROR("Expected %d or %d-grams, got %d (%s)\n",
                         n, n+1, nn, li->buf);
-                ckd_free(wptr);
-                return -1;
+                goto error_out;
             }
         }
         /* Now interpret the line as an N-Gram. */
         if (add_ngram_line(t, li->buf, n, wptr,
-                           wids, &last_history) == NULL) {
-            ckd_free(wptr);
-            return -1;
-        }
+                           wids, &last_history) == NULL)
+            goto error_out;
         ++ngcount;
     }
-    ckd_free(wptr);
     E_ERROR("Expected \\end\\ or an N-Gram marker\n");
+error_out:
+    ckd_free(wptr);
+    ckd_free(wids);
     return -1;
 }
 
