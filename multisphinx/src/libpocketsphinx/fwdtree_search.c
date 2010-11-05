@@ -100,7 +100,6 @@ static void deactivate_channels(fwdtree_search_t *fts, int frame_idx);
 static void word_transition(fwdtree_search_t *fts, int frame_idx);
 static void prune_channels(fwdtree_search_t *fts, int frame_idx);
 static void prune_word_chan(fwdtree_search_t *fts, int frame_idx);
-static int too_old_too_cold(fwdtree_search_t *fts, int bp, int frame_idx);
 static void last_phone_transition(fwdtree_search_t *fts, int frame_idx);
 static void prune_nonroot_chan(fwdtree_search_t *fts, int frame_idx);
 static void prune_root_chan(fwdtree_search_t *fts, int frame_idx);
@@ -434,7 +433,7 @@ create_search_tree(fwdtree_search_t *fts)
         else
             rhmm = &(fts->root_chan[i]);
 
-        E_DEBUG(2, ("word %s rhmm %d\n", dict_wordstr(dict, w), rhmm - fts->root_chan));
+        E_INFO_NOFN("word %s rhmm %d\n", dict_wordstr(dict, w), rhmm - fts->root_chan);
         /* Now, rhmm = root channel for w.  Go on to remaining phones */
         if (dict_pronlen(dict, w) == 2) {
             /* Next phone is the last; not kept in tree; add w to penult_phn_wid set */
@@ -983,15 +982,15 @@ prune_root_chan(fwdtree_search_t *fts, int frame_idx)
     nacl = fts->active_chan_list[nf & 0x1];
 
     for (i = 0, rhmm = fts->root_chan; i < fts->n_root_chan; i++, rhmm++) {
-        E_DEBUG(3,("Root channel %d frame %d score %d thresh %d\n",
-                   i, hmm_frame(&rhmm->hmm), hmm_bestscore(&rhmm->hmm), thresh));
+        E_INFO_NOFN("Root channel %d frame %d score %d thresh %d\n",
+                    i, hmm_frame(&rhmm->hmm), hmm_bestscore(&rhmm->hmm), thresh);
         /* First check if this channel was active in current frame */
         if (hmm_frame(&rhmm->hmm) < frame_idx)
             continue;
 
         if (hmm_bestscore(&rhmm->hmm) BETTER_THAN thresh) {
             hmm_frame(&rhmm->hmm) = nf;  /* rhmm will be active in next frame */
-            E_DEBUG(3, ("Preserving root channel %d score %d\n", i, hmm_bestscore(&rhmm->hmm)));
+            E_INFO_NOFN("Preserving root channel %d score %d\n", i, hmm_bestscore(&rhmm->hmm));
             /* transitions out of this root channel */
             /* transition to all next-level channels in the HMM tree */
             newphone_score = hmm_out_score(&rhmm->hmm) + fts->pip;
@@ -1014,6 +1013,7 @@ prune_root_chan(fwdtree_search_t *fts, int frame_idx)
             if (newphone_score BETTER_THAN lastphn_thresh) {
                 for (w = rhmm->penult_phn_wid; w >= 0;
                      w = fts->homophone_set[w]) {
+                    E_INFO_NOFN("word %s newphone_score %d\n", dict_wordstr(ps_search_dict(fts), w), newphone_score);
                     candp = fts->lastphn_cand + fts->n_lastphn_cand;
                     fts->n_lastphn_cand++;
                     candp->wid = w;
@@ -1122,7 +1122,7 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
 
     /* For each candidate word (entering its last phone) */
     /* If best LM score and bp for candidate known use it, else sort cands by startfrm */
-    E_DEBUG(3, ("n_lastphn_cand %d\n", fts->n_lastphn_cand));
+    /* E_INFO_NOFN("n_lastphn_cand %d:", fts->n_lastphn_cand); */
     for (i = 0, candp = fts->lastphn_cand; i < fts->n_lastphn_cand; i++, candp++) {
         int32 start_score;
         bp_t bpe;
@@ -1133,6 +1133,7 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
         /* Backpointer entry for it. */
         bptbl_get_bp(fts->bptbl, candp->bp, &bpe);
 
+        /* E_INFOCONT(" %s/%d", dict_wordstr(ps_search_dict(fts), candp->wid), bpe.frame); */
         /* Subtract starting score for candidate, leave it with only word score */
         start_score = fwdtree_search_exit_score
             (fts, candp->bp, bpe.last_phone, bpe.last2_phone,
@@ -1188,8 +1189,10 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
             fts->last_ltrans[candp->wid].sf = bpe.frame + 1;
         }
     }
+    /* E_INFOCONT("\n"); */
 
     /* Compute best LM score and bp for new cands entered in the sorted lists above */
+    /* E_INFO_NOFN("n_cand_sf %d\n", n_cand_sf); */
     for (i = 0; i < n_cand_sf; i++) {
         int32 bpend;
         /* This is the last frame that contains end-sorted
@@ -1197,9 +1200,10 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
          * not possible to have any candidates that fail this
          * assertion. */
         assert(fts->cand_sf[i].bp_ef >= fts->bptbl->active_fr);
-        /* For the i-th unique start frame... */
+        /* For the i-th unique end frame... */
         bp = bptbl_ef_idx(fts->bptbl, fts->cand_sf[i].bp_ef);
         bpend = bptbl_ef_idx(fts->bptbl, fts->cand_sf[i].bp_ef + 1);
+        /* E_INFO_NOFN("bp_ef %d bp %d bpend %d\n", fts->cand_sf[i].bp_ef, bp, bpend); */
         for (; bp < bpend; bp++) {
             bp_t bpe;
             bptbl_get_bp(fts->bptbl, bp, &bpe);
@@ -1213,13 +1217,19 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
                     fwdtree_search_exit_score
                     (fts, bp, bpe.last_phone, bpe.last2_phone,
                      dict_first_phone(ps_search_dict(fts), candp->wid));
-                if (dscr != WORST_SCORE)
+                if (dscr BETTER_THAN WORST_SCORE) {
+                    assert(!dict_filler_word(ps_search_dict(fts), candp->wid));
                     dscr += ngram_tg_score(fts->lmset,
                                            dict_basewid(ps_search_dict(fts), candp->wid),
                                            bpe.real_wid,
                                            bpe.prev_real_wid, &n_used)>>SENSCR_SHIFT;
-
+                    if (candp->wid == dict_basewid(ps_search_dict(fts), dict_wordid(ps_search_dict(fts), "FOR")))
+                        E_INFO_NOFN("cand FOR dscr %d real_wid %d prev_real_wid %d\n", dscr, bpe.real_wid, bpe.prev_real_wid);
+                    /* E_INFO_NOFN("cand %s %d %d dscr %d bp %d\n", dict_wordstr(ps_search_dict(fts), candp->wid), bpe.real_wid, bpe.prev_real_wid, dscr, bp); */
+                }
                 if (dscr BETTER_THAN fts->last_ltrans[candp->wid].dscr) {
+                    if (candp->wid == dict_basewid(ps_search_dict(fts), dict_wordid(ps_search_dict(fts), "FOR")))
+                        E_INFO_NOFN("cand FOR dscr %d bp %d\n", dscr, bp);
                     fts->last_ltrans[candp->wid].dscr = dscr;
                     fts->last_ltrans[candp->wid].bp = bp;
                 }
@@ -1240,7 +1250,10 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
 
     /* At this pt, we know the best entry score (with LM component) for all candidates */
     thresh = bestscore + fts->lponlybeam;
+    E_INFO_NOFN("n_lastphn_cand %d:", fts->n_lastphn_cand);
     for (i = fts->n_lastphn_cand, candp = fts->lastphn_cand; i > 0; --i, candp++) {
+        if (candp->wid == dict_basewid(ps_search_dict(fts), dict_wordid(ps_search_dict(fts), "FOR")))
+            E_INFOCONT(" FOR=%d>%d", candp->score, thresh);
         if (candp->score BETTER_THAN thresh) {
             w = candp->wid;
 
@@ -1256,6 +1269,7 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
                     k++;
                 }
             }
+            E_INFOCONT(" %s/%d", dict_wordstr(ps_search_dict(fts),w),k);
             if (k > 0) {
                 assert(bitvec_is_clear(fts->word_active, w));
                 assert(!dict_is_single_phone(ps_search_dict(fts), w));
@@ -1264,20 +1278,8 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
             }
         }
     }
+    E_INFOCONT("\n");
     fts->n_active_word[nf & 0x1] = nawl - fts->active_word_list[nf & 0x1];
-}
-
-/* Check if a given backpointer has been around for too long. */
-static int
-too_old_too_cold(fwdtree_search_t *fts, int bp, int frame_idx)
-{
-    if (fts->max_silence >= 0
-        && frame_idx - bptbl_sf(fts->bptbl, bp) > fts->max_silence) {
-        E_DEBUG(4,("Pruning too-old HMM (bp %d sf %d frame_idx %d)\n",
-                   bp, bptbl_sf(fts->bptbl, bp), frame_idx));
-        return TRUE;
-    }
-    return FALSE;
 }
 
 /*
@@ -1302,10 +1304,12 @@ prune_word_chan(fwdtree_search_t *fts, int frame_idx)
     nawl = fts->active_word_list[nf & 0x1] + fts->n_active_word[nf & 0x1];
 
     /* Dynamically allocated last channels of multi-phone words */
+    E_INFO_NOFN("Active lextree words in %d:", frame_idx);
     for (i = fts->n_active_word[frame_idx & 0x1], w = *(awl++); i > 0;
          --i, w = *(awl++)) {
         k = 0;
         phmmp = &(fts->word_chan[w]);
+        E_INFOCONT(" %s", dict_wordstr(ps_search_dict(fts), w));
         for (hmm = fts->word_chan[w]; hmm; hmm = thmm) {
             assert(hmm_frame(&hmm->hmm) >= frame_idx);
 
@@ -1340,6 +1344,7 @@ prune_word_chan(fwdtree_search_t *fts, int frame_idx)
             bitvec_set(fts->word_active, w);
         }
     }
+    E_INFOCONT("\n");
     fts->n_active_word[nf & 0x1] = nawl - fts->active_word_list[nf & 0x1];
 
     /*
@@ -1367,11 +1372,6 @@ prune_word_chan(fwdtree_search_t *fts, int frame_idx)
                 fwdtree_search_save_bp(fts, frame_idx, w,
                              hmm_out_score(&rhmm->hmm),
                              hmm_out_history(&rhmm->hmm), 0);
-                /* If it's silence, and it's too old, then forcibly re-enter it. */
-                if (rhmm->ciphone == ps_search_acmod(fts)->mdef->sil
-                    && too_old_too_cold(fts, hmm_out_history(&rhmm->hmm),
-                                        frame_idx))
-                    hmm_clear(&rhmm->hmm);
             }
         }
     }
@@ -1668,14 +1668,7 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
     w = ps_search_silence_wid(fts);
     rhmm = (root_node_t *) fts->word_chan[w];
     bestbp_rc_ptr = &(fts->bestbp_rc[ps_search_acmod(fts)->mdef->sil]);
-    /* Omit silence penalty for transitions between silence and
-     * silence (brought on by too_old_too_cold() */
-    if (bestbp_rc_ptr->lc == ps_search_acmod(fts)->mdef->sil) {
-        newscore = bestbp_rc_ptr->score + fts->pip;
-    }
-    else {
-        newscore = bestbp_rc_ptr->score + fts->silpen + fts->pip;
-    }
+    newscore = bestbp_rc_ptr->score + fts->silpen + fts->pip;
     if (newscore BETTER_THAN thresh) {
         if ((hmm_frame(&rhmm->hmm) < frame_idx)
             || (newscore BETTER_THAN hmm_in_score(&rhmm->hmm))) {
@@ -1843,7 +1836,7 @@ fwdtree_search_finish(ps_search_t *base)
         E_INFO("%8d candidate words for entering last phone (%d/fr)\n",
                fts->st.n_lastphn_cand_utt, fts->st.n_lastphn_cand_utt / (cf + 1));
     }
-    /* bptbl_dump(fts->bptbl); */
+    bptbl_dump(fts->bptbl);
 
     return 0;
 }

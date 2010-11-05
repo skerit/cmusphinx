@@ -147,12 +147,14 @@ bptbl_dump(bptbl_t *bptbl)
          i < bptbl_retired_idx(bptbl); ++i) {
         bp_t *ent = garray_ptr(bptbl->retired, bp_t, i);
         assert(ent->valid);
-        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
+        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d real_wid %-5d prev_real_wid %-5d\n",
                     i, dict_wordstr(bptbl->d2p->dict, ent->wid),
                     bptbl_sf_internal(bptbl, i),
                     ent->frame,
                     ent->score,
-                    ent->bp);
+                    ent->bp,
+                    ent->real_wid,
+                    ent->prev_real_wid);
     }
     E_INFO("Active backpointers (%d entries starting at %d):\n",
            bptbl_end_idx(bptbl) - bptbl_active_idx(bptbl),
@@ -189,6 +191,9 @@ bptbl_mark_all(bptbl_t *bptbl, int ef, int cf)
         ent->valid = TRUE;
     }
 
+    E_INFO("Marked bps %d to %d\n",
+           bptbl_ef_idx_internal(bptbl, bptbl_active_frame(bptbl)),
+           bptbl_ef_idx_internal(bptbl, ef));
     for (j = 0, i = bptbl_ef_idx_internal(bptbl, bptbl_active_frame(bptbl));
          i < bptbl_ef_idx_internal(bptbl, ef); ++i) {
         bp_t *ent = garray_ptr(bptbl->ent, bp_t, i);
@@ -197,6 +202,12 @@ bptbl_mark_all(bptbl_t *bptbl, int ef, int cf)
             ++j;
         else
             E_DEBUGCONT(2,(" %d", i));
+        E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
+                    i, dict_wordstr(bptbl->d2p->dict, ent->wid),
+                    bptbl_sf_internal(bptbl, i),
+                    ent->frame,
+                    ent->score,
+                    ent->bp);
     }
     E_DEBUGCONT(2,("\n"));
     return j;
@@ -507,8 +518,7 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     garray_expand_to(bptbl->permute, bptbl_ef_idx_internal(bptbl, next_active_fr));
     garray_set_base(bptbl->permute, bptbl_active_idx(bptbl));
     /* Mark, compact, snap pointers. */
-    /* Or don't. */
-    n_retired = bptbl_mark(bptbl, next_active_fr, frame_idx);
+    n_retired = bptbl_mark_all(bptbl, next_active_fr, frame_idx);
     E_DEBUG(2,("About to retire %d bps\n", n_retired));
     first_retired_bp = bptbl_retired_idx(bptbl);
     bptbl_retire(bptbl, n_retired,
@@ -662,7 +672,7 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
     bpidx_t base_idx;
     bp_t *ent;
 
-#if 0 /* For debugging purposes... */
+#if 1 /* For debugging purposes... */
     return 0;
 #endif
 
@@ -680,7 +690,7 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
         sbmtx_unlock(bptbl->mtx);
         return 0;
     }
-#if 0
+#if 1 /* For debugging purposes... */
     int i;
     for (i = base_idx; i < first_idx; ++i) {
         bp_t *ent = garray_ptr(bptbl->retired, bp_t, i);
@@ -1004,11 +1014,17 @@ bptbl_fake_lmstate_internal(bptbl_t *bptbl, bp_t *ent)
             ent->real_wid = prev->real_wid;
             ent->prev_real_wid = prev->prev_real_wid;
         }
+        else {
+            ent->real_wid = dict_basewid(bptbl->d2p->dict, ent->wid);
+            ent->prev_real_wid = ent->real_wid;
+        }
     }
     else {
         ent->real_wid = dict_basewid(bptbl->d2p->dict, ent->wid);
         if (prev != NULL)
             ent->prev_real_wid = prev->real_wid;
+        else
+            ent->prev_real_wid = BAD_S3WID;
     }
 }
 

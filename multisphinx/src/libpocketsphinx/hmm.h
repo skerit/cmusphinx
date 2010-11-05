@@ -249,11 +249,6 @@ void hmm_deinit(hmm_t *hmm);
 void hmm_clear(hmm_t *h);
 
 /**
- * Reset the scores of the HMM.
- */
-void hmm_clear_scores(hmm_t *h);
-
-/**
  * Renormalize the scores in this HMM based on the given best score.
  */
 void hmm_normalize(hmm_t *h, int32 bestscr);
