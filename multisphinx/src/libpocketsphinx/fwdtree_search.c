@@ -85,7 +85,8 @@ static void fwdtree_search_free_all_rc(fwdtree_search_t *fts, int32 w);
 static void fwdtree_search_save_bp(fwdtree_search_t *fts, int frame_idx,
                                    int32 w, int32 score, int32 path, int32 rc);
 static void fwdtree_search_alloc_all_rc(fwdtree_search_t *fts, int32 w);
-static int32 fwdtree_search_exit_score(fwdtree_search_t *fts, bp_t *pbe, int rcphone);
+static int32 fwdtree_search_exit_score(fwdtree_search_t *fts, bpidx_t bp,
+                                       int last_phone, int last2_phone, int rcphone);
 static void fwdtree_search_update_widmap(fwdtree_search_t *fts);
 static void fwdtree_search_calc_beams(fwdtree_search_t *fts);
 static void init_search_tree(fwdtree_search_t *fts);
@@ -1111,7 +1112,6 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
     int32 thresh;
     int32 bestscore, dscr;
     nonroot_node_t *hmm;
-    bp_t *bpe;
     int32 n_cand_sf = 0;
 
     nf = frame_idx + 1;
@@ -1123,16 +1123,18 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
     E_DEBUG(3, ("n_lastphn_cand %d\n", fts->n_lastphn_cand));
     for (i = 0, candp = fts->lastphn_cand; i < fts->n_lastphn_cand; i++, candp++) {
         int32 start_score;
+        bp_t bpe;
 
         /* This can happen if recognition fails. */
         if (candp->bp == NO_BP)
             continue;
         /* Backpointer entry for it. */
-        bpe = bptbl_ent(fts->bptbl, candp->bp);
+        bptbl_get_bp(fts->bptbl, candp->bp, &bpe);
 
         /* Subtract starting score for candidate, leave it with only word score */
         start_score = fwdtree_search_exit_score
-            (fts, bpe, dict_first_phone(ps_search_dict(fts), candp->wid));
+            (fts, candp->bp, bpe.last_phone, bpe.last2_phone,
+             dict_first_phone(ps_search_dict(fts), candp->wid));
         assert(start_score BETTER_THAN WORST_SCORE);
         candp->score -= start_score;
         E_DEBUG(4, ("candp->score %d\n", candp->score));
@@ -1143,11 +1145,11 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
          */
         /* i.e. if we don't have an entry in last_ltrans for this
          * <word,sf>, then create one */
-        if (fts->last_ltrans[candp->wid].sf != bpe->frame + 1) {
+        if (fts->last_ltrans[candp->wid].sf != bpe.frame + 1) {
             /* Look for an entry in cand_sf matching the backpointer
              * for this candidate. */
             for (j = 0; j < n_cand_sf; j++) {
-                if (fts->cand_sf[j].bp_ef == bpe->frame)
+                if (fts->cand_sf[j].bp_ef == bpe.frame)
                     break;
             }
             /* Oh, we found one, so chain onto it. */
@@ -1175,13 +1177,13 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
                 /* Use the newly created cand_sf. */
                 j = n_cand_sf++;
                 candp->next = -1; /* End of the chain. */
-                fts->cand_sf[j].bp_ef = bpe->frame;
+                fts->cand_sf[j].bp_ef = bpe.frame;
             }
             /* Update it to point to this candidate. */
             fts->cand_sf[j].cand = i;
 
             fts->last_ltrans[candp->wid].dscr = WORST_SCORE;
-            fts->last_ltrans[candp->wid].sf = bpe->frame + 1;
+            fts->last_ltrans[candp->wid].sf = bpe.frame + 1;
         }
     }
 
@@ -1194,11 +1196,12 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
          * assertion. */
         assert(fts->cand_sf[i].bp_ef >= fts->bptbl->active_fr);
         /* For the i-th unique start frame... */
-        /* BPTBL: Replace this with explicit iteration over bp_ef. */
         bp = bptbl_ef_idx(fts->bptbl, fts->cand_sf[i].bp_ef);
         bpend = bptbl_ef_idx(fts->bptbl, fts->cand_sf[i].bp_ef + 1);
-        for (bpe = bptbl_ent(fts->bptbl, bp); bp < bpend; bp++, bpe++) {
-            if (!bpe->valid)
+        for (; bp < bpend; bp++) {
+            bp_t bpe;
+            bptbl_get_bp(fts->bptbl, bp, &bpe);
+            if (!bpe.valid)
                 continue;
             /* For each candidate at the start frame find bp->cand transition-score */
             for (j = fts->cand_sf[i].cand; j >= 0; j = candp->next) {
@@ -1206,12 +1209,13 @@ last_phone_transition(fwdtree_search_t *fts, int frame_idx)
                 candp = &(fts->lastphn_cand[j]);
                 dscr = 
                     fwdtree_search_exit_score
-                    (fts, bpe, dict_first_phone(ps_search_dict(fts), candp->wid));
+                    (fts, bp, bpe.last_phone, bpe.last2_phone,
+                     dict_first_phone(ps_search_dict(fts), candp->wid));
                 if (dscr != WORST_SCORE)
                     dscr += ngram_tg_score(fts->lmset,
                                            dict_basewid(ps_search_dict(fts), candp->wid),
-                                           bpe->real_wid,
-                                           bpe->prev_real_wid, &n_used)>>SENSCR_SHIFT;
+                                           bpe.real_wid,
+                                           bpe.prev_real_wid, &n_used)>>SENSCR_SHIFT;
 
                 if (dscr BETTER_THAN fts->last_ltrans[candp->wid].dscr) {
                     fts->last_ltrans[candp->wid].dscr = dscr;
@@ -1430,8 +1434,8 @@ fwdtree_maxwpf(fwdtree_search_t *fts, int frame_idx)
 {
     int32 n, maxwpf;
     int32 bestscr, worstscr;
-    bp_t *bpe, *bestbpe, *worstbpe;
-    bp_t *start, *end;
+    bpidx_t start, end;
+    bpidx_t bp, bestbp, worstbp;
     bptbl_t *bptbl;
 
     /* Don't prune if no pruing. */
@@ -1441,27 +1445,34 @@ fwdtree_maxwpf(fwdtree_search_t *fts, int frame_idx)
         return 0;
 
     /* Get bps. */
-    start = bptbl_ent(bptbl, bptbl_ef_idx(bptbl, frame_idx));
-    end = bptbl_ent(bptbl, bptbl_end_idx(bptbl));
+    start = bptbl_ef_idx(bptbl, frame_idx);
+    end = bptbl_end_idx(bptbl);
     /* Allow only one filler word exit (the best) per frame */
     bestscr = (int32) 0x80000000;
-    bestbpe = NULL;
+    bestbp = NO_BP;
     n = 0;
-    for (bpe = start; bpe != end; ++bpe) {
-        if (dict_filler_word(bptbl->d2p->dict, bpe->wid)) {
-            if (bpe->score BETTER_THAN bestscr) {
-                bestscr = bpe->score;
-                bestbpe = bpe;
+    for (bp = start; bp != end; ++bp) {
+        bp_t bpe;
+        bptbl_get_bp(bptbl, bp, &bpe);
+        if (dict_filler_word(bptbl->d2p->dict, bpe.wid)) {
+            if (bpe.score BETTER_THAN bestscr) {
+                bestscr = bpe.score;
+                bestbp = bp;
             }
-            bpe->valid = FALSE; /* Flag to indicate invalidation */
-            fts->word_idx[bpe->wid] = NO_BP;
+            /* FIXME: Should have a shortcut to invalidate. */
+            bpe.valid = FALSE; /* Flag to indicate invalidation */
+            bptbl_set_bp(bptbl, bp, &bpe);
+            fts->word_idx[bpe.wid] = NO_BP;
             n++;                /* No. of filler words */
         }
     }
     /* Restore bestbpe to valid state */
-    if (bestbpe != NULL) {
-        fts->word_idx[bestbpe->wid] = bptbl_idx(bptbl, bestbpe);
-        bestbpe->valid = TRUE;
+    if (bestbp != NO_BP) {
+        bp_t bestbpe;
+        bptbl_get_bp(bptbl, bestbp, &bestbpe);
+        fts->word_idx[bestbpe.wid] = bestbp;
+        bestbpe.valid = TRUE;
+        bptbl_set_bp(bptbl, bestbp, &bestbpe);
         --n;
     }
 
@@ -1470,20 +1481,23 @@ fwdtree_maxwpf(fwdtree_search_t *fts, int frame_idx)
     /* No. of entries after limiting fillers */
     n = bptbl_ef_count(bptbl, frame_idx) - n;
     for (; n > maxwpf; --n) {
+        bp_t worstbpe;
         /* Find worst BPTable entry */
         worstscr = (int32) 0x7fffffff;
-        worstbpe = NULL;
-        /* BPTBL: Replace this with explicit iteration over the
-         * current frame (which frame_idx always is). */
-        for (bpe = start; bpe != end; ++bpe) {
-            if (bpe->valid && (bpe->score WORSE_THAN worstscr)) {
-                worstscr = bpe->score;
-                worstbpe = bpe;
+        worstbp = NO_BP;
+        for (bp = start; bp != end; ++bp) {
+            bp_t bpe;
+            bptbl_get_bp(bptbl, bp, &bpe);
+            if (bpe.valid && (bpe.score WORSE_THAN worstscr)) {
+                worstscr = bpe.score;
+                worstbp = bp;
             }
         }
-        assert(worstbpe != NULL);
-        worstbpe->valid = 0;
-        fts->word_idx[worstbpe->wid] = NO_BP;
+        assert(worstbp != NO_BP);
+        bptbl_get_bp(bptbl, worstbp, &worstbpe);
+        fts->word_idx[worstbpe.wid] = NO_BP;
+        worstbpe.valid = FALSE;
+        bptbl_set_bp(bptbl, worstbp, &worstbpe);
     }
 
     return n;
@@ -1492,10 +1506,10 @@ fwdtree_maxwpf(fwdtree_search_t *fts, int frame_idx)
 static void
 word_transition(fwdtree_search_t *fts, int frame_idx)
 {
-    int32 i, k, bp, w, nf;
+    int32 i, k, w, nf;
     int32 rc;
     int32 thresh, newscore;
-    bp_t *bpe;
+    bpidx_t bp;
     root_node_t *rhmm;
     struct bestbp_rc_s *bestbp_rc_ptr;
     dict_t *dict = ps_search_dict(fts);
@@ -1511,15 +1525,14 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
     k = 0;
     /* Ugh, this is complicated.  Scan all word exits for this frame
      * (they have already been created by prune_word_chan()). */
-    /* BPTBL: Replace this with explicit iteration over the current
-     * frame (which frame_idx always is). */
     for (bp = bptbl_ef_idx(fts->bptbl, frame_idx);
          bp < bptbl_ef_idx(fts->bptbl, frame_idx + 1); bp++) {
-        bpe = bptbl_ent(fts->bptbl, bp);
-        fts->word_idx[bpe->wid] = NO_BP;
+        bp_t bpe;
+        bptbl_get_bp(fts->bptbl, bp, &bpe);
+        fts->word_idx[bpe.wid] = NO_BP;
 
         /* No transitions from the finish word for obvious reasons. */
-        if (bpe->wid == ps_search_finish_wid(fts))
+        if (bpe.wid == ps_search_finish_wid(fts))
             continue;
         k++;
 
@@ -1527,29 +1540,29 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
         /* Array of HMM scores corresponding to all the possible right
          * context expansions of the final phone.  It's likely that a
          * lot of these are going to be missing, actually. */
-        bptbl_rcscores(fts->bptbl, bpe, fts->rcss);
-        if (bpe->last2_phone == -1) {
+        bptbl_get_rcscores(fts->bptbl, bp, fts->rcss);
+        if (bpe.last2_phone == -1) {
             /* No right context expansion. */
             for (rc = 0;
                  rc < bin_mdef_n_ciphone(ps_search_acmod(fts)->mdef); ++rc) {
                 if (fts->rcss[0] BETTER_THAN fts->bestbp_rc[rc].score) {
                     E_DEBUG(4,("bestbp_rc[0] = %d lc %d\n",
-                               fts->rcss[0], bpe->last_phone));
+                               fts->rcss[0], bpe.last_phone));
                     fts->bestbp_rc[rc].score = fts->rcss[0];
                     fts->bestbp_rc[rc].path = bp;
-                    fts->bestbp_rc[rc].lc = bpe->last_phone;
+                    fts->bestbp_rc[rc].lc = bpe.last_phone;
                 }
             }
         }
         else {
-            xwdssid_t *rssid = dict2pid_rssid(d2p, bpe->last_phone, bpe->last2_phone);
+            xwdssid_t *rssid = dict2pid_rssid(d2p, bpe.last_phone, bpe.last2_phone);
             for (rc = 0; rc < bin_mdef_n_ciphone(ps_search_acmod(fts)->mdef); ++rc) {
                 if (fts->rcss[rssid->cimap[rc]] BETTER_THAN fts->bestbp_rc[rc].score) {
                     E_DEBUG(4,("bestbp_rc[%d] = %d lc %d\n",
-                               rc, fts->rcss[rssid->cimap[rc]], bpe->last_phone));
+                               rc, fts->rcss[rssid->cimap[rc]], bpe.last_phone));
                     fts->bestbp_rc[rc].score = fts->rcss[rssid->cimap[rc]];
                     fts->bestbp_rc[rc].path = bp;
-                    fts->bestbp_rc[rc].lc = bpe->last_phone;
+                    fts->bestbp_rc[rc].lc = bpe.last_phone;
                 }
             }
         }
@@ -1591,26 +1604,27 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
         w = fts->single_phone_wid[i];
         fts->last_ltrans[w].dscr = (int32) 0x80000000;
     }
-    /* BPTBL: Replace this with explicit iteration over the current
-     * frame (which frame_idx always is). */
     for (bp = bptbl_ef_idx(fts->bptbl, frame_idx);
          bp < bptbl_ef_idx(fts->bptbl, frame_idx + 1); bp++) {
-        bpe = bptbl_ent(fts->bptbl, bp);
-        if (bpe == NULL || !bpe->valid)
+        bp_t bpe;
+
+        bptbl_get_bp(fts->bptbl, bp, &bpe);
+        if (!bpe.valid)
             continue;
 
         for (i = 0; i < fts->n_1ph_LMwords; i++) {
             int32 n_used;
             w = fts->single_phone_wid[i];
             newscore = fwdtree_search_exit_score
-                (fts, bpe, dict_first_phone(dict, w));
+                (fts, bp, bpe.last_phone, bpe.last2_phone,
+                 dict_first_phone(dict, w));
             E_DEBUG(4, ("initial newscore for %s: %d\n",
                         dict_wordstr(dict, w), newscore));
             if (newscore != WORST_SCORE)
                 newscore += ngram_tg_score(fts->lmset,
                                            dict_basewid(dict, w),
-                                           bpe->real_wid,
-                                           bpe->prev_real_wid, &n_used)>>SENSCR_SHIFT;
+                                           bpe.real_wid,
+                                           bpe.prev_real_wid, &n_used)>>SENSCR_SHIFT;
 
             /* FIXME: Not sure how WORST_SCORE could be better, but it
              * apparently happens (uh, maybe because WORST_SCORE >
@@ -1632,7 +1646,8 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
         rhmm = (root_node_t *) fts->word_chan[w];
         newscore = fts->last_ltrans[w].dscr + fts->pip;
         if (newscore BETTER_THAN thresh) {
-            bpe = bptbl_ent(fts->bptbl, fts->last_ltrans[w].bp);
+            bp_t bpe;
+            bptbl_get_bp(fts->bptbl, fts->last_ltrans[w].bp, &bpe);
             if ((hmm_frame(&rhmm->hmm) < frame_idx)
                 || (newscore BETTER_THAN hmm_in_score(&rhmm->hmm))) {
                 hmm_enter(&rhmm->hmm,
@@ -1641,7 +1656,7 @@ word_transition(fwdtree_search_t *fts, int frame_idx)
                 /* Look up the ssid to use when entering this mpx triphone. */
                 hmm_mpx_ssid(&rhmm->hmm, 0) =
                     dict2pid_ldiph_lc(d2p, rhmm->ciphone, rhmm->ci2phone,
-                                      dict_last_phone(dict, bpe->wid));
+                                      dict_last_phone(dict, bpe.wid));
                 assert(hmm_mpx_ssid(&rhmm->hmm, 0) != BAD_SSID);
             }
         }
@@ -1900,21 +1915,15 @@ fwdtree_search_alloc_all_rc(fwdtree_search_t *fts, int32 w)
 }
 
 static int32
-fwdtree_search_exit_score(fwdtree_search_t *fts, bp_t *pbe, int rcphone)
+fwdtree_search_exit_score(fwdtree_search_t *fts, bpidx_t bp,
+                          int last_phone, int last2_phone, int rcphone)
 {
-    /* DICT2PID */
-    /* Get the mapping from right context phone ID to index in the
-     * right context table and the bptbl->bscore_stack. */
-    /* FIXME: This function gets called like 50 zillion times, either
-     * it should be inlined or we should find a better way to do
-     * this. */
-    E_DEBUG(99,("fwdtree_search_exit_score(%d,%d)\n", bptbl_idx(fts->bptbl, pbe), rcphone));
-    assert(pbe->valid);
-    if (pbe->last2_phone == -1) {
-        bptbl_rcscores(fts->bptbl, pbe, fts->rcss);
-        /* No right context for single phone predecessor words. */
-        E_DEBUG(99,("last2_phone = %d s_idx = %d bscore = %d\n", -1,
-                    pbe->s_idx, fts->rcss[0]));
+    int rcsize;
+    /* Get the right context scores for this backpointer. */
+    rcsize = bptbl_get_rcscores(fts->bptbl, bp, fts->rcss);
+    if (rcsize == 1) {
+        /* This indicates a single phone predecessor word, which has
+         * no right context scores. */
         assert(fts->rcss[0] != WORST_SCORE);
         return fts->rcss[0];
     }
@@ -1923,14 +1932,10 @@ fwdtree_search_exit_score(fwdtree_search_t *fts, bp_t *pbe, int rcphone)
         /* Find the index for the last diphone of the previous word +
          * the first phone of the current word. */
         rssid = dict2pid_rssid(ps_search_dict2pid(fts),
-                               pbe->last_phone, pbe->last2_phone);
-        bptbl_rcscores(fts->bptbl, pbe, fts->rcss);
-        E_DEBUG(99,("last2_phone = %d s_idx = %d rc = %d n_rc = %d bscore = %d\n",
-                    pbe->last2_phone, pbe->s_idx, rssid->cimap[rcphone],
-                    rssid->n_ssid,
-                    fts->rcss[rssid->cimap[rcphone]]));
+                               last_phone, last2_phone);
         /* This may be WORST_SCORE, which means that there was no exit
          * with rcphone as right context. */
+        assert(rssid->cimap[rcphone] < rcsize);
         return fts->rcss[rssid->cimap[rcphone]];
     }
 }
@@ -1957,27 +1962,27 @@ fwdtree_search_save_bp(fwdtree_search_t *fts, int frame_idx,
     /* Look for an existing exit for this word in this frame. */
     bp = fts->word_idx[w];
     if (bp != NO_BP) {
-        bp_t *bpe = bptbl_ent(fts->bptbl, bp);
+        bp_t bpe;
+
         assert(bp >= bptbl_ef_idx(fts->bptbl, frame_idx));
-        assert(frame_idx == bpe->frame);
+        bptbl_get_bp(fts->bptbl, bp, &bpe);
+        assert(frame_idx == bpe.frame);
         /* Keep only the best scoring one (this is a potential source
          * of search errors...) */
-        if (bpe->score WORSE_THAN score) {
-            if (bpe->bp != path) {
-                bpe->bp = path;
-                bptbl_fake_lmstate(fts->bptbl, bp);
-            }
-            bpe->score = score;
+        if (bpe.score WORSE_THAN score) {
+            if (bpe.bp != path)
+                bptbl_fake_lmstate(fts->bptbl, bp, path);
+            bpe.score = score;
+            bptbl_set_bp(fts->bptbl, bp, &bpe);
         }
         /* But do keep track of scores for all right contexts, since
          * we need them to determine the starting path scores for any
          * successors of this word exit. */
-        bptbl_set_rcscore(fts->bptbl, bpe, rc, score);
+        bptbl_set_rcscore(fts->bptbl, bp, rc, score);
     }
     else {
-        bp_t *bpe = bptbl_enter(fts->bptbl, w, path, score, rc);
-        fts->word_idx[w] = bptbl_idx(fts->bptbl, bpe);
-        assert(frame_idx == bpe->frame);
+        bpidx_t bpidx = bptbl_enter(fts->bptbl, w, path, score, rc);
+        fts->word_idx[w] = bpidx;
     }
 }
 

@@ -533,25 +533,27 @@ fwdflat_search_save_bp(fwdflat_search_t *ffs, int frame_idx,
     /* Look for an existing exit for this word in this frame. */
     bp = ffs->word_idx[w];
     if (bp != NO_BP) {
-        bp_t *bpe = bptbl_ent(ffs->bptbl, bp);
+        bp_t bpe;
+
+        bptbl_get_bp(ffs->bptbl, bp, &bpe);
         /* Keep only the best scoring one (this is a potential source
          * of search errors...) */
-        if (bpe->score WORSE_THAN score) {
-            if (bpe->bp != path) {
-                bpe->bp = path;
-                bptbl_fake_lmstate(ffs->bptbl, bp);
+        if (bpe.score WORSE_THAN score) {
+            if (bpe.bp != path) {
+                bpe.bp = path;
+                bptbl_fake_lmstate(ffs->bptbl, bp, path);
             }
-            bpe->score = score;
+            bpe.score = score;
+            bptbl_set_bp(ffs->bptbl, bp, &bpe);
         }
         /* But do keep track of scores for all right contexts, since
          * we need them to determine the starting path scores for any
          * successors of this word exit. */
-        bptbl_set_rcscore(ffs->bptbl, bpe, rc, score);
+        bptbl_set_rcscore(ffs->bptbl, bp, rc, score);
     }
     else {
-        bp_t *bpe = bptbl_enter(ffs->bptbl, w, path, score, rc);
-        ffs->word_idx[w] = bptbl_idx(ffs->bptbl, bpe);
-        assert(frame_idx == bpe->frame);
+        bpidx_t bpidx = bptbl_enter(ffs->bptbl, w, path, score, rc);
+        ffs->word_idx[w] = bpidx;
     }
 }
 
@@ -696,21 +698,21 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
          b < bptbl_ef_idx(ffs->bptbl, cf + 1); b++) {
         xwdssid_t *rssid;
         int32 silscore;
-        bp_t *ent;
+        bp_t ent;
 
-        ent = bptbl_ent(ffs->bptbl, b);
-        ffs->word_idx[ent->wid] = NO_BP;
+        bptbl_get_bp(ffs->bptbl, b, &ent);
+        ffs->word_idx[ent.wid] = NO_BP;
 
-        if (ent->wid == ps_search_finish_wid(ffs))
+        if (ent.wid == ps_search_finish_wid(ffs))
             continue;
 
         /* Get the mapping from right context phone ID to index in the
          * right context table and the bptbl->bscore_stack. */
-        bptbl_rcscores(ffs->bptbl, ent, ffs->rcss);
-        if (ent->last2_phone == -1)
+        bptbl_get_rcscores(ffs->bptbl, b, ffs->rcss);
+        if (ent.last2_phone == -1)
             rssid = NULL;
         else
-            rssid = dict2pid_rssid(d2p, ent->last_phone, ent->last2_phone);
+            rssid = dict2pid_rssid(d2p, ent.last_phone, ent.last2_phone);
 
         /* Transition to all successor words. */
         for (i = 0; i < ffs->n_expand_word; ++i) {
@@ -728,8 +730,8 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
                 continue;
             newscore += ngram_tg_score(ffs->lmset,
                                        dict_basewid(dict, w),
-                                       ent->real_wid,
-                                       ent->prev_real_wid, &n_used)>>SENSCR_SHIFT;
+                                       ent.real_wid,
+                                       ent.prev_real_wid, &n_used)>>SENSCR_SHIFT;
             newscore += pip >> SENSCR_SHIFT;
 
             /* Enter the next word */
@@ -742,7 +744,7 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
                     /* Look up the ssid to use when entering this mpx triphone. */
                     hmm_mpx_ssid(&rhmm->hmm, 0) =
                         dict2pid_ldiph_lc(d2p, rhmm->ciphone, rhmm->ci2phone,
-                                          dict_last_phone(dict, ent->wid));
+                                          dict_last_phone(dict, ent.wid));
                     assert(IS_S3SSID(hmm_mpx_ssid(&rhmm->hmm, 0)));
                     bitvec_set(ffs->word_active, w);
                 }

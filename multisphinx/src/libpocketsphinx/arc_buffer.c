@@ -111,13 +111,13 @@ arc_buffer_add_bps(arc_buffer_t *fab,
     next_idx = -1;
     for (idx = start; idx < end; ++idx) {
         arc_t arc;
-        bp_t *ent;
+        bp_t ent;
 
         /* Convert it to an arc. */
-        ent = bptbl_ent(bptbl, idx);
-        arc.wid = ent->wid;
+        bptbl_get_bp(bptbl, idx, &ent);
+        arc.wid = ent.wid;
         arc.src = bptbl_sf(bptbl, idx);
-        arc.dest = ent->frame;
+        arc.dest = ent.frame;
         /* If it's inside the appropriate frame span, add it. */
         if (arc.src >= fab->active_sf && arc.src < fab->next_sf) {
             garray_append(fab->arcs, &arc);

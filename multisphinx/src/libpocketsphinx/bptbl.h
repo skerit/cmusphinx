@@ -168,14 +168,6 @@ void bptbl_reset(bptbl_t *bptbl);
 int bptbl_finalize(bptbl_t *bptbl);
 
 /**
- * Find the best scoring exit in the final frame.
- *
- * @param wid End word ID (or BAD_S3WID to return the best exit
- * regardless of word ID)
- */
-bp_t *bptbl_find_exit(bptbl_t *bptbl, int32 wid);
-
-/**
  * Record the current frame's index in the backpointer table.
  *
  * @param oldest_bp Index of the oldest backpointer still active in
@@ -192,8 +184,8 @@ int bptbl_release(bptbl_t *bptbl, bpidx_t first_idx);
 /**
  * Add a backpointer to the table.
  */
-bp_t *bptbl_enter(bptbl_t *bptbl, int32 w, int32 path,
-                  int32 score, int rc);
+bpidx_t bptbl_enter(bptbl_t *bptbl, int32 w, int32 path,
+                    int32 score, int rc);
 
 /**
  * Commit all valid backpointers from the current frame.
@@ -251,24 +243,19 @@ int bptbl_active_sf(bptbl_t *bptbl);
 int bptbl_wait(bptbl_t *bptbl, int timeout);
 
 /**
- * Obtain a pointer to the backpointer with a given index.
+ * Get a backpointer entry.
  */
-bp_t *bptbl_ent(bptbl_t *bptbl, bpidx_t bpidx);
+int bptbl_get_bp(bptbl_t *bptbl, bpidx_t bpidx, bp_t *out_ent);
 
 /**
- * Obtain the best predecessor to a given backpointer entry.
+ * Update a backpointer entry.
  */
-bp_t *bptbl_prev(bptbl_t *bptbl, bp_t *ent);
+int bptbl_set_bp(bptbl_t *bptbl, bpidx_t bpidx, bp_t const *ent);
 
 /**
  * Get the start frame for a given backpointer index.
  */
 int bptbl_sf(bptbl_t *bptbl, bpidx_t bpidx);
-
-/**
- * Get the index for a given backpointer.
- */
-bpidx_t bptbl_idx(bptbl_t *bptbl, bp_t *bpe);
 
 /**
  * Get the number of word exits in a given frame.
@@ -278,12 +265,14 @@ int bptbl_ef_count(bptbl_t *bptbl, int frame_idx);
 /**
  * Set a right context score for a given backpointer entry.
  */
-void bptbl_set_rcscore(bptbl_t *bptbl, bp_t *bpe, int rc, int32 score);
+void bptbl_set_rcscore(bptbl_t *bptbl, bpidx_t bpidx, int rc, int32 score);
 
 /**
  * Get the array of right context scores for a backpointer entry.
+ *
+ * @return Number of right context scores.
  */
-void bptbl_rcscores(bptbl_t *bptbl, bp_t *bpe, int32 *out_rcscores);
+int bptbl_get_rcscores(bptbl_t *bptbl, bpidx_t bpidx, int32 *out_rcscores);
 
 /**
  * Update language model state for a backpointer table entry.
@@ -292,7 +281,7 @@ void bptbl_rcscores(bptbl_t *bptbl, bp_t *bpe, int32 *out_rcscores);
  * actually have unique LM states.  In other words this is "poor man's
  * trigram" search.
  */
-void bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp);
+void bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp, bpidx_t new_path);
 
 /**
  * Construct a hypothesis string from the best path in bptbl.
