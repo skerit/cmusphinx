@@ -67,7 +67,7 @@ static const arg_t args_def[] = {
       REQARG_STRING,
       NULL,
       "Input language model file." },
-    { "-vmap",
+    { "-vm",
       REQARG_STRING,
       NULL,
       "Input vocabulary mapping file." },
@@ -300,8 +300,8 @@ main(int argc, char *argv[])
     fclose(fh);
 
     vm = vocab_map_init(NULL);
-    if ((fh = fopen(cmd_ln_str_r(config, "-vmap"), "r")) == NULL)
-        E_FATAL_SYSTEM("Failed to open %s", cmd_ln_str_r(config, "-vmap"));
+    if ((fh = fopen(cmd_ln_str_r(config, "-vm"), "r")) == NULL)
+        E_FATAL_SYSTEM("Failed to open %s", cmd_ln_str_r(config, "-vm"));
     if (vocab_map_read(vm, fh) < 0)
         return 1;
     fclose(fh);
@@ -321,8 +321,8 @@ main(int argc, char *argv[])
     /* Now re-read the vocab map with this updated dictionary. */
     vocab_map_free(vm);
     vm = vocab_map_init(dict);
-    if ((fh = fopen(cmd_ln_str_r(config, "-vmap"), "r")) == NULL)
-        E_FATAL_SYSTEM("Failed to open %s", cmd_ln_str_r(config, "-vmap"));
+    if ((fh = fopen(cmd_ln_str_r(config, "-vm"), "r")) == NULL)
+        E_FATAL_SYSTEM("Failed to open %s", cmd_ln_str_r(config, "-vm"));
     if (vocab_map_read(vm, fh) < 0)
         return 1;
     fclose(fh);
