@@ -1111,7 +1111,9 @@ lm_t *lm_read_advance (const char *file,	/**< In: LM file being read */
 					   automaticaly determined */
 		       int32 applyweight,      /**< In: whether lw,wip, uw should be 
 						 applied to the lm or not */
-		       logmath_t *logmath
+		       logmath_t *logmath,
+		       int32 ugonly, /**< In: read only unigrams */
+		       int32 bgonly /**< In: read only bigrams */
     );
 
 S3DECODER_EXPORT
@@ -1130,7 +1132,9 @@ lm_t *lm_read_advance2(const char *file,	/**< In: LM file being read */
 		       int32 applyweight,      /**< In: whether lw,wip, uw should be 
                                                   applied to the lm or not */
                        int lminmemory, /**< In: Whether LM is read into memory */
-		       logmath_t *logmath
+		       logmath_t *logmath,
+		       int32 ugonly, /**< In: read only unigrams */
+		       int32 bgonly /**< In: read only bigrams */
     );
 /**
    Simple writing of an LM file, the input and output encoding will

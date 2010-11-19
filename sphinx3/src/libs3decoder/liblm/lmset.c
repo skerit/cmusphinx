@@ -291,7 +291,7 @@ lmset_read_lm(const char *lmfile, dict_t * dict, const char *lmname,
      */
     if ((lms->lmarray[0] =
          lm_read_advance(lmfile, lmname, lw, wip, uw, dict_size(dict),
-                         NULL, 1, logmath)) == NULL)
+                         NULL, 1, logmath, FALSE, FALSE)) == NULL)
         E_FATAL
             ("lm_read_advance(%s, %e, %e, %e %d [Arbitrary Fmt], Weighted Apply) failed\n",
              lmfile, lw, wip, uw, dict_size(dict));
@@ -451,7 +451,7 @@ lmset_read_ctl(const char *ctlfile,
             str[0] = '\0';
 
         lm = (lm_t *) lm_read_advance(lmfile, lmname, lw, wip, uw,
-                                      dict_size(dict), NULL, 1, logmath);
+                                      dict_size(dict), NULL, 1, logmath, FALSE, FALSE);
 
 
         if (n_lmclass_used > 0) {

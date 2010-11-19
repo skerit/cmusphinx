@@ -439,7 +439,9 @@ s3_decode_read_lm(s3_decode_t * _decode,
                          cmd_ln_float32_r(kbcore_config(_decode->kbcore), "-wip"),
                          cmd_ln_float32_r(kbcore_config(_decode->kbcore), "-uw"),
                          ndict, NULL, 1,   /* Weight apply */
-                         kbcore_logmath(s->kbc)
+                         kbcore_logmath(s->kbc),
+                         cmd_ln_boolean_r(kbcore_config(_decode->kbcore), "-ugonly"),
+                         cmd_ln_boolean_r(kbcore_config(_decode->kbcore), "-bgonly")
         );
 
     s->funcs->add_lm(s, lm, lmname);

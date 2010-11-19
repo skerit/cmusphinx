@@ -574,21 +574,25 @@ lm_read(const char *file, const char *lmname, cmd_ln_t *config, logmath_t *logma
                            lmname,
                            cmd_ln_float32_r(config, "-lw"),
                            cmd_ln_float32_r(config, "-wip"),
-                           cmd_ln_float32_r(config, "-uw"), 0, NULL, 1, logmath);
+                           cmd_ln_float32_r(config, "-uw"), 0, NULL, 1, logmath,
+                           cmd_ln_boolean_r(config, "-ugonly"),
+                           cmd_ln_boolean_r(config, "-bgonly"));
 }
 
 lm_t *
 lm_read_advance(const char *file, const char *lmname, float64 lw,
                 float64 wip, float64 uw, int32 ndict, const char *fmt,
-                int32 applyWeight, logmath_t *logmath)
+                int32 applyWeight, logmath_t *logmath,
+                int32 ugonly, int32 bgonly)
 {
-    return lm_read_advance2(file, lmname, lw, wip, uw, ndict, fmt, applyWeight, 0, logmath);
+    return lm_read_advance2(file, lmname, lw, wip, uw, ndict, fmt, applyWeight, 0, logmath, ugonly, bgonly);
 }
 
 lm_t *
 lm_read_advance2(const char *file, const char *lmname, float64 lw,
                  float64 wip, float64 uw, int32 ndict, const char *fmt,
-                 int32 applyWeight, int lminmemory, logmath_t *logmath)
+                 int32 applyWeight, int lminmemory, logmath_t *logmath,
+                 int32 ugonly, int32 bgonly)
 {
     int32 i, u;
     lm_t *lm;
@@ -684,11 +688,11 @@ lm_read_advance2(const char *file, const char *lmname, float64 lw,
 
     /* the following code is for MMIE training
        lqin 2010-03 */
-    lm->ugonly = cmd_ln_boolean("-ugonly");
+    lm->ugonly = ugonly;
     if (lm->ugonly == TRUE)
         E_INFO("Only use Unigram to compute LM score in decoding\n");
 
-    lm->bgonly = cmd_ln_boolean("-bgonly");
+    lm->bgonly = bgonly;
     if (lm->bgonly == TRUE)
         E_INFO("Only use Bigram to compute LM score in decoding\n");
 
