@@ -861,7 +861,13 @@ fwdflat_create_expand_word_list(fwdflat_search_t *ffs)
     return 0;
 }
 
-static void
+#ifdef __GNUC__
+#define ATTRIBUTE_UNUSED __attribute__((unused))
+#else
+#define ATTRIBUTE_UNUSED
+#endif
+
+static void ATTRIBUTE_UNUSED
 fwdflat_dump_expand_words(fwdflat_search_t *ffs, int sf)
 {
     int i;
