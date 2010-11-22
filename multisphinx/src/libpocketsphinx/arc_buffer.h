@@ -113,8 +113,8 @@ int arc_buffer_extend(arc_buffer_t *fab, int next_sf);
  *         of arc addition.
  */
 bpidx_t arc_buffer_add_bps(arc_buffer_t *fab,
-                                   bptbl_t *bptbl, bpidx_t start,
-                                   bpidx_t end);
+                           bptbl_t *bptbl, bpidx_t start,
+                           bpidx_t end);
 /**
  * Commit extended arcs to the arc buffer.
  *
@@ -141,7 +141,8 @@ arc_t *arc_next(arc_buffer_t *fab, arc_t *ab);
  * Wait until arcs for the given frame are committed.
  *
  * @return First arc in sf, or NULL if the utterance was terminated
- *         before sf was reached.
+ *         before sf was reached.  This can be iterated over as if it
+ *         were obtained with arc_buffer_iter().
  */
 arc_t *arc_buffer_wait(arc_buffer_t *fab, int sf);
 

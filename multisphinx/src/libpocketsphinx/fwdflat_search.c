@@ -1007,6 +1007,25 @@ fwdflat_search_decode(ps_search_t *base)
     while (!final) {
         int k, timeout, end_win;
 
+        /* FIXME: We should be waiting on the arc buffer here (this
+         * will be necessary for network transparency).
+         *
+         * Basically what needs to happen is all the code below
+         * (except the call to bptbl_wait of course) will go into the
+         * bptbl code and be done synchronously with retirement.
+         * Basically the same as what we were trying to do before with
+         * sorting the retired arcs.
+         *
+         * Then instead of polling the arc buffer and waiting on the
+         * acmod, we wait on the arc buffer and poll the acmod
+         * (waiting on both is extremely unwise for reasons that
+         * should be obvious but in case not - it's a recipe for
+         * deadlock)
+         *
+         * Otherwise not much has to change, we just wait on the arc
+         * buffer and consume all available frames in it.
+         */
+
         /* next_sf is the first starting frame that is still
          * referenced by active backpointers. */
         if (bptbl_wait(ffs->input_bptbl, -1) < 0)

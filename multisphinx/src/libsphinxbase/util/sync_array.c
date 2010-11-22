@@ -145,16 +145,10 @@ sync_array_wait(sync_array_t *sa, size_t idx, int sec, int nsec)
 
     /* Wait until length of sa->data > idx or end of utt. */
     while (1) {
-        sbmtx_lock(sa->mtx);
-        if (garray_next_idx(sa->data) > idx) {
-            sbmtx_unlock(sa->mtx);
+        if (garray_next_idx(sa->data) > idx)
             return 0;
-        }
-        if (idx >= sa->final_next_idx) {
-            sbmtx_unlock(sa->mtx);
+        if (idx >= sa->final_next_idx)
             return -1;
-        }
-        sbmtx_unlock(sa->mtx);
         if (nwait > 0)
             return -1;
         /* If we wait forever here, there's a race condition
@@ -173,15 +167,11 @@ sync_array_wait(sync_array_t *sa, size_t idx, int sec, int nsec)
 int
 sync_array_get(sync_array_t *sa, size_t idx, void *out_ent)
 {
-    sbmtx_lock(sa->mtx);
     if (idx < garray_base(sa->data)
-        || idx >= garray_next_idx(sa->data)) {
-        sbmtx_unlock(sa->mtx);
+        || idx >= garray_next_idx(sa->data))
         return -1;
-    }
     memcpy(out_ent, garray_void(sa->data, idx),
            garray_ent_size(sa->data));
-    sbmtx_unlock(sa->mtx);
     return 0;
 }
 
