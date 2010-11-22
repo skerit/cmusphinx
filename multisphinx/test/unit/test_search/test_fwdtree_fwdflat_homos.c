@@ -49,7 +49,7 @@ main(int argc, char *argv[])
 	fwdtree = fwdtree_search_init(config, acmod, dict, d2p);
 	cmd_ln_set_str_r(config, "-lm", TESTDATADIR "/bn10000.3g.arpa");
 	fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-				      fwdtree_search_bptbl(fwdtree),
+				      fwdtree_search_arc_buffer(fwdtree),
 				      NULL);
 	vm = vocab_map_init(dict);
 	rawfh = fopen(TESTDATADIR "/bn10000.homos", "r");

@@ -9,35 +9,17 @@
 #include "bptbl.h"
 #include "test_macros.h"
 
-static int
-waiter(sbthread_t *th)
-{
-	bptbl_t *bptbl = sbthread_arg(th);
-
-	printf("Waiting thread started\n");
-	while (bptbl_wait(bptbl, -1) == 0) {
-		printf("Woken up with active_sf = %d\n",
-		       bptbl_active_sf(bptbl));
-		if (bptbl_active_frame(bptbl)
-		    == bptbl_frame_idx(bptbl))
-			break;
-	}
-	printf("Waiting thread exiting\n");
-	return 0;
-}
-
 int
 main(int argc, char *argv[])
 {
 	bin_mdef_t *mdef;
 	dict2pid_t *d2p;
 	dict_t *dict;
-	sbthread_t *thr;
 	cmd_ln_t *config;
 	ps_seg_t *seg;
 	bptbl_t *bptbl;
-	char *hyp;
-	bp_t *bp;
+	bp_t bpe;
+	bpidx_t bp;
 	int fi;
 	int i;
 
@@ -53,36 +35,34 @@ main(int argc, char *argv[])
 	d2p = dict2pid_build(mdef, dict);
 
 	bptbl = bptbl_init(d2p, 10, 10);
-	thr = sbthread_start(NULL, waiter, bptbl);
-	sleep(2);
 
 	/* Enter a few bps starting at frame zero. */
 	fi = bptbl_push_frame(bptbl, NO_BP);
 	TEST_ASSERT(fi == 0);
 	bp = bptbl_enter(bptbl, 42, NO_BP, 1, 0);
-	TEST_ASSERT(bptbl_idx(bptbl, bp) == 0);
-	TEST_ASSERT(bptbl_sf(bptbl, 0) == 0);
+	TEST_ASSERT(bp == 0);
+	TEST_ASSERT(bptbl_sf(bptbl, bp) == 0);
 
 	fi = bptbl_push_frame(bptbl, NO_BP);
 	TEST_ASSERT(fi == 1);
 	bp = bptbl_enter(bptbl, 42, NO_BP, 2, 0);
-	TEST_ASSERT(bptbl_idx(bptbl, bp) == 1);
-	TEST_ASSERT(bptbl_sf(bptbl, 1) == 0);
+	TEST_ASSERT(bp == 1);
+	TEST_ASSERT(bptbl_sf(bptbl, bp) == 0);
 
 	fi = bptbl_push_frame(bptbl, NO_BP);
 	TEST_ASSERT(fi == 2);
 	bp = bptbl_enter(bptbl, 42, NO_BP, 3, 0);
-	TEST_ASSERT(bptbl_idx(bptbl, bp) == 2);
-	TEST_ASSERT(bptbl_sf(bptbl, 2) == 0);
+	TEST_ASSERT(bp == 2);
+	TEST_ASSERT(bptbl_sf(bptbl, bp) == 0);
 
 	fi = bptbl_push_frame(bptbl, NO_BP);
 	TEST_ASSERT(fi == 3);
 	bp = bptbl_enter(bptbl, 69, 1, 4, 0);
-	TEST_ASSERT(bptbl_idx(bptbl, bp) == 3);
-	TEST_ASSERT(bptbl_sf(bptbl, 3) == 2);
+	TEST_ASSERT(bp == 3);
+	TEST_ASSERT(bptbl_sf(bptbl, bp) == 2);
 	bp = bptbl_enter(bptbl, 69, 1, 5, 0);
-	TEST_ASSERT(bptbl_idx(bptbl, bp) == 4);
-	TEST_ASSERT(bptbl_sf(bptbl, 4) == 2);
+	TEST_ASSERT(bp == 4);
+	TEST_ASSERT(bptbl_sf(bptbl, bp) == 2);
 
 	bptbl_dump(bptbl);
 	/* This should cause frames 0 and 1 to get garbage collected,
@@ -94,40 +74,36 @@ main(int argc, char *argv[])
 	bptbl_dump(bptbl);
 
 	/* This one is retired. */
-	bp = bptbl_ent(bptbl, 0);
-	TEST_ASSERT(bptbl_idx(bptbl, bp) == 0);
+	bptbl_get_bp(bptbl, 0, &bpe);
 	TEST_ASSERT(bptbl_sf(bptbl, 0) == 0);
-	TEST_ASSERT(bp->wid == 42);
-	TEST_ASSERT(bp->score == 2);
+	TEST_ASSERT(bpe.wid == 42);
+	TEST_ASSERT(bpe.score == 2);
 
 	/* FIXME: bptbl_ent(bptbl, 1) should return NULL since it is
 	 * now an invalid index. */
 
 	/* This one is the first active one.  It has not been renumbered. */
-	bp = bptbl_ent(bptbl, 2);
-	TEST_ASSERT(bptbl_idx(bptbl, bp) == 2);
+	bptbl_get_bp(bptbl, 2, &bpe);
 	TEST_ASSERT(bptbl_sf(bptbl, 2) == 0);
-	TEST_ASSERT(bp->wid == 42);
-	TEST_ASSERT(bp->score == 3);
+	TEST_ASSERT(bpe.wid == 42);
+	TEST_ASSERT(bpe.score == 3);
 
-	bp = bptbl_ent(bptbl, 3);
-	TEST_ASSERT(bptbl_idx(bptbl, bp) == 3);
+	bptbl_get_bp(bptbl, 3, &bpe);
 	TEST_ASSERT(bptbl_sf(bptbl, 3) == 2);
-	TEST_ASSERT(bp->wid == 69);
-	TEST_ASSERT(bp->score == 4);
+	TEST_ASSERT(bpe.wid == 69);
+	TEST_ASSERT(bpe.score == 4);
 
-	bp = bptbl_ent(bptbl, 4);
-	TEST_ASSERT(bptbl_idx(bptbl, bp) == 4);
+	bptbl_get_bp(bptbl, 4, &bpe);
 	TEST_ASSERT(bptbl_sf(bptbl, 4) == 2);
-	TEST_ASSERT(bp->wid == 69);
-	TEST_ASSERT(bp->score == 5);
+	TEST_ASSERT(bpe.wid == 69);
+	TEST_ASSERT(bpe.score == 5);
 
 	/* Add some more bps and gc again. */
 	fi = bptbl_push_frame(bptbl, 2);
 	TEST_ASSERT(fi == 5);
 	bp = bptbl_enter(bptbl, 999, 3, 5, 0);
-	TEST_ASSERT(bptbl_idx(bptbl, bp) == 5);
-	TEST_ASSERT(bptbl_sf(bptbl, 5) == 4);
+	TEST_ASSERT(bp == 5);
+	TEST_ASSERT(bptbl_sf(bptbl, bp) == 4);
 
 	bptbl_dump(bptbl);
 	/* This should cause frames 2 through 4 to get garbage
@@ -152,24 +128,6 @@ main(int argc, char *argv[])
 	bptbl_finalize(bptbl);
 	bptbl_dump(bptbl);
 
-	/* Find the best exit. */
-	bp = bptbl_find_exit(bptbl, BAD_S3WID);
-	printf("%p %d start %d end %d score %d\n", bp,
-	       bp->wid, bptbl_sf(bptbl, bptbl_idx(bptbl, bp)),
-	       bp->frame, bp->score);
-	TEST_ASSERT(bp != NULL);
-	TEST_ASSERT(bp->wid == 69);
-	TEST_ASSERT(bp->score = 14);
-	TEST_ASSERT(bp->frame = fi);
-
-	/* Find the best exit with wid 42 (which does not exist) */
-	bp = bptbl_find_exit(bptbl, 42);
-	TEST_ASSERT(bp == NULL);
-	hyp = bptbl_hyp(bptbl, NULL, BAD_S3WID);
-	printf("HYP: %s\n", hyp);
-	string_trim(hyp, STRING_BOTH);
-	TEST_ASSERT(0 == strcmp(hyp, "achieved acts cochran achieved acts"));
-
 	/* FIXME: assert the correct values here. */
 	for (seg = bptbl_seg_iter(bptbl, NULL, BAD_S3WID); seg;
 	     seg = ps_seg_next(seg)) {
@@ -189,8 +147,6 @@ main(int argc, char *argv[])
 	dict2pid_free(d2p);
 	dict_free(dict);
 	bin_mdef_free(mdef);
-	sbthread_wait(thr);
-	sbthread_free(thr);
 
 	return 0;
 }
