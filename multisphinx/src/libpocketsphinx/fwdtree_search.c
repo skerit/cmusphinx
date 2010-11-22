@@ -1822,8 +1822,9 @@ fwdtree_search_finish(ps_search_t *base)
 
     /* Print out some statistics. */
     if (cf > 0) {
-        E_INFO("%8d words recognized (%d/fr)\n",
-               bptbl_end_idx(fts->bptbl), (bptbl_end_idx(fts->bptbl) + (cf >> 1)) / (cf + 1));
+        E_INFO("%8d words recognized in %d frames (%d/fr)\n",
+               bptbl_end_idx(fts->bptbl), cf + 1,
+               (bptbl_end_idx(fts->bptbl) + (cf >> 1)) / (cf + 1));
         E_INFO("%8d senones evaluated (%d/fr)\n", fts->st.n_senone_active_utt,
                (fts->st.n_senone_active_utt + (cf >> 1)) / (cf + 1));
         E_INFO("%8d channels searched (%d/fr), %d 1st, %d last\n",

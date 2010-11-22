@@ -50,6 +50,7 @@ arc_buffer_init(bptbl_t *input_bptbl)
     fab->arcs = garray_init(0, sizeof(arc_t));
     fab->sf_idx = garray_init(0, sizeof(int));
     fab->evt = sbevent_init(FALSE);
+    fab->mtx = sbmtx_init();
     if (input_bptbl)
         fab->input_bptbl = bptbl_retain(input_bptbl);
 
@@ -75,8 +76,21 @@ arc_buffer_free(arc_buffer_t *fab)
     garray_free(fab->arcs);
     bptbl_free(fab->input_bptbl);
     sbevent_free(fab->evt);
+    sbmtx_free(fab->mtx);
     ckd_free(fab);
     return 0;
+}
+
+void
+arc_buffer_lock(arc_buffer_t *fab)
+{
+    sbmtx_lock(fab->mtx);
+}
+
+void
+arc_buffer_unlock(arc_buffer_t *fab)
+{
+    sbmtx_unlock(fab->mtx);
 }
 
 void
@@ -149,6 +163,7 @@ arc_buffer_sweep(arc_buffer_t *fab, int release)
 {
     int next_sf;
 
+    arc_buffer_lock(fab);
     next_sf = bptbl_active_sf(fab->input_bptbl);
     if (arc_buffer_extend(fab, next_sf) > 0) {
         fab->next_idx = arc_buffer_add_bps(fab, fab->input_bptbl,
@@ -159,6 +174,7 @@ arc_buffer_sweep(arc_buffer_t *fab, int release)
         /* Do this after release since it may wake someone up. */
         arc_buffer_commit(fab);
     }
+    arc_buffer_unlock(fab);
     return fab->next_idx;
 }
 
@@ -167,6 +183,7 @@ arc_buffer_finalize(arc_buffer_t *fab, int release)
 {
     int next_sf;
 
+    arc_buffer_lock(fab);
     next_sf = bptbl_active_sf(fab->input_bptbl);
     if (arc_buffer_extend(fab, next_sf) > 0) {
         fab->next_idx = arc_buffer_add_bps(fab, fab->input_bptbl,
@@ -178,6 +195,7 @@ arc_buffer_finalize(arc_buffer_t *fab, int release)
         /* Do this after marking the arc buffer final to avoid race conditions. */
         arc_buffer_commit(fab);
     }
+    arc_buffer_unlock(fab);
     return 0;
 }
 
@@ -277,6 +295,7 @@ arc_buffer_release(arc_buffer_t *fab, int first_sf)
     if (first_sf == garray_base(fab->sf_idx))
         return 0;
 
+    arc_buffer_lock(fab);
     /* Get the new first arc. */
     next_first_arc = garray_ent(fab->sf_idx, int, first_sf);
     /* Shift back start frames and arcs. */
@@ -284,6 +303,7 @@ arc_buffer_release(arc_buffer_t *fab, int first_sf)
     garray_set_base(fab->sf_idx, first_sf);
     garray_shift_from(fab->arcs, next_first_arc);
     garray_set_base(fab->arcs, next_first_arc);
+    arc_buffer_unlock(fab);
 
     return 0;
 }

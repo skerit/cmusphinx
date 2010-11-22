@@ -996,9 +996,10 @@ fwdflat_search_decode(ps_search_t *base)
     acmod_t *acmod = ps_search_acmod(base);
     int frame_idx;
 
+    ptmr_start(&ffs->base.t);
     fwdflat_search_start(ps_search_base(ffs));
     frame_idx = 0;
-    while (TRUE) {
+    while (frame_idx >= 0) {
         int end_win;
 
         /* Stop timing and wait for the arc buffer. */
@@ -1008,6 +1009,7 @@ fwdflat_search_decode(ps_search_t *base)
 
         /* Figure out the last frame we need. */
         end_win = frame_idx + ffs->max_sf_win;
+        /* Decode as many frames as possible. */
         while (ffs->input_arcs->final
                || arc_buffer_iter(ffs->input_arcs,
                                   end_win - 1) != NULL) {
@@ -1043,23 +1045,26 @@ fwdflat_search_decode(ps_search_t *base)
                     break;
             }
             else {
-                int nfx;
                 /* Don't wait on the acoustic model as that could
-                 * cause deadlock. */
-                if ((nfx = acmod_wait(acmod, 0)) < 0)
+                 * cause deadlock.  If this times out it will return
+                 * -1, so there is no danger of accidentally searching
+                 * the same frame twice. */
+                if ((frame_idx = acmod_wait(acmod, 0)) < 0)
                     break;
-                if (nfx == frame_idx)
-                    continue;
-                frame_idx = nfx;
             }
             ptmr_start(&ffs->base.t);
+
+            /* Lock the arc buffer while we expand arcs. */
+            arc_buffer_lock(ffs->input_arcs);
             end_win = frame_idx + ffs->max_sf_win;
             start_win = frame_idx - ffs->max_sf_win;
             if (start_win < 0) start_win = 0;
-            /* We are going to use the window so truncate it. */
             if (end_win > ffs->input_arcs->next_sf)
                 end_win = ffs->input_arcs->next_sf;
             fwdflat_search_expand_arcs(ffs, start_win, end_win);
+            arc_buffer_unlock(ffs->input_arcs);
+
+            /* Now do our search. */
             if ((k = fwdflat_search_one_frame(ffs, frame_idx)) <= 0)
                 break;
             frame_idx += k;
@@ -1088,8 +1093,9 @@ fwdflat_search_finish(ps_search_t *base)
 
     /* Print out some statistics. */
     if (cf > 0) {
-        E_INFO("%8d words recognized (%d/fr)\n",
-               bptbl_end_idx(ffs->bptbl), (bptbl_end_idx(ffs->bptbl) + (cf >> 1)) / (cf + 1));
+        E_INFO("%8d words recognized in %d frames (%d/fr)\n",
+               bptbl_end_idx(ffs->bptbl), cf + 1,
+               (bptbl_end_idx(ffs->bptbl) + (cf >> 1)) / (cf + 1));
         E_INFO("%8d senones evaluated (%d/fr)\n", ffs->st.n_senone_active_utt,
                (ffs->st.n_senone_active_utt + (cf >> 1)) / (cf + 1));
         E_INFO("%8d channels searched (%d/fr)\n",

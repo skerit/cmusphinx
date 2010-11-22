@@ -58,6 +58,7 @@ typedef struct arc_s {
 
 typedef struct arc_buffer_s {
     int refcount;
+    sbmtx_t *mtx;
     sbevent_t *evt;
     garray_t *arcs;
     garray_t *sf_idx;
@@ -147,6 +148,21 @@ arc_t *arc_buffer_iter(arc_buffer_t *fab, int sf);
  * Move the arc pointer forward.
  */
 arc_t *arc_next(arc_buffer_t *fab, arc_t *ab);
+
+/**
+ * Lock the arc buffer.
+ *
+ * The pointers returned by arc_buffer_iter() and arc_next() can
+ * become invalid if the buffer is resized while they are held.  To
+ * avoid this, lock the arc buffer before iterating over it and unlock
+ * it afterwards.
+ */
+void arc_buffer_lock(arc_buffer_t *fab);
+
+/**
+ * Unlock the arc buffer.
+ */
+void arc_buffer_unlock(arc_buffer_t *fab);
 
 /**
  * Wait until new arcs are committed (or the buffer is finalized)
