@@ -47,6 +47,7 @@
 
 /* Local headers. */
 #include "bptbl.h"
+#include "arc_buffer.h"
 
 /**
  * Lexical tree node data type.
@@ -188,6 +189,12 @@ typedef struct fwdtree_search_s {
     int32 *rcss; /**< Temporary storage for right context scores. */
 
     /**
+     * Arc buffer used to forward retired arcs to a second pass (or
+     * lattice generation, or whatever).
+     */
+    arc_buffer_t *output_arcs;
+
+    /**
      * Search structure of HMM instances.
      *
      * The word triphone sequences (HMM instances) are transformed
@@ -322,9 +329,9 @@ ps_search_t *fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
                                  dict_t *dict, dict2pid_t *d2p);
 
 /**
- * Get the output backpointer table.
+ * Get the output arc buffer.
  */
-bptbl_t *fwdtree_search_bptbl(ps_search_t *base);
+arc_buffer_t *fwdtree_search_arc_buffer(ps_search_t *base);
 
 /**
  * Get the language model set.

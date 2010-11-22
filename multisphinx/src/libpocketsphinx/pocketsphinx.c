@@ -218,12 +218,12 @@ ps_init(cmd_ln_t *config)
         acmod2 = acmod_copy(ps->acmod);
         if (cmd_ln_str_r(config, "-fwdtreelm") != NULL) {
             ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-                                              fwdtree_search_bptbl(ps->fwdtree),
+                                              fwdtree_search_arc_buffer(ps->fwdtree),
                                               NULL);
         }
         else {
             ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-                                              fwdtree_search_bptbl(ps->fwdtree),
+                                              fwdtree_search_arc_buffer(ps->fwdtree),
                                               fwdtree_search_lmset(ps->fwdtree));
         }
         acmod_free(acmod2);

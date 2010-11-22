@@ -44,6 +44,7 @@
 
 /* SphinxBase headers. */
 #include <sphinxbase/garray.h>
+#include <sphinxbase/sbthread.h>
 
 /* Local headers. */
 #include "bptbl.h"
@@ -57,18 +58,21 @@ typedef struct arc_s {
 
 typedef struct arc_buffer_s {
     int refcount;
+    sbevent_t *evt;
     garray_t *arcs;
     garray_t *sf_idx;
+    bptbl_t *input_bptbl;
+    int final;
     int active_sf; /**< First frame of incoming arcs. */
-    int next_sf;   /**< First frame not containing arcs (last frame + 1)
-                      (FIXME: same as garray_next_ent(sf_idx)). */
+    int next_sf;   /**< First frame not containing arcs (last frame + 1). */
+    bpidx_t next_idx;  /**< Next bptbl index to scan from. */
     int active_arc; /**< First incoming arc. */
 } arc_buffer_t;
 
 /**
  * Create a new arc buffer.
  */
-arc_buffer_t *arc_buffer_init(void);
+arc_buffer_t *arc_buffer_init(bptbl_t *input_bptbl);
 
 /**
  * Retain a pointer to an arc buffer.
@@ -81,7 +85,7 @@ arc_buffer_t *arc_buffer_retain(arc_buffer_t *fab);
 int arc_buffer_free(arc_buffer_t *fab);
 
 /**
- * Clear the contents of an arc buffer.
+ * Clear the contents of an arc buffer and mark it non-final.
  */
 void arc_buffer_reset(arc_buffer_t *fab);
 
@@ -99,28 +103,35 @@ void arc_buffer_dump(arc_buffer_t *fab, dict_t *dict);
 int arc_buffer_extend(arc_buffer_t *fab, int next_sf);
 
 /**
- * Add arcs to the buffer from a bptbl.
+ * Sweep newly available arcs from the bptbl into the arc buffer and
+ * commit them.
  *
- * Only arcs starting in the newly extended frames will be
- * successfully added to the buffer.
- *
- * @param bptbl Backpointer table to take arcs from.
- * @param start First backpointer index to add to the buffer.
- * @param end One past the last backpointer index to add to the buffer.
+ * @param release If true, elease arcs from input_bptbl.
  * @return The first backpointer index between start and end which
  *         starts after the next active frame, i.e. the first
  *         backpointer index which must be preserved for the next pass
  *         of arc addition.
  */
-bpidx_t arc_buffer_add_bps(arc_buffer_t *fab,
-                           bptbl_t *bptbl, bpidx_t start,
-                           bpidx_t end);
+bpidx_t arc_buffer_sweep(arc_buffer_t *fab, int release);
+
+/**
+ * Sweep all remaining arcs from the bptbl into the arc buffer and
+ * mark it as final.
+
+ * @param release If true, elease arcs from input_bptbl.
+ * @return 0 or <0 for failure.
+ */
+int arc_buffer_finalize(arc_buffer_t *fab, int release);
+
 /**
  * Commit extended arcs to the arc buffer.
  *
  * This freezes in place the start frames added since the last call to
- * arc_buffer_extend().  No more arcs with these start frames
- * may be added to the arc buffer.
+ * arc_buffer_extend().  No more arcs with these start frames may be
+ * added to the arc buffer.
+ *
+ * It also signals the consumer thread.  IMPORTANT: It is assumed that
+ * there is only one consumer thread.
  */
 int arc_buffer_commit(arc_buffer_t *fab);
 
@@ -138,18 +149,22 @@ arc_t *arc_buffer_iter(arc_buffer_t *fab, int sf);
 arc_t *arc_next(arc_buffer_t *fab, arc_t *ab);
 
 /**
- * Wait until arcs for the given frame are committed.
+ * Wait until new arcs are committed (or the buffer is finalized)
  *
- * @return First arc in sf, or NULL if the utterance was terminated
- *         before sf was reached.  This can be iterated over as if it
- *         were obtained with arc_buffer_iter().
+ * IMPORTANT: It is currently assumed that only one thread will ever
+ * wait on an arc buffer.  If multiple threads wait on the same arc
+ * buffer, signals may be lost.
+ *
+ * @return Next start frame which will be available (i.e. currently
+ * available frame plus one).
  */
-arc_t *arc_buffer_wait(arc_buffer_t *fab, int sf);
+int arc_buffer_wait(arc_buffer_t *fab, int timeout);
 
 /**
  * Release old arcs from the arc buffer.
  *
- * This releases all arcs starting in frames before first_sf.
+ * This releases all arcs starting in frames before first_sf.  It
+ * should be called from the consumer thread only.
  */
 int arc_buffer_release(arc_buffer_t *fab, int first_sf);
 

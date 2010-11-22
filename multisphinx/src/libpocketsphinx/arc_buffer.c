@@ -41,7 +41,7 @@
 #include "arc_buffer.h"
 
 arc_buffer_t *
-arc_buffer_init(void)
+arc_buffer_init(bptbl_t *input_bptbl)
 {
     arc_buffer_t *fab;
 
@@ -49,6 +49,9 @@ arc_buffer_init(void)
     fab->refcount = 1;
     fab->arcs = garray_init(0, sizeof(arc_t));
     fab->sf_idx = garray_init(0, sizeof(int));
+    fab->evt = sbevent_init(FALSE);
+    if (input_bptbl)
+        fab->input_bptbl = bptbl_retain(input_bptbl);
 
     return fab;
 }
@@ -70,6 +73,8 @@ arc_buffer_free(arc_buffer_t *fab)
 
     garray_free(fab->sf_idx);
     garray_free(fab->arcs);
+    bptbl_free(fab->input_bptbl);
+    sbevent_free(fab->evt);
     ckd_free(fab);
     return 0;
 }
@@ -139,6 +144,43 @@ arc_buffer_add_bps(arc_buffer_t *fab,
     return next_idx;
 }
 
+bpidx_t
+arc_buffer_sweep(arc_buffer_t *fab, int release)
+{
+    int next_sf;
+
+    next_sf = bptbl_active_sf(fab->input_bptbl);
+    if (arc_buffer_extend(fab, next_sf) > 0) {
+        fab->next_idx = arc_buffer_add_bps(fab, fab->input_bptbl,
+                                           fab->next_idx,
+                                           bptbl_retired_idx(fab->input_bptbl));
+        if (release && fab->input_bptbl->oldest_bp > 0)
+            bptbl_release(fab->input_bptbl, fab->input_bptbl->oldest_bp - 1);
+        /* Do this after release since it may wake someone up. */
+        arc_buffer_commit(fab);
+    }
+    return fab->next_idx;
+}
+
+bpidx_t
+arc_buffer_finalize(arc_buffer_t *fab, int release)
+{
+    int next_sf;
+
+    next_sf = bptbl_active_sf(fab->input_bptbl);
+    if (arc_buffer_extend(fab, next_sf) > 0) {
+        fab->next_idx = arc_buffer_add_bps(fab, fab->input_bptbl,
+                                           fab->next_idx,
+                                           bptbl_retired_idx(fab->input_bptbl));
+        if (release && fab->input_bptbl->oldest_bp > 0)
+            bptbl_release(fab->input_bptbl, fab->input_bptbl->oldest_bp - 1);
+        fab->final = TRUE;
+        /* Do this after marking the arc buffer final to avoid race conditions. */
+        arc_buffer_commit(fab);
+    }
+    return 0;
+}
+
 int
 arc_buffer_commit(arc_buffer_t *fab)
 {
@@ -189,6 +231,9 @@ arc_buffer_commit(arc_buffer_t *fab)
     /* Update frame and arc pointers. */
     fab->active_sf += n_active_fr;
     fab->active_arc += n_arcs;
+
+    /* Signal consumer thread. */
+    sbevent_signal(fab->evt);
     return n_arcs;
 }
 
@@ -214,11 +259,15 @@ arc_next(arc_buffer_t *fab, arc_t *ab)
     return ab;
 }
 
-arc_t *
-arc_buffer_wait(arc_buffer_t *fab, int sf)
+int
+arc_buffer_wait(arc_buffer_t *fab, int timeout)
 {
-    /* FIXME: Implement this... */
-    return NULL;
+    int sec = timeout / 1000000000;
+    if (timeout == -1)
+        sec = -1;
+    if (sbevent_wait(fab->evt, sec, timeout) < 0)
+        return -1;
+    return fab->next_sf;
 }
 
 int
@@ -244,6 +293,8 @@ arc_buffer_reset(arc_buffer_t *fab)
 {
     fab->active_sf = fab->next_sf = 0;
     fab->active_arc = 0;
+    fab->next_idx = 0;
+    fab->final = FALSE;
     garray_reset(fab->arcs);
     garray_reset(fab->sf_idx);
 }

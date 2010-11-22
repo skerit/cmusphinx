@@ -135,9 +135,7 @@ typedef struct fwdflat_search_s {
     /**
      * Arc buffer, used for input words.
      */
-    bptbl_t *input_bptbl;
     arc_buffer_t *input_arcs;
-    bpidx_t next_idx;     /**< Next incoming bptbl idx to scan for arcs. */
     int max_sf_win;       /**< Window size for word entries. */
 
     bitvec_t *expand_words;
@@ -179,7 +177,7 @@ typedef struct fwdflat_search_s {
  */
 ps_search_t *fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
                                  dict_t *dict, dict2pid_t *d2p,
-                                 bptbl_t *input_bptbl,
+                                 arc_buffer_t *input_arcs,
                                  ngram_model_t *lmset);
 
 #endif /* __FWDFLAT_SEARCH_H__ */

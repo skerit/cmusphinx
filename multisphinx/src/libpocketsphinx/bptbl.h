@@ -91,9 +91,6 @@ typedef struct bptbl_s {
     garray_t *retired;   /**< Retired backpointer entries. */
     garray_t *ent;       /**< Active backpointer entries. */
     garray_t *rc;        /**< Right context scores for word exits. */
-    sbevent_t *evt;      /**< Event signalling newly retired entries. */
-    sbmtx_t *mtx;        /**< Mutex protecting retired entries (used
-                              to synchronize release operations) */
 
     int32 n_frame;       /**< Number of frames searched. */
     /**

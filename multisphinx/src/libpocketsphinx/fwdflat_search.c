@@ -130,14 +130,14 @@ fwdflat_search_update_widmap(fwdflat_search_t *ffs)
 ps_search_t *
 fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
                     dict_t *dict, dict2pid_t *d2p,
-                    bptbl_t *input_bptbl,
+                    arc_buffer_t *input_arcs,
                     ngram_model_t *lmset)
 {
     fwdflat_search_t *ffs;
     const char *path;
 
-    if (input_bptbl == NULL) {
-        E_ERROR("fwdflat search requires an input bptbl\n");
+    if (input_arcs == NULL) {
+        E_ERROR("fwdflat search requires an input arc buffer\n");
         return NULL;
     }
     ffs = ckd_calloc(1, sizeof(*ffs));
@@ -170,10 +170,8 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     /* FIXME: Make this a garray_t */
     ffs->expand_word_list = ckd_calloc(ps_search_n_words(ffs),
                                       sizeof(*ffs->expand_word_list));
-    ffs->input_arcs = arc_buffer_init();
-
+    ffs->input_arcs = input_arcs;
     ffs->bptbl = bptbl_init(d2p, cmd_ln_int32_r(config, "-latsize"), 256);
-    ffs->input_bptbl = bptbl_retain(input_bptbl);
 
     /* Allocate active word list array */
     ffs->active_word_list = ckd_calloc_2d(2, ps_search_n_words(ffs),
@@ -435,7 +433,6 @@ fwdflat_search_start(ps_search_t *base)
     bptbl_reset(ffs->bptbl);
     arc_buffer_reset(ffs->input_arcs);
     ffs->oldest_bp = -1;
-    ffs->next_idx = 0;
     for (i = 0; i < ps_search_n_words(ffs); i++)
         ffs->word_idx[i] = NO_BP;
 
@@ -997,89 +994,71 @@ fwdflat_search_decode(ps_search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
     acmod_t *acmod = ps_search_acmod(base);
-    int next_sf; /**< First frame pointed to by active bps. */
-    int frame_idx, final;
+    int frame_idx;
 
     fwdflat_search_start(ps_search_base(ffs));
     frame_idx = 0;
-    final = FALSE;
-    /* Wait for things to get retired from the input bptbl. */
-    while (!final) {
-        int k, timeout, end_win;
+    while (TRUE) {
+        int end_win;
 
-        /* FIXME: We should be waiting on the arc buffer here (this
-         * will be necessary for network transparency).
-         *
-         * Basically what needs to happen is all the code below
-         * (except the call to bptbl_wait of course) will go into the
-         * bptbl code and be done synchronously with retirement.
-         * Basically the same as what we were trying to do before with
-         * sorting the retired arcs.
-         *
-         * Then instead of polling the arc buffer and waiting on the
-         * acmod, we wait on the arc buffer and poll the acmod
-         * (waiting on both is extremely unwise for reasons that
-         * should be obvious but in case not - it's a recipe for
-         * deadlock)
-         *
-         * Otherwise not much has to change, we just wait on the arc
-         * buffer and consume all available frames in it.
-         */
-
-        /* next_sf is the first starting frame that is still
-         * referenced by active backpointers. */
-        if (bptbl_wait(ffs->input_bptbl, -1) < 0)
-            break;
-        ptmr_start(&ffs->base.t);
-        next_sf = bptbl_active_sf(ffs->input_bptbl);
-        /* Extend the arc buffer the appropriate number of frames. */
-        if (arc_buffer_extend(ffs->input_arcs, next_sf) > 0) {
-            E_DEBUG(2,("Extending arc buffer to frame %d\n", next_sf));
-            /* Add the next chunk of bps to the arc buffer. */
-            ffs->next_idx = arc_buffer_add_bps
-                (ffs->input_arcs, ffs->input_bptbl,
-                 ffs->next_idx, bptbl_retired_idx(ffs->input_bptbl));
-            arc_buffer_commit(ffs->input_arcs);
-            /* Release bps we won't need anymore (but we have to keep
-             * oldest_bp, otherwise we don't know the start frame of
-             * anything after it!). */
-            if (ffs->input_bptbl->oldest_bp > 0)
-                bptbl_release(ffs->input_bptbl, ffs->input_bptbl->oldest_bp - 1);
-        }
-        /* arc_buffer_dump(ffs->input_arcs, ps_search_dict(base)); */
-        /* We do something different depending on whether the input
-         * bptbl has been finalized or not.  If it has, we run out the
-         * clock and finish, otherwise we only search forward as far
-         * as the arc buffer goes. */
-        final = (bptbl_active_frame(ffs->input_bptbl)
-                 == bptbl_frame_idx(ffs->input_bptbl));
-        E_DEBUG(2, ("active %d idx %d final %d\n",
-                   bptbl_active_frame(ffs->input_bptbl),
-                   bptbl_frame_idx(ffs->input_bptbl), final));
-        /* Whether we are final or not determines whether we wait for
-         * the acmod or not. */
-        if (final)
-            timeout = -1; /* Run until end of utterance. */
-        else
-            timeout = 0;  /* Don't wait for results, we will block on
-                           * input_bptbl instead. */
+        /* Stop timing and wait for the arc buffer. */
         ptmr_stop(&ffs->base.t);
-        /* Decode while we have a big enough window. */
-        end_win = frame_idx + ffs->max_sf_win;
-        while (final
-               || arc_buffer_iter(ffs->input_arcs,
-                                          end_win - 1) != NULL) {
-            int start_win;
+        if (arc_buffer_wait(ffs->input_arcs, -1) < 0)
+            break; /* FIXME: Not sure what to do here. */
 
-            if ((frame_idx = acmod_wait(acmod, timeout)) < 0)
-                break;
+        /* Figure out the last frame we need. */
+        end_win = frame_idx + ffs->max_sf_win;
+        while (ffs->input_arcs->final
+               || arc_buffer_iter(ffs->input_arcs,
+                                  end_win - 1) != NULL) {
+            int start_win, k;
+            /* Note that if ffs->input_arcs->final changes state
+             * between the tests above and now, there will be no ill
+             * effect, since we will never block on acmod if we
+             * believe it to be false.  A full analysis by cases
+             * follows:
+             *
+             * 1) final = TRUE on exiting arc_buffer_wait(): it
+             *    will not be reset until the next utterance, we wait
+             *    on acmod below exclusively until utterance end.
+             *
+             * 2) final = FALSE on exiting arc_buffer_wait():
+             *
+             *    2a) final = FALSE in while() above: arc buffer
+             *        either does or does not contain new frames, we
+             *        do not block either way.  If arc buffer becomes
+             *        final in the meantime, arc_buffer_wait will not
+             *        block above (FIXME: This relies on there only
+             *        being one consumer thread)
+             *
+             *    2b) final = TRUE in while() above: it will not be
+             *        reset until the next utterance and we wait on
+             *        acmod below exclusively
+             */
+            if (ffs->input_arcs->final) {
+                /* We are no longer waiting on the arc buffer so it is
+                 * okay to wait as long as necessary for acmod
+                 * frames. */
+                if ((frame_idx = acmod_wait(acmod, -1)) < 0)
+                    break;
+            }
+            else {
+                int nfx;
+                /* Don't wait on the acoustic model as that could
+                 * cause deadlock. */
+                if ((nfx = acmod_wait(acmod, 0)) < 0)
+                    break;
+                if (nfx == frame_idx)
+                    continue;
+                frame_idx = nfx;
+            }
             ptmr_start(&ffs->base.t);
             end_win = frame_idx + ffs->max_sf_win;
             start_win = frame_idx - ffs->max_sf_win;
             if (start_win < 0) start_win = 0;
             /* We are going to use the window so truncate it. */
-            if (end_win > bptbl_frame_idx(ffs->input_bptbl))
-                end_win = bptbl_frame_idx(ffs->input_bptbl);
+            if (end_win > ffs->input_arcs->next_sf)
+                end_win = ffs->input_arcs->next_sf;
             fwdflat_search_expand_arcs(ffs, start_win, end_win);
             if ((k = fwdflat_search_one_frame(ffs, frame_idx)) <= 0)
                 break;

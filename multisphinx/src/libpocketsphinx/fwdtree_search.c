@@ -664,6 +664,10 @@ fwdtree_search_start(ps_search_t *base)
     bptbl_reset(fts->bptbl);
     fts->oldest_bp = NO_BP;
 
+    /* Reset output arc buffer (if any). */
+    if (fts->output_arcs)
+        arc_buffer_reset(fts->output_arcs);
+
     /* Reset word lattice. */
     for (i = 0; i < n_words; ++i)
         fts->word_idx[i] = NO_BP;
@@ -1726,6 +1730,10 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     fi = bptbl_push_frame(fts->bptbl, fts->oldest_bp);
     assert(fi == frame_idx);
 
+    /* Forward retired backpointers to the arc buffer. */
+    if (fts->output_arcs)
+        arc_buffer_sweep(fts->output_arcs, TRUE);
+
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
     if (fts->best_score == WORST_SCORE
@@ -1773,6 +1781,9 @@ fwdtree_search_finish(ps_search_t *base)
     cf = acmod_frame(ps_search_acmod(fts));
     /* Finalize the backpointer table. */
     bptbl_finalize(fts->bptbl);
+    /* Finalize the output arc buffer. */
+    if (fts->output_arcs)
+        arc_buffer_finalize(fts->output_arcs, TRUE);
 
     /* Deactivate channels lined up for the next frame */
     /* First, root channels of HMM tree */
@@ -1991,11 +2002,13 @@ fwdtree_search_seg_iter(ps_search_t *base, int32 *out_score)
     return bptbl_seg_iter(fts->bptbl, out_score, ps_search_finish_wid(fts));
 }
 
-bptbl_t *
-fwdtree_search_bptbl(ps_search_t *base)
+arc_buffer_t *
+fwdtree_search_arc_buffer(ps_search_t *base)
 {
     fwdtree_search_t *fts = (fwdtree_search_t *)base;
-    return fts->bptbl;
+    if (fts->output_arcs == NULL)
+        fts->output_arcs = arc_buffer_init(fts->bptbl);
+    return fts->output_arcs;
 }
 
 ngram_model_t *
