@@ -51,8 +51,10 @@ arc_buffer_init(bptbl_t *input_bptbl)
     fab->sf_idx = garray_init(0, sizeof(int));
     fab->evt = sbevent_init(FALSE);
     fab->mtx = sbmtx_init();
+    /* FIXME: In theory we should retain this, not sure why that does
+     * not work... */
     if (input_bptbl)
-        fab->input_bptbl = bptbl_retain(input_bptbl);
+        fab->input_bptbl = input_bptbl;
 
     return fab;
 }
@@ -74,7 +76,6 @@ arc_buffer_free(arc_buffer_t *fab)
 
     garray_free(fab->sf_idx);
     garray_free(fab->arcs);
-    bptbl_free(fab->input_bptbl);
     sbevent_free(fab->evt);
     sbmtx_free(fab->mtx);
     ckd_free(fab);
@@ -166,6 +167,8 @@ arc_buffer_sweep(arc_buffer_t *fab, int release)
     arc_buffer_lock(fab);
     next_sf = bptbl_active_sf(fab->input_bptbl);
     if (arc_buffer_extend(fab, next_sf) > 0) {
+        E_DEBUG(2,("Adding arcs to frame %d idx %d:%d\n",
+                   next_sf, fab->next_idx, bptbl_retired_idx(fab->input_bptbl)));
         fab->next_idx = arc_buffer_add_bps(fab, fab->input_bptbl,
                                            fab->next_idx,
                                            bptbl_retired_idx(fab->input_bptbl));

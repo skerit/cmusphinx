@@ -968,6 +968,8 @@ fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
 
     arc_start = arc_buffer_iter(ffs->input_arcs, sf);
     arc_end = arc_buffer_iter(ffs->input_arcs, ef);
+    E_DEBUG(2,("Expanding %ld arcs in %d:%d\n",
+               arc_end > arc_start ? arc_end - arc_start : 0, sf, ef));
     bitvec_clear_all(ffs->expand_words, ps_search_n_words(ffs));
     for (arc = arc_start; arc != arc_end;
          arc = arc_next(ffs->input_arcs, arc)) {
@@ -1014,6 +1016,9 @@ fwdflat_search_decode(ps_search_t *base)
                || arc_buffer_iter(ffs->input_arcs,
                                   end_win - 1) != NULL) {
             int start_win, k;
+            E_DEBUG(2,("final %d iter %p\n",
+                       ffs->input_arcs->final,
+                       arc_buffer_iter(ffs->input_arcs, end_win - 1)));
             /* Note that if ffs->input_arcs->final changes state
              * between the tests above and now, there will be no ill
              * effect, since we will never block on acmod if we
@@ -1059,8 +1064,6 @@ fwdflat_search_decode(ps_search_t *base)
             end_win = frame_idx + ffs->max_sf_win;
             start_win = frame_idx - ffs->max_sf_win;
             if (start_win < 0) start_win = 0;
-            if (end_win > ffs->input_arcs->next_sf)
-                end_win = ffs->input_arcs->next_sf;
             fwdflat_search_expand_arcs(ffs, start_win, end_win);
             arc_buffer_unlock(ffs->input_arcs);
 
