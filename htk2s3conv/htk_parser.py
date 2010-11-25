@@ -42,12 +42,12 @@ def p_macros(p):
 
 def p_macro(p):
 	'''
-	macro : MACRO_H STRING hmmdef
+	macro : MACRO_H NAME hmmdef
 		  | MACRO_O globaloptions
-		  | MACRO_S STRING state
-		  | MACRO_T STRING tmat
-		  | MACRO_U STRING mean
-		  | MACRO_V STRING var
+		  | MACRO_S NAME state
+		  | MACRO_T NAME tmat
+		  | MACRO_U NAME mean
+		  | MACRO_V NAME var
 	'''
 	if p[1] == 'h':
 		p[3].name = p[2]
@@ -85,7 +85,7 @@ def p_hmmdef_states(p):
 def p_hmmdef_state(p):
 	'''
 	hmmdef_state : state
-				 | MACRO_S STRING
+				 | MACRO_S NAME
 	'''
 	if len(p) == 2:
 		p[0] = p[1]
@@ -98,7 +98,7 @@ def p_hmmdef_state(p):
 def p_hmmdef_tmat(p):
 	'''
 	hmmdef_tmat : tmat
-				| MACRO_T STRING
+				| MACRO_T NAME
 	'''
 	if len(p) == 2:
 		p[0] = p[1]
@@ -141,7 +141,7 @@ def p_state_2(p):
 def p_state_mean(p):
 	'''
 	state_mean : mean
-			   | MACRO_U STRING
+			   | MACRO_U NAME
 	'''
 	if len(p) == 2:
 		p[0] = p[1]
@@ -154,7 +154,7 @@ def p_state_mean(p):
 def p_state_var(p):
 	'''
 	state_var : var
-			  | MACRO_V STRING
+			  | MACRO_V NAME
 	'''
 	if len(p) == 2:
 		p[0] = p[1]
@@ -214,7 +214,7 @@ def p_filler(p):
 def p_filler1(p):
 	'''
 	filler1 : INT
-			| STRING
+			| NAME
 			| FLOAT
 			| OTHER_TAG
 	'''

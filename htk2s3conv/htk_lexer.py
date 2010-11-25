@@ -37,7 +37,7 @@ macros = (
 tokens = tags + macros + (
 	'FLOAT',
 	'INT',
-	'STRING',
+	'NAME',
 	)
 
 # Lexer definitions.
@@ -69,8 +69,8 @@ def t_MACRO(t):
 		t.value = type
 	return t
 
-def t_STRING(t):
-	r'([a-zA-Z]\w*|"[\w@\-+:]+"|\'[\w@\-+:]+\')'
+def t_NAME(t):
+	r'(\w+|"[^ \t\n\r\f\v"]+"|\'[^ \t\n\r\f\v\']+\')'
 	if t.value[0] == '"' and t.value[-1] == '"' or t.value[0] == "'" and t.value[-1] == "'":
 		t.value = t.value[1:-1]
 	return t
