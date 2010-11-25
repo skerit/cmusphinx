@@ -93,7 +93,7 @@ def t_TAG(t):
 t_ignore = ' \t'
 
 def t_error(t):
-	raise HtkScanningError, ("Scanning error. Illegal character '%s' at line %s " % (lexdata[lexpos], t.lexer.lineno), lexdata[lexpos:])
+	raise HtkScanningError, ("Scanning error. Illegal character '%s' at line %s " % (t.lexer.lexdata[t.lexpos], t.lexer.lineno), t.lexer.lexdata[t.lexpos:])
 
 # Build the lexer.
 lex.lex()
