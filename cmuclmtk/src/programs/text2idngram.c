@@ -52,6 +52,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <errno.h>
+
 #include "../liblmest/toolkit.h"
 #include "../libs/general.h"
 #include "../libs/pc_general.h"
@@ -144,7 +146,7 @@ int main(int argc, char *argv[]) {
   if (!strcmp("",idngram_filename)) 
     quit(-1,"text2idngram : Error : Must specify idngram file.\n");
     
-  if (compress_flag) 
+  if (compress_flag)
     temp_file_ext = salloc(".Z");
   else {
     if (gzip_flag) 
@@ -160,7 +162,10 @@ int main(int argc, char *argv[]) {
 
   /* If the last charactor in the directory name isn't a / then add one. */
   strcpy (tempfiles_directory, "cmuclmtk-XXXXXX");
-  temp_file_root = mkdtemp(tempfiles_directory);
+  temp_file_root = mkdtemp(tempfiles_directory);  
+  if (temp_file_root == NULL) {
+     quit(-1, "Failed to create temporary folder: %s\n", strerror(errno));
+  }
   
   pc_message(verbosity,2,"Vocab                  : %s\n",vocab_filename);
   pc_message(verbosity,2,"Output idngram         : %s\n",idngram_filename);

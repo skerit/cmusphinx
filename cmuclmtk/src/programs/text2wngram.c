@@ -37,10 +37,11 @@
 #define DEFAULT_MAX_FILES 20
 
 #include <sys/types.h>
-/* #include <sys/utsname.h> */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
+
 #include "../liblmest/toolkit.h"
 #include "../libs/pc_general.h"
 #include "../libs/general.h"
@@ -383,6 +384,9 @@ int main (int argc, char **argv) {
 
   strcpy(temp_directory, "cmuclmtk-XXXXXX");
   temp_file_root = mkdtemp(temp_directory);
+  if (temp_file_root == NULL) {
+     quit(-1, "Failed to create temporary folder: %s\n", strerror(errno));
+  }
 
   pc_report_unk_args(&argc,argv,verbosity);
  

@@ -45,8 +45,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-/* #include <sys/utsname.h> */
 #include <sys/types.h>
+#include <errno.h>
 
 #include "idngram.h"
 
@@ -185,6 +185,9 @@ int main(int argc, char *argv[]) {
 
   strcpy(temp_directory, "cmuclmtk-XXXXXX");
   temp_file_root = mkdtemp(temp_directory);
+  if (temp_file_root == NULL) {
+     quit(-1, "Failed to create temporary folder: %s\n", strerror(errno));
+  }
 
   pc_report_unk_args(&argc,argv,verbosity);
 
