@@ -70,4 +70,23 @@ int compare_ngrams(const void *ngram1,
 
 int get_word( FILE *fp , char *word );
 
+void merge_tempfiles (int start_file, 
+		      int end_file, 
+		      char *temp_file_root,
+		      char *temp_file_ext,
+		      int max_files,
+		      FILE *outfile,
+		      int n,
+		      int verbosity);
+
+
+void merge_idngramfiles (int start_file, 
+		      int end_file, 
+		      char *temp_file_root,
+		      char *temp_file_ext,
+		      int max_files,
+		      FILE *outfile,
+		      flag write_ascii,
+		      int fof_size, int n);
+
 #endif

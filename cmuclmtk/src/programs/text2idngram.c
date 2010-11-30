@@ -59,7 +59,6 @@
 #include "../libs/pc_general.h"
 #include "../libs/ac_hash.h"
 #include "../libs/ac_lmfunc_impl.h"
-#include "../programs/idngram.h"
 
 void help_message()
 {
@@ -83,7 +82,8 @@ void help_message()
  ***************************/
 
 int main(int argc, char *argv[]) {
-
+    
+  int n;
   char *vocab_filename;
   char *idngram_filename;
   FILE *tempfile;
@@ -214,14 +214,15 @@ int main(int argc, char *argv[]) {
     quit(-1,"text2idngram did not appear to find any input!\n");
   }
   
-  merge_tempfiles(1,
+  merge_idngramfiles(1,
 		  number_of_tempfiles,
 		  temp_directory,
 		  temp_file_ext,
 		  max_files,
 		  outfile,
 		  write_ascii,
-		  fof_size); 
+		  fof_size,
+		  n); 
 
   fclose(outfile);
   rmdir(temp_directory);

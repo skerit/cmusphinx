@@ -48,8 +48,6 @@
 #include <sys/types.h>
 #include <errno.h>
 
-#include "idngram.h"
-
 #include "../liblmest/toolkit.h"
 #include "../libs/general.h"
 #include "../libs/pc_general.h"
@@ -61,6 +59,8 @@ typedef struct {
   wordid_t *word;
   int count;
 } ngram_rec;
+
+static int n;
 
 int compare_ngrams2(const void *ngram1,
 		    const void *ngram2) 
@@ -431,27 +431,29 @@ int main(int argc, char *argv[]) {
 
     pc_message(verbosity,2,"Merging temporary files...\n");
     
-    merge_tempfiles(1,
+    merge_idngramfiles(1,
 		    number_of_tempfiles,
 		    temp_directory,
 		    temp_file_ext,
 		    max_files,
 		    outfile,
 		    write_ascii,
-		    fof_size); 
+		    fof_size,
+		    n); 
   }else {
 
     /* Just write out the none OOV buffer to stdout */
     fclose(non_unk_fp);
 
-    merge_tempfiles(1,
+    merge_idngramfiles(1,
 		    1,
 		    temp_directory,
 		    temp_file_ext,
 		    max_files,
 		    outfile,
 		    write_ascii,
-		    fof_size); 
+		    fof_size,
+		    n); 
   }
 
   fclose(outfile);
