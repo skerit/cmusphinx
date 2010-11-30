@@ -99,7 +99,8 @@ class HtkConverter(object):
 		self.triphoneHmms = [hmm for hmm in self.hmms if self.triphone_reobj.match(hmm.name)]
 		
 		if len(self.monophoneHmms) + len(self.triphoneHmms) != len(self.hmms):
-			raise HtkConverterError('Not all HMMs could be classified as either monophone or triphone.')
+			missing = filter(lambda x: x not in self.monophoneHmms and x not in self.triphoneHmms, self.hmms)
+			raise HtkConverterError('Not all HMMs could be classified as either monophone or triphone: ' + " ".join([hmm.name for hmm in missing]))
 		
 		# Check if a monophone model exists for the base phone of every
 		# triphone model.
