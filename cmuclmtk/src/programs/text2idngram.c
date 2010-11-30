@@ -60,7 +60,6 @@
 #include "../libs/ac_hash.h"
 #include "../libs/ac_lmfunc_impl.h"
 #include "../programs/idngram.h"
-#include "../libs/win32compat.h"
 
 void help_message()
 {
@@ -89,7 +88,6 @@ int main(int argc, char *argv[]) {
   char *idngram_filename;
   FILE *tempfile;
   FILE *outfile;
-  char tempfiles_directory[1000];
   int verbosity;
 
   int buffer_size;
@@ -97,7 +95,8 @@ int main(int argc, char *argv[]) {
   int fof_size;
 
   wordid_t *buffer;
-  char *temp_file_root;
+
+  char temp_directory[1000];
   char *temp_file_ext;
 
   flag write_ascii;
@@ -161,9 +160,8 @@ int main(int argc, char *argv[]) {
   outfile = rr_fopen(idngram_filename,"wb");
 
   /* If the last charactor in the directory name isn't a / then add one. */
-  strcpy (tempfiles_directory, "cmuclmtk-XXXXXX");
-  temp_file_root = mkdtemp(tempfiles_directory);  
-  if (temp_file_root == NULL) {
+  strcpy (temp_directory, "cmuclmtk-XXXXXX");
+  if (mkdtemp(temp_directory) == NULL) {
      quit(-1, "Failed to create temporary folder: %s\n", strerror(errno));
   }
   
@@ -171,7 +169,7 @@ int main(int argc, char *argv[]) {
   pc_message(verbosity,2,"Output idngram         : %s\n",idngram_filename);
   pc_message(verbosity,2,"N-gram buffer size     : %d\n",buffer_size);
   pc_message(verbosity,2,"Hash table size        : %d\n",hash_size);
-  pc_message(verbosity,2,"Temp directory         : %s\n",tempfiles_directory);
+  pc_message(verbosity,2,"Temp directory         : %s\n",temp_directory);
   pc_message(verbosity,2,"Max open files         : %d\n",max_files);
   pc_message(verbosity,2,"FOF size               : %d\n",fof_size);  
   pc_message(verbosity,2,"n                      : %d\n",n);
@@ -204,7 +202,7 @@ int main(int argc, char *argv[]) {
 					       buffer,
 					       buffer_size, 
 					       n,
-					       temp_file_root,
+					       temp_directory,
 					       temp_file_ext,
 					       tempfile
 					       );
@@ -218,16 +216,17 @@ int main(int argc, char *argv[]) {
   
   merge_tempfiles(1,
 		  number_of_tempfiles,
-		  temp_file_root,
+		  temp_directory,
 		  temp_file_ext,
 		  max_files,
 		  outfile,
 		  write_ascii,
 		  fof_size); 
+
   fclose(outfile);
+  unlink(temp_directory);
   pc_message(verbosity,0,"text2idngram : Done.\n");
 
-  exit(0);
-  
+  return 0;
 }
 

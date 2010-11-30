@@ -56,7 +56,6 @@
 #include "../libs/ac_parsetext.h"
 #include "../libs/ac_lmfunc_impl.h"
 #include "../libs/ac_hash.h"
-#include "../libs/win32compat.h"
 
 typedef struct {
   wordid_t *word;
@@ -118,7 +117,6 @@ int main(int argc, char *argv[]) {
   int number_of_tempfiles;
   char *vocab_filename;
   char *idngram_filename;
-  char temp_directory[1000];
   char temp_word[MAX_WORD_LENGTH];
   char temp_word2[MAX_WORD_LENGTH];
   char temp_word3[MAX_WORD_LENGTH];
@@ -133,7 +131,8 @@ int main(int argc, char *argv[]) {
   int j;
   int fof_size;
   int size_of_rec;
-  char *temp_file_root;
+
+  char temp_directory[1000];
   char *temp_file_ext;
 
   /* Vocab hash table things */
@@ -184,8 +183,7 @@ int main(int argc, char *argv[]) {
   }
 
   strcpy(temp_directory, "cmuclmtk-XXXXXX");
-  temp_file_root = mkdtemp(temp_directory);
-  if (temp_file_root == NULL) {
+  if (mkdtemp(temp_directory) == NULL) {
      quit(-1, "Failed to create temporary folder: %s\n", strerror(errno));
   }
 
@@ -254,7 +252,7 @@ int main(int argc, char *argv[]) {
 
   /* Open the "non-OOV" tempfile */
 
-  sprintf(temp_word,"%s1%s",temp_file_root,temp_file_ext);
+  sprintf(temp_word, "%s/1%s", temp_directory, temp_file_ext);
   
   non_unk_fp = rr_fopen(temp_word,"w");
 
@@ -306,7 +304,7 @@ int main(int argc, char *argv[]) {
 
 	  number_of_tempfiles++;
 	  
-	  sprintf(temp_word,"%s%hu%s",temp_file_root,
+	  sprintf(temp_word,"%s/%hu%s", temp_directory,
 		  number_of_tempfiles,temp_file_ext);
 	  
 	  pc_message(verbosity,2,
@@ -384,7 +382,7 @@ int main(int argc, char *argv[]) {
     
     number_of_tempfiles++;
   
-    sprintf(temp_word,"%s%hu%s",temp_file_root,
+    sprintf(temp_word,"%s/%hu%s", temp_directory,
 	    number_of_tempfiles,temp_file_ext);
     
     pc_message(verbosity,2,"Writing sorted buffer to temporary file %s\n", temp_word);
@@ -435,7 +433,7 @@ int main(int argc, char *argv[]) {
     
     merge_tempfiles(1,
 		    number_of_tempfiles,
-		    temp_file_root,
+		    temp_directory,
 		    temp_file_ext,
 		    max_files,
 		    outfile,
@@ -448,7 +446,7 @@ int main(int argc, char *argv[]) {
 
     merge_tempfiles(1,
 		    1,
-		    temp_file_root,
+		    temp_directory,
 		    temp_file_ext,
 		    max_files,
 		    outfile,
@@ -456,9 +454,9 @@ int main(int argc, char *argv[]) {
 		    fof_size); 
   }
 
-  pc_message(verbosity,0,"wngram2idngram : Done.\n");
   fclose(outfile);
+  unlink(temp_directory);
+  pc_message(verbosity,0,"wngram2idngram : Done.\n");
 
-  exit(0);
-
+  return 0;
 }

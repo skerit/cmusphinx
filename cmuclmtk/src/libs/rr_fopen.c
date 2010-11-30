@@ -36,6 +36,9 @@
 
 
 #include <stdio.h>
+#include <string.h>
+#include <errno.h>
+
 #include "general.h"
 
 FILE *rr_fopen(char *filename, char *mode)
@@ -43,6 +46,6 @@ FILE *rr_fopen(char *filename, char *mode)
   FILE *fp;
   fp = fopen(filename,mode);
   if (!fp) 
-    quit(-1,"rr_fopen: problems opening %s for \"%s\".\n", filename, mode);
+    quit(-1,"Failed to open '%s' with mode '%s': %s\n", filename, mode, strerror(errno));
   return(fp);
 }

@@ -45,7 +45,6 @@
 #include "../liblmest/toolkit.h"
 #include "../libs/pc_general.h"
 #include "../libs/general.h"
-#include "../libs/win32compat.h"
 
 int cmp_strings(const void *string1,const void *string2) {
   
@@ -111,7 +110,7 @@ void merge_tempfiles (int start_file,
  	  if (new_end_file > end_file) new_end_file = end_file;
  	  
  	  sprintf(new_temp_filename,
- 		  "%s%hu%s",
+ 		  "%s/%hu%s",
  		  temp_file_root,
  		  end_file+i+1,
  		  temp_file_ext);
@@ -161,7 +160,7 @@ void merge_tempfiles (int start_file,
   
    /* Open all the temp files for reading */
    for (i=start_file;i<=end_file;i++) {
-     sprintf(temp_filename[i],"%s%hu%s",
+     sprintf(temp_filename[i],"%s/%hu%s",
 	     temp_file_root,i,temp_file_ext);
      temp_file[i] = rr_iopen(temp_filename[i]);
    }
@@ -308,7 +307,6 @@ int main (int argc, char **argv) {
   int max_files;
   int max_words;
   int max_chars;
-  char temp_directory[1000];
 
   int current_word;
   int current_char;
@@ -333,7 +331,7 @@ int main (int argc, char **argv) {
 
   int counter;
 
-  char *temp_file_root;
+  char temp_directory[1000];
   char *temp_file_ext;
 
   flag words_set;
@@ -383,8 +381,7 @@ int main (int argc, char **argv) {
   }
 
   strcpy(temp_directory, "cmuclmtk-XXXXXX");
-  temp_file_root = mkdtemp(temp_directory);
-  if (temp_file_root == NULL) {
+  if (mkdtemp(temp_directory) == NULL) {
      quit(-1, "Failed to create temporary folder: %s\n", strerror(errno));
   }
 
@@ -398,9 +395,6 @@ int main (int argc, char **argv) {
 
   /* If the last charactor in the directory name isn't a / then add one. */
   
-  if (temp_directory[strlen(temp_directory)-1] != '/') {
-    strcat(temp_directory,"/");
-  }
   pc_message(verbosity,2,"n = %d\n",n);
   pc_message(verbosity,2,"Number of words in buffer = %d\n",max_words);
   pc_message(verbosity,2,"Number of chars in buffer = %d\n",max_chars);
@@ -488,7 +482,7 @@ int main (int argc, char **argv) {
    
     /* Write out temporary file */
 
-    sprintf(current_temp_filename,"%s%hu%s",temp_file_root,current_file_number,temp_file_ext);
+    sprintf(current_temp_filename,"%s/%hu%s",temp_directory, current_file_number, temp_file_ext);
 
     pc_message(verbosity,2,"Writing out temporary file %s...\n",current_temp_filename);
         
@@ -569,15 +563,16 @@ int main (int argc, char **argv) {
 
   merge_tempfiles(1,
 		  current_file_number,
-		  temp_file_root,
+		  temp_directory,
 		  temp_file_ext,
 		  max_files,
 		  stdout,
 		  n,
 		  verbosity); 
+
+  unlink(temp_directory);
   pc_message(verbosity,0,"text2wngram : Done.\n");
-
-  exit(0);
-
+  
+  return 0;
 }
 
