@@ -455,7 +455,7 @@ int main(int argc, char *argv[]) {
   }
 
   fclose(outfile);
-  unlink(temp_directory);
+  rmdir(temp_directory);
   pc_message(verbosity,0,"wngram2idngram : Done.\n");
 
   return 0;

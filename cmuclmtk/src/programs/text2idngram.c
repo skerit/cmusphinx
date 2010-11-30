@@ -224,7 +224,7 @@ int main(int argc, char *argv[]) {
 		  fof_size); 
 
   fclose(outfile);
-  unlink(temp_directory);
+  rmdir(temp_directory);
   pc_message(verbosity,0,"text2idngram : Done.\n");
 
   return 0;
