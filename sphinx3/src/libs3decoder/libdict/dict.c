@@ -134,7 +134,7 @@ dict_ciphone_id(dict_t * d, const char *str)
             d->ciphone_str[id] = (char *) ckd_salloc(str);      /* Freed in dict_free() */
 
             if (hash_table_enter(d->pht, d->ciphone_str[id], (void *)(long)id) != (void *)(long)id)
-                E_FATAL("hash_table_enter(local-phonetable, %s) failed\n", str);
+                E_FATAL("Failed to add phone '%s' to the table\n", str);
 	    return id;
         }
 	else
@@ -207,7 +207,7 @@ dict_add_word(dict_t * d, char *word, s3cipid_t * p, int32 np)
         /* Truncated to a baseword string; find its ID */
         if (hash_table_lookup(d->ht, word, &val) < 0) {
             word[len] = '(';    /* Get back the original word */
-            E_FATAL("Missing base word for: %s\n", word);
+            E_FATAL("Missing base word for '%s'\n", word);
         }
         else
             word[len] = '(';    /* Get back the original word */
@@ -246,14 +246,14 @@ dict_read(FILE * fp, dict_t * d)
             continue;
 
         if ((nwd = str2words(line, wptr, maxwd)) < 0)
-            E_FATAL("str2words(%s) failed; Increase maxwd from %d\n", line,
+            E_FATAL("Too long pronuncation string '%s'. Increase maxwd from %d\n", line,
                     maxwd);
 
         if (nwd == 0)           /* Empty line */
             continue;
         /* wptr[0] is the word-string and wptr[1..nwd-1] the pronunciation sequence */
         if (nwd == 1) {
-            E_ERROR("Line %d: No pronunciation for word %s; ignored\n",
+            E_ERROR("Line %d: No pronunciation for word '%s'; ignored\n",
                     lineno, wptr[0]);
             continue;
         }
@@ -262,7 +262,7 @@ dict_read(FILE * fp, dict_t * d)
         for (i = 1; i < nwd; i++) {
             p[i - 1] = dict_ciphone_id(d, wptr[i]);
             if (NOT_S3CIPID(p[i - 1])) {
-                E_ERROR("Line %d: Bad ciphone: %s; word %s ignored\n",
+                E_ERROR("Line %d: Phone '%s' is mising in the acoustic model; word '%s' ignored\n",
                         lineno, wptr[i], wptr[0]);
                 break;
             }
@@ -272,7 +272,7 @@ dict_read(FILE * fp, dict_t * d)
             w = dict_add_word(d, wptr[0], p, nwd - 1);
             if (NOT_S3WID(w))
                 E_ERROR
-                    ("Line %d: dict_add_word (%s) failed (duplicate?); ignored\n",
+                    ("Line %d: Failed to add the word '%s' (duplicate?); ignored\n",
                      lineno, wptr[0]);
         }
     }
@@ -329,7 +329,7 @@ dict_init(mdef_t * mdef, const char *dictfile, const char *fillerfile,
      * all the required memory in one go.
      */
     if ((fp = fopen(dictfile, "r")) == NULL)
-        E_FATAL_SYSTEM("fopen(%s,r) failed\n", dictfile);
+        E_FATAL_SYSTEM("Failed to read the file '%s'\n", dictfile);
     n = 0;
     while (fgets(line, sizeof(line), fp) != NULL) {
         if (line[0] != '#')
@@ -340,7 +340,7 @@ dict_init(mdef_t * mdef, const char *dictfile, const char *fillerfile,
     fp2 = NULL;
     if (fillerfile) {
         if ((fp2 = fopen(fillerfile, "r")) == NULL)
-            E_FATAL_SYSTEM("fopen(%s,r) failed\n", fillerfile);
+            E_FATAL_SYSTEM("Failed to read the file '%s'\n", fillerfile);
 
         while (fgets(line, sizeof(line), fp2) != NULL) {
             if (line[0] != '#')
@@ -357,7 +357,7 @@ dict_init(mdef_t * mdef, const char *dictfile, const char *fillerfile,
     d->max_words =
         (n + DICT_INC_SZ < MAX_S3WID) ? n + DICT_INC_SZ : MAX_S3WID;
     if (n >= MAX_S3WID)
-        E_FATAL("#Words in dictionaries (%d) exceeds limit (%d)\n", n,
+        E_FATAL("Number of words in dictionaries (%d) exceeds limit (%d)\n", n,
                 MAX_S3WID);
 
     d->word = (dictword_t *) ckd_calloc(d->max_words, sizeof(dictword_t));      /* freed in dict_free() */
@@ -451,25 +451,25 @@ dict_init(mdef_t * mdef, const char *dictfile, const char *fillerfile,
     /* This imposes the constraints of <s> </s> <sil> for the dictionary and filler dictionary */
     /* HACK!! Make sure SILENCE_WORD, START_WORD and FINISH_WORD are in dictionary */
     if (NOT_S3WID(d->startwid)) {
-        E_ERROR("%s not in dictionary\n", S3_START_WORD);
+        E_ERROR("Word '%s' not in dictionary\n", S3_START_WORD);
         proper = 0;
     }
     if (NOT_S3WID(d->finishwid)) {
-        E_ERROR("%s not in dictionary\n", S3_FINISH_WORD);
+        E_ERROR("Word '%s' not in dictionary\n", S3_FINISH_WORD);
         proper = 0;
     }
     if (NOT_S3WID(d->silwid)) {
-        E_ERROR("%s not in dictionary\n", S3_SILENCE_WORD);
+        E_ERROR("Word '%s' not in dictionary\n", S3_SILENCE_WORD);
         proper = 0;
     }
 
     if (! proper)
-        E_FATAL("%s, %s, or %s missing from dictionary\n", S3_SILENCE_WORD,
+        E_FATAL("Words %s, %s, or %s missing from dictionary\n", S3_SILENCE_WORD,
                 S3_START_WORD, S3_FINISH_WORD);
 
     if ((d->filler_start > d->filler_end)
         || (!dict_filler_word(d, d->silwid)))
-        E_FATAL("%s must occur (only) in filler dictionary\n",
+        E_FATAL("Word %s must occur (only) in filler dictionary\n",
                 S3_SILENCE_WORD);
 
     /* No check that alternative pronunciations for filler words are in filler range!! */
