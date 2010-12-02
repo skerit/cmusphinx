@@ -795,6 +795,7 @@ ms_lattice_traverse_topo(ms_lattice_t *l,
     itor = ckd_calloc(1, sizeof(*itor));
     itor->l = l;
     itor->cur = ms_lattice_get_idx_node(l, ms_lattice_get_start(l));
+    itor->start = -1;
     if (end == NULL)
         itor->end = ms_lattice_get_idx_node(l, ms_lattice_get_end(l));
     else
@@ -833,6 +834,7 @@ ms_lattice_reverse_topo(ms_lattice_t *l,
         itor->start = ms_lattice_get_idx_node(l, ms_lattice_get_start(l));
     else
         itor->start = ms_lattice_get_idx_node(l, start);
+    itor->end = -1;
     itor->cur = ms_lattice_get_idx_node(l, ms_lattice_get_end(l));
     itor->q = gq_init(sizeof(int32));
 
@@ -857,7 +859,7 @@ ms_latnode_iter_next(ms_latnode_iter_t *itor)
 
     /* Figure out which direction we're going. */
     node = ms_lattice_get_node_idx(itor->l, itor->cur);
-    if (itor->start)
+    if (itor->start != -1)
         links = node->entries;
     else
         links = node->exits;
@@ -873,7 +875,7 @@ ms_latnode_iter_next(ms_latnode_iter_t *itor)
         ms_latnode_t *next;
         int32 nextid;
 
-        if (itor->start) {
+        if (itor->start != -1) {
             next = garray_ptr(itor->l->node_list,
                               ms_latnode_t,
                               link->src);
@@ -1095,16 +1097,16 @@ merge_exits(ms_lattice_t *l, ms_latnode_t *new,
             continue;
         yylink = ms_lattice_link(l, new, ydest, ylink->wid, ylink->ascr);
         yylink->lscr = lscr;
-        E_INFO("Created new link %s/%d -> %s/%d / %s\n",
-               newwid == -1 ? "&epsilon;" : dict_basestr(l->dict, newwid),
-               new->id.sf,
-               ydestwid == -1 ? "&epsilon;" : dict_basestr(l->dict, ydestwid),
-               ydest->id.sf, dict_basestr(l->dict, ylink->wid));
+        E_DEBUG(2,("Created new link %s/%d -> %s/%d / %s\n",
+                   newwid == -1 ? "&epsilon;" : dict_basestr(l->dict, newwid),
+                   new->id.sf,
+                   ydestwid == -1 ? "&epsilon;" : dict_basestr(l->dict, ydestwid),
+                   ydest->id.sf, dict_basestr(l->dict, ylink->wid)));
     }
-    E_INFO("%p %s/%d now has %d exits\n",
-           new, 
-           newwid == -1 ? "&epsilon;" : dict_wordstr(l->dict, newwid),
-           new->id.sf, ms_latnode_n_exits(new));
+    E_DEBUG(2,("%p %s/%d now has %d exits\n",
+               new, 
+               newwid == -1 ? "&epsilon;" : dict_wordstr(l->dict, newwid),
+               new->id.sf, ms_latnode_n_exits(new)));
 }
 
 /**
@@ -1145,9 +1147,9 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
     /* Keep track of which entry links are moved to newly created
      * nodes, and which are deleted as duplicates. */
     ms_lattice_get_lmstate_wids(l, backoff->id.lmstate, &node_latwid, NULL);
-    E_INFO("Considering node %s/%d\n",
-           node_latwid == -1 ? "&epsilon;" : dict_wordstr(l->dict, node_latwid),
-           backoff->id.sf);
+    E_DEBUG(2,("Considering node %s/%d\n",
+               node_latwid == -1 ? "&epsilon;" : dict_wordstr(l->dict, node_latwid),
+               backoff->id.sf));
     node_lmwid = map_lmwid(l->dict, lm, node_latwid);
     /* Expand this node with unique incoming N-gram histories. */
     for (j = 0; j < ms_latnode_n_entries(backoff); ++j) {
@@ -1228,11 +1230,11 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
                 new = ms_lattice_node_init(l, backoff->id.sf, lmstate);
                 ms_lattice_get_lmstate_wids(l, new->id.lmstate,
                                             &node_latwid, NULL);
-                E_INFO("Created node %d/%s/%d\n",
-                       new->id.lmstate,
-                       node_latwid == -1 ? "&epsilon;"
-                       : dict_wordstr(l->dict, node_latwid),
-                       new->id.sf);
+                E_DEBUG(2,("Created node %d/%s/%d\n",
+                           new->id.lmstate,
+                           node_latwid == -1 ? "&epsilon;"
+                           : dict_wordstr(l->dict, node_latwid),
+                           new->id.sf));
                 /* That could cause memory to move so update this pointer. */
                 backoff = ms_lattice_get_node_idx(l, backoffid);
                 merge_exits(l, new, backoff, lscr);
@@ -1256,11 +1258,11 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
             else {
                 ms_lattice_get_lmstate_wids(l, new->id.lmstate,
                                             &node_latwid, NULL);
-                E_INFO("Found node %d/%s/%d\n",
-                       new->id.lmstate,
-                       node_latwid == -1 ? "&epsilon;"
-                       : dict_wordstr(l->dict, node_latwid),
-                       new->id.sf);
+                E_DEBUG(2,("Found node %d/%s/%d\n",
+                           new->id.lmstate,
+                           node_latwid == -1 ? "&epsilon;"
+                           : dict_wordstr(l->dict, node_latwid),
+                           new->id.sf));
                 /* Copy outgoing arcs from original node to the
                  * newly discovered node. */
                 merge_exits(l, new, backoff, lscr);
@@ -1351,9 +1353,9 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
         /* If the backoff node has no more entries (and is not the
          * start node), then make it unreachable. */
         ms_lattice_get_lmstate_wids(l, backoff->id.lmstate, &node_latwid, NULL);
-        E_INFO("Dead node: %s/%d\n",
-               node_latwid == -1 ? "&epsilon;" : dict_wordstr(l->dict, node_latwid),
-               backoff->id.sf);
+        E_DEBUG(2,("Dead node: %s/%d\n",
+                   node_latwid == -1 ? "&epsilon;" : dict_wordstr(l->dict, node_latwid),
+                   backoff->id.sf));
         backoff->id.lmstate = 0xdeadbeef;
     }
 

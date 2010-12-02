@@ -70,6 +70,7 @@ main(int argc, char *argv[])
 
 	/* A -> D : A/-420 */
 	idx2 = ms_lattice_get_lmstate_idx(l, dict_wordid(dict, "A"), NULL, 0);
+	printf("idx()=%d\n", idx2);
 	ms_lattice_link(l, a, d, idx2, -999);
 
 	/* C -> </s> : C/-99 */
@@ -80,12 +81,19 @@ main(int argc, char *argv[])
 		    (l, 13,
 		     ms_lattice_get_lmstate_idx(l, dict_finishwid(dict), NULL, 0)));
 	idx2 = ms_lattice_get_lmstate_idx(l, dict_wordid(dict, "C"), NULL, 0);
+	printf("idx(C)=%d\n", idx2);
 	ms_lattice_link(l, c, e, idx2, -99);
 
 	/* D -> </s> : D/-69 */
 	idx2 = ms_lattice_get_lmstate_idx(l, dict_wordid(dict, "D"), NULL, 0);
+	printf("idx(D)=%d\n", idx2);
 	ms_lattice_link(l, d, e, idx2, -69);
 	ms_lattice_set_end(l, e);
+
+	/* Write it out to a dot file so we can verify it. */
+	TEST_ASSERT(fh = fopen("test_build_lattice.dot", "w"));
+	TEST_ASSERT(0 == ms_lattice_write_dot(l, fh));
+	TEST_ASSERT(0 == fclose(fh))
 
 	/* Test traversal functions. */
 	itor = ms_lattice_traverse_topo(l, NULL);
@@ -138,10 +146,6 @@ main(int argc, char *argv[])
 	TEST_ASSERT(ms_latnode_iter_get(itor) == b);
 	TEST_ASSERT(ms_latnode_iter_next(itor) == NULL);
 
-	/* Write it out to a dot file so we can verify it. */
-	TEST_ASSERT(fh = fopen("test_build_lattice.dot", "w"));
-	TEST_ASSERT(0 == ms_lattice_write_dot(l, fh));
-	TEST_ASSERT(0 == fclose(fh))
 	ms_lattice_free(l);
 	return 0;
 }

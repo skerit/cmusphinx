@@ -145,3 +145,4 @@ test/unit/test_lattice/test_htk_lattice.slf
 test/unit/test_lattice/test_htk_lattice.dot
 test/unit/test_lattice/test_build_lattice.dot
 test/unit/test_util/test_gq
+test/unit/test_lattice/expanded.dot
