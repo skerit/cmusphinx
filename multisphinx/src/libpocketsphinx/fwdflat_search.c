@@ -170,7 +170,7 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     /* FIXME: Make this a garray_t */
     ffs->expand_word_list = ckd_calloc(ps_search_n_words(ffs),
                                       sizeof(*ffs->expand_word_list));
-    ffs->input_arcs = input_arcs;
+    ffs->input_arcs = arc_buffer_retain(input_arcs);
     ffs->bptbl = bptbl_init("fwdflat", d2p, cmd_ln_int32_r(config, "-latsize"), 256);
     ps_search_output_arcs(ffs) = arc_buffer_init("fwdflat", ffs->bptbl, TRUE);
 
@@ -432,13 +432,12 @@ fwdflat_search_start(ps_search_t *base)
     int i;
 
     bptbl_reset(ffs->bptbl);
-    arc_buffer_reset(ffs->input_arcs);
     ffs->oldest_bp = -1;
     for (i = 0; i < ps_search_n_words(ffs); i++)
         ffs->word_idx[i] = NO_BP;
 
     /* Reset output arc buffer. */
-    arc_buffer_reset(ps_search_output_arcs(ffs));
+    arc_buffer_producer_start_utt(ps_search_output_arcs(ffs));
 
     /* Create word HMM for start, end, and silence words. */
     for (i = ps_search_start_wid(ffs);
@@ -922,7 +921,7 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
     assert(fi == frame_idx);
 
     /* Forward retired backpointers to the arc buffer. */
-    arc_buffer_sweep(ps_search_output_arcs(ffs), FALSE);
+    arc_buffer_producer_sweep(ps_search_output_arcs(ffs), FALSE);
 
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
@@ -950,7 +949,7 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
     fwdflat_create_active_word_list(ffs, frame_idx + 1);
 
     /* Release the frame just searched. */
-    acmod_release(acmod, frame_idx);
+    acmod_consumer_release(acmod, frame_idx);
 
     /* Return the number of frames processed. */
     return 1;
@@ -984,7 +983,7 @@ fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
                arc_end > arc_start ? arc_end - arc_start : 0, sf, ef));
     bitvec_clear_all(ffs->expand_words, ps_search_n_words(ffs));
     for (arc = arc_start; arc != arc_end;
-         arc = arc_next(ffs->input_arcs, arc)) {
+         arc = arc_buffer_iter_next(ffs->input_arcs, arc)) {
         /* Expand things in the vocabulary map, if we have one. */
         if (ffs->vmap) {
             int32 const *wids;
@@ -1011,26 +1010,33 @@ fwdflat_search_decode(ps_search_t *base)
     int frame_idx;
 
     ptmr_start(&ffs->base.t);
-    fwdflat_search_start(ps_search_base(ffs));
     frame_idx = 0;
-    while (frame_idx >= 0) {
+    /* Wait for the arc buffer. */
+    E_INFO("fwdflat: waiting for acmod start\n");
+    if (acmod_consumer_start_utt(base->acmod, -1) < 0) {
+        arc_buffer_producer_shutdown(base->output_arcs);
+        return -1;
+    }
+    E_INFO("fwdflat: waiting for arc buffer start\n");
+    if (arc_buffer_consumer_wait(ffs->input_arcs, -1) < 0)
+        goto canceled;
+    fwdflat_search_start(ps_search_base(ffs));
+    while (!acmod_eou(base->acmod)) {
         int end_win;
 
         /* Stop timing and wait for the arc buffer. */
         ptmr_stop(&ffs->base.t);
-        if (arc_buffer_wait(ffs->input_arcs, -1) < 0)
-            break;
+        if (arc_buffer_consumer_wait(ffs->input_arcs, -1) < 0)
+            goto canceled;
 
         /* Figure out the last frame we need. */
         end_win = frame_idx + ffs->max_sf_win;
         /* Decode as many frames as possible. */
-        while (ffs->input_arcs->final
+        while (arc_buffer_eou(ffs->input_arcs)
                || arc_buffer_iter(ffs->input_arcs,
                                   end_win - 1) != NULL) {
             int start_win, k;
-            E_DEBUG(2,("final %d iter %p\n",
-                       ffs->input_arcs->final,
-                       arc_buffer_iter(ffs->input_arcs, end_win - 1)));
+
             /* Note that if ffs->input_arcs->final changes state
              * between the tests above and now, there will be no ill
              * effect, since we will never block on acmod if we
@@ -1054,20 +1060,30 @@ fwdflat_search_decode(ps_search_t *base)
              *        reset until the next utterance and we wait on
              *        acmod below exclusively
              */
-            if (ffs->input_arcs->final) {
+            if (arc_buffer_eou(ffs->input_arcs)) {
+                int nfx;
                 /* We are no longer waiting on the arc buffer so it is
                  * okay to wait as long as necessary for acmod
                  * frames. */
-                if ((frame_idx = acmod_wait(acmod, -1)) < 0)
-                    break;
+                if ((nfx = acmod_consumer_wait(acmod, -1)) < 0) {
+                    if (acmod_eou(acmod))
+                        break;
+                    else
+                        goto canceled;
+                }
             }
             else {
+                int nfx;
                 /* Don't wait on the acoustic model as that could
                  * cause deadlock.  If this times out it will return
                  * -1, so there is no danger of accidentally searching
                  * the same frame twice. */
-                if ((frame_idx = acmod_wait(acmod, 0)) < 0)
-                    break;
+                if ((nfx = acmod_consumer_wait(acmod, 0)) < 0) {
+                    if (acmod_eou(acmod))
+                        break;
+                    else
+                        goto canceled;
+                }
             }
             ptmr_start(&ffs->base.t);
 
@@ -1083,14 +1099,19 @@ fwdflat_search_decode(ps_search_t *base)
             if ((k = fwdflat_search_one_frame(ffs, frame_idx)) <= 0)
                 break;
             frame_idx += k;
-            arc_buffer_release(ffs->input_arcs, start_win);
+            arc_buffer_consumer_release(ffs->input_arcs, start_win);
             ptmr_stop(&ffs->base.t);
         }
     }
+    arc_buffer_consumer_end_utt(ffs->input_arcs);
     ptmr_start(&ffs->base.t);
     fwdflat_search_finish(ps_search_base(ffs));
     ptmr_stop(&ffs->base.t);
     return frame_idx;
+
+canceled:
+    arc_buffer_producer_shutdown(base->output_arcs);
+    return -1;
 }
 
 static int
@@ -1106,8 +1127,12 @@ fwdflat_search_finish(ps_search_t *base)
     /* Finalize the backpointer table. */
     bptbl_finalize(ffs->bptbl);
 
-    /* Finalize the output arc buffer. */
-    arc_buffer_finalize(ps_search_output_arcs(ffs), FALSE);
+    /* Finalize the output arc buffer and wait for consumer. */
+    arc_buffer_producer_end_utt(ps_search_output_arcs(ffs), FALSE);
+
+    /* Finalize the input acmod (signals producer) */
+    acmod_consumer_end_utt(base->acmod);
+    base->total_frames += base->acmod->output_frame;
 
     /* Print out some statistics. */
     if (cf > 0) {
@@ -1123,12 +1148,16 @@ fwdflat_search_finish(ps_search_t *base)
         E_INFO("%8d word transitions (%d/fr)\n",
                ffs->st.n_fwdflat_word_transition,
                ffs->st.n_fwdflat_word_transition / (cf + 1));
+        E_INFO("time %f wall %.2f xRT\n",
+               base->t.t_elapsed,
+               base->t.t_elapsed / base->acmod->output_frame
+               * cmd_ln_int32_r(base->config, "-frate"));
+        E_INFO("utterance vocabulary had %d words\n",
+               garray_next_idx(ffs->word_list));
     }
-    E_INFO("Utterance vocabulary had %d words\n",
-           garray_next_idx(ffs->word_list));
+
     /* Reset the utterance vocabulary. */
     destroy_fwdflat_chan(ffs);
-    /* bptbl_dump(ffs->bptbl); */
 
     return 0;
 }

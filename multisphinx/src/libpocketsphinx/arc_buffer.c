@@ -42,6 +42,39 @@
 #include "bptbl.h"
 #include "arc_buffer.h"
 
+typedef enum arc_buffer_state_s {
+    ARC_BUFFER_INITIAL = 0,
+    ARC_BUFFER_RUNNING,
+    ARC_BUFFER_FINAL,
+    ARC_BUFFER_CANCELED
+} arc_buffer_state_e;
+
+struct arc_buffer_s {
+    int refcount;
+    char *name;
+    /* FIXME: Probably non-orthogonal set of synchronization primitives */
+    sbmtx_t *mtx;
+    sbsem_t *start, *release;
+    sbevent_t *evt;
+    garray_t *arcs;
+    garray_t *sf_idx;
+    garray_t *rc_deltas;
+    bptbl_t *input_bptbl;
+    int32 *tmp_rcscores;
+    int max_n_rc;
+    int state;
+    int scores;
+    int arc_size;
+    int active_sf; /**< First frame of incoming arcs. */
+    int next_sf;   /**< First frame not containing arcs (last frame + 1). */
+    bpidx_t next_idx;  /**< Next bptbl index to scan from. */
+    int active_arc; /**< First incoming arc. */
+};
+
+/* Internal functions for producers only. */
+static int arc_buffer_extend(arc_buffer_t *fab, int next_sf);
+static int arc_buffer_commit(arc_buffer_t *fab);
+
 arc_buffer_t *
 arc_buffer_init(char const *name, bptbl_t *input_bptbl, int keep_scores)
 {
@@ -51,6 +84,8 @@ arc_buffer_init(char const *name, bptbl_t *input_bptbl, int keep_scores)
     fab->refcount = 1;
     fab->name = ckd_salloc(name);
     fab->sf_idx = garray_init(0, sizeof(int));
+    fab->start = sbsem_init("arc_buffer:start",0);
+    fab->release = sbsem_init("arc_buffer:release",0);
     fab->evt = sbevent_init(FALSE);
     fab->mtx = sbmtx_init();
     fab->input_bptbl = bptbl_retain(input_bptbl);
@@ -90,6 +125,8 @@ arc_buffer_free(arc_buffer_t *fab)
     garray_free(fab->sf_idx);
     garray_free(fab->arcs);
     garray_free(fab->rc_deltas);
+    sbsem_free(fab->start);
+    sbsem_free(fab->release);
     sbevent_free(fab->evt);
     sbmtx_free(fab->mtx);
     bptbl_free(fab->input_bptbl);
@@ -126,6 +163,44 @@ arc_buffer_dump(arc_buffer_t *fab, dict_t *dict)
 }
 
 int
+arc_buffer_eou(arc_buffer_t *fab)
+{
+    return fab->state == ARC_BUFFER_FINAL;
+}
+
+int
+arc_buffer_consumer_start_utt(arc_buffer_t *fab, int timeout)
+{
+    int s = (timeout == -1) ? -1 : 0;
+    int rc;
+
+    if ((rc = sbsem_down(fab->start, s, timeout)) < 0)
+        return rc;
+    if (fab->state == ARC_BUFFER_CANCELED)
+        return -1;
+    return 0;
+}
+
+int
+arc_buffer_consumer_end_utt(arc_buffer_t *fab)
+{
+    return sbsem_up(fab->release);
+}
+
+void
+arc_buffer_producer_start_utt(arc_buffer_t *fab)
+{
+    fab->active_sf = fab->next_sf = 0;
+    fab->active_arc = 0;
+    fab->next_idx = 0;
+    fab->state = ARC_BUFFER_RUNNING;
+    garray_reset(fab->arcs);
+    garray_reset(fab->sf_idx);
+    /* If we ever have multiple consumers this will be sbsem_set() */
+    sbsem_up(fab->start);
+}
+
+static int
 arc_buffer_extend(arc_buffer_t *fab, int next_sf)
 {
     if (next_sf == fab->next_sf)
@@ -136,7 +211,7 @@ arc_buffer_extend(arc_buffer_t *fab, int next_sf)
     return next_sf - fab->active_sf;
 }
 
-bpidx_t
+static bpidx_t
 arc_buffer_add_bps(arc_buffer_t *fab,
                    bptbl_t *bptbl, bpidx_t start,
                    bpidx_t end)
@@ -199,7 +274,7 @@ arc_buffer_add_bps(arc_buffer_t *fab,
 }
 
 bpidx_t
-arc_buffer_sweep(arc_buffer_t *fab, int release)
+arc_buffer_producer_sweep(arc_buffer_t *fab, int release)
 {
     int next_sf;
 
@@ -221,9 +296,9 @@ arc_buffer_sweep(arc_buffer_t *fab, int release)
 }
 
 bpidx_t
-arc_buffer_finalize(arc_buffer_t *fab, int release)
+arc_buffer_producer_end_utt(arc_buffer_t *fab, int release)
 {
-    int next_sf;
+    int next_sf, i, rc, nth;
 
     arc_buffer_lock(fab);
     next_sf = bptbl_active_sf(fab->input_bptbl);
@@ -233,7 +308,8 @@ arc_buffer_finalize(arc_buffer_t *fab, int release)
                                            bptbl_retired_idx(fab->input_bptbl));
         if (release && fab->input_bptbl->oldest_bp > 0)
             bptbl_release(fab->input_bptbl, fab->input_bptbl->oldest_bp - 1);
-        fab->final = TRUE;
+        E_INFO("%s: marking arc buffer final\n", fab->name);
+        fab->state = ARC_BUFFER_FINAL;
         /* Do this after marking the arc buffer final to avoid race conditions. */
         arc_buffer_commit(fab);
     }
@@ -248,10 +324,17 @@ arc_buffer_finalize(arc_buffer_t *fab, int release)
         E_INFO("%s: allocated %d right context deltas (%d KiB)\n", fab->name,
                garray_alloc_size(fab->rc_deltas),
                garray_alloc_size(fab->rc_deltas) * sizeof(rcdelta_t) / 1024);
+
+    nth = fab->refcount - 1;
+    E_INFO("Waiting for %d consumers to finish\n", nth);
+    for (i = 0; i < nth; ++i)
+        if ((rc = sbsem_down(fab->release, -1, -1)) < 0)
+            return rc;
+
     return 0;
 }
 
-int
+static int
 arc_buffer_commit(arc_buffer_t *fab)
 {
     size_t n_arcs;
@@ -321,7 +404,7 @@ arc_buffer_iter(arc_buffer_t *fab, int sf)
 }
 
 arc_t *
-arc_next(arc_buffer_t *fab, arc_t *ab)
+arc_buffer_iter_next(arc_buffer_t *fab, arc_t *ab)
 {
     ab = (arc_t *)((char *)ab + fab->arc_size);
     if (ab >= garray_ptr(fab->arcs, arc_t, fab->active_arc))
@@ -330,18 +413,27 @@ arc_next(arc_buffer_t *fab, arc_t *ab)
 }
 
 int
-arc_buffer_wait(arc_buffer_t *fab, int timeout)
+arc_buffer_producer_shutdown(arc_buffer_t *fab)
+{
+    fab->state = ARC_BUFFER_CANCELED;
+    return sbsem_up(fab->start);
+}
+
+int
+arc_buffer_consumer_wait(arc_buffer_t *fab, int timeout)
 {
     int sec = timeout / 1000000000;
     if (timeout == -1)
         sec = -1;
     if (sbevent_wait(fab->evt, sec, timeout) < 0)
         return -1;
+    if (fab->state == ARC_BUFFER_CANCELED)
+        return -1;
     return fab->next_sf;
 }
 
 int
-arc_buffer_release(arc_buffer_t *fab, int first_sf)
+arc_buffer_consumer_release(arc_buffer_t *fab, int first_sf)
 {
     int next_first_arc;
     if (first_sf == garray_base(fab->sf_idx))
@@ -360,15 +452,4 @@ arc_buffer_release(arc_buffer_t *fab, int first_sf)
     arc_buffer_unlock(fab);
 
     return 0;
-}
-
-void
-arc_buffer_reset(arc_buffer_t *fab)
-{
-    fab->active_sf = fab->next_sf = 0;
-    fab->active_arc = 0;
-    fab->next_idx = 0;
-    fab->final = FALSE;
-    garray_reset(fab->arcs);
-    garray_reset(fab->sf_idx);
 }

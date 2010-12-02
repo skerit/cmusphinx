@@ -102,32 +102,13 @@ static int
 ps_search_main(sbthread_t *thr)
 {
     ps_search_t *search = sbthread_arg(thr);
+    int rv = 0;
 
-    while (1) {
+    while (rv >= 0) {
         ptmr_reset(&search->t);
-        /* Not everything has an acmod - in that case the waiting will
-         * be done internally to the decode function (FIXME: Not sure
-         * that actually is going to work) */
-        if (search->acmod) {
-            E_INFO("Waiting to start utt\n");
-            if (acmod_start_utt(search->acmod, -1) < 0) {
-                E_INFO("Interrupted\n");
-                break;
-            }
+        if ((rv = (*search->vt->decode)(search)) < 0) {
+            E_INFO("%s canceled\n", search->vt->name);
         }
-
-        (*search->vt->decode)(search);
-
-        if (search->acmod) {
-            acmod_end_utt(search->acmod);
-            search->total_frames += search->acmod->output_frame;
-            E_INFO("TOTAL %s %f wall %.2f xRT\n",
-                   search->vt->name,
-                   search->t.t_elapsed,
-                   search->t.t_elapsed / search->acmod->output_frame
-                   * cmd_ln_int32_r(search->config, "-frate"));
-        }
-
     }
     return 0;
 }
@@ -137,6 +118,12 @@ ps_search_run(ps_search_t *search)
 {
     search->thr = sbthread_start(NULL, ps_search_main, search);
     return search->thr;
+}
+
+int
+ps_search_wait(ps_search_t *search)
+{
+    return sbthread_wait(search->thr);
 }
 
 char const *

@@ -164,8 +164,8 @@ featbuf_init(cmd_ln_t *config)
     fb->sa = sync_array_init(0,
                              feat_dimension(fb->fcb)
                              * sizeof(mfcc_t));
-    fb->start = sbsem_init(0);
-    fb->release = sbsem_init(0);
+    fb->start = sbsem_init("featbuf:start",0);
+    fb->release = sbsem_init("featbuf:release",0);
     return fb;
 error_out:
     featbuf_free(fb);
@@ -227,7 +227,7 @@ featbuf_next(featbuf_t *fb)
 }
 
 int
-featbuf_wait_utt(featbuf_t *fb, int timeout)
+featbuf_consumer_start_utt(featbuf_t *fb, int timeout)
 {
     int s = (timeout == -1) ? -1 : 0;
     int rc;
@@ -242,12 +242,13 @@ featbuf_wait_utt(featbuf_t *fb, int timeout)
 }
 
 int
-featbuf_wait(featbuf_t *fb, int fidx, int timeout, mfcc_t *out_frame)
+featbuf_consumer_wait(featbuf_t *fb, int fidx, int timeout, mfcc_t *out_frame)
 {
     int s = timeout == -1 ? -1 : 0;
     int rc;
 
-    /* Wait for the frame in sync array. */
+    /* Wait for the frame in sync array.  <0 means timeout or end of
+     * utterance.*/
     if ((rc = sync_array_wait(fb->sa, fidx, s, timeout)) < 0)
         return rc;
 
@@ -258,7 +259,7 @@ featbuf_wait(featbuf_t *fb, int fidx, int timeout, mfcc_t *out_frame)
 }
 
 int
-featbuf_release(featbuf_t *fb, int sidx, int eidx)
+featbuf_consumer_release(featbuf_t *fb, int sidx, int eidx)
 {
     int rv;
 
@@ -270,11 +271,11 @@ featbuf_release(featbuf_t *fb, int sidx, int eidx)
 }
 
 int
-featbuf_release_all(featbuf_t *fb, int sidx)
+featbuf_consumer_end_utt(featbuf_t *fb, int sidx)
 {
     int rv;
 
-    if ((rv = featbuf_release(fb, sidx, -1)) < 0)
+    if ((rv = featbuf_consumer_release(fb, sidx, -1)) < 0)
         return rv;
     /* Record this thread as having finished. */
     sbsem_up(fb->release);
@@ -282,7 +283,7 @@ featbuf_release_all(featbuf_t *fb, int sidx)
 }
 
 int
-featbuf_start_utt(featbuf_t *fb)
+featbuf_producer_start_utt(featbuf_t *fb)
 {
     /* Reset the sync array. */
     sync_array_reset(fb->sa);
@@ -294,15 +295,17 @@ featbuf_start_utt(featbuf_t *fb)
     fe_start_utt(fb->fe);
 
     /* Signal any consumers. */
+    E_INFO("Setting canceled = FALSE\n");
     fb->canceled = FALSE;
     /* Allow refcount - 1 threads to start. */
+    E_INFO("setting fb->start to %d\n", fb->refcount - 1);
     sbsem_set(fb->start, fb->refcount - 1);
 
     return 0;
 }
 
 int
-featbuf_end_utt(featbuf_t *fb, int timeout)
+featbuf_producer_end_utt(featbuf_t *fb, int timeout)
 {
     int nfr, i, rc, nth;
     size_t last_idx;
@@ -315,7 +318,7 @@ featbuf_end_utt(featbuf_t *fb, int timeout)
         return -1;
 
     /* Drain remaining frames from fb->fcb.*/
-    if (featbuf_process_cep(fb, &fb->cepbuf, nfr, FALSE) < 0)
+    if (featbuf_producer_process_cep(fb, &fb->cepbuf, nfr, FALSE) < 0)
         return -1;
 
     /* Close out log files. */
@@ -341,9 +344,11 @@ featbuf_end_utt(featbuf_t *fb, int timeout)
     nth = fb->refcount - 1;
 
     /* Finalize. */
+    E_INFO("Finalizing frame array\n");
     last_idx = sync_array_finalize(fb->sa);
 
     /* Wait for everybody to be done. */
+    E_INFO("Waiting for %d consumers to finish\n", nth);
     for (i = 0; i < nth; ++i)
         if ((rc = sbsem_down(fb->release, -1, -1)) < 0)
             return rc;
@@ -352,11 +357,13 @@ featbuf_end_utt(featbuf_t *fb, int timeout)
 }
 
 int
-featbuf_shutdown(featbuf_t *fb)
+featbuf_producer_shutdown(featbuf_t *fb)
 {
     /* Wake up anybody waiting for an utterance, but first set a flag
      * that makes featbuf_wait_utt() fail. */
+    E_INFO("Setting canceled = TRUE\n");
     fb->canceled = TRUE;
+    E_INFO("setting fb->start to %d\n", fb->refcount - 1);
     sbsem_set(fb->start, fb->refcount - 1);
     return 0;
 }
@@ -376,7 +383,7 @@ featbuf_process_full_cep(featbuf_t *fb,
 
     /* Queue them. */
     for (i = 0; i < nfr; ++i) {
-        if (featbuf_process_feat(fb, featbuf[i]) < 0) {
+        if (featbuf_producer_process_feat(fb, featbuf[i]) < 0) {
             feat_array_free(featbuf);
             return -1;
         }
@@ -419,10 +426,10 @@ error_out:
 }
 
 int
-featbuf_process_raw(featbuf_t *fb,
-                    int16 const *raw,
-                    size_t n_samps,
-                    int full_utt)
+featbuf_producer_process_raw(featbuf_t *fb,
+                             int16 const *raw,
+                             size_t n_samps,
+                             int full_utt)
 {
     int16 const *rptr;
 
@@ -443,7 +450,7 @@ featbuf_process_raw(featbuf_t *fb,
                               &fb->cepbuf, &nframes) < 0)
             return -1;
         if (nframes)
-            featbuf_process_cep(fb, &fb->cepbuf, 1, FALSE);
+            featbuf_producer_process_cep(fb, &fb->cepbuf, 1, FALSE);
     }
 
     return 0;
@@ -478,10 +485,10 @@ featbuf_log_mfc(featbuf_t *fb,
 }
 
 int
-featbuf_process_cep(featbuf_t *fb,
-                    mfcc_t **cep,
-                    size_t n_frames,
-                    int full_utt)
+featbuf_producer_process_cep(featbuf_t *fb,
+                             mfcc_t **cep,
+                             size_t n_frames,
+                             int full_utt)
 {
     mfcc_t **cptr;
 
@@ -505,7 +512,7 @@ featbuf_process_cep(featbuf_t *fb,
         if (fb->beginutt)
             fb->beginutt = FALSE;
         for (i = 0; i < nfeat; ++i) {
-            if (featbuf_process_feat(fb, fb->featbuf[i]) < 0)
+            if (featbuf_producer_process_feat(fb, fb->featbuf[i]) < 0)
                 return -1;
         }
         cptr += ncep;
@@ -516,8 +523,8 @@ featbuf_process_cep(featbuf_t *fb,
 }
 
 int
-featbuf_process_feat(featbuf_t *fb,
-                     mfcc_t **feat)
+featbuf_producer_process_feat(featbuf_t *fb,
+                              mfcc_t **feat)
 {
     /* This one is easy, at least... */
     return sync_array_append(fb->sa, feat[0]);

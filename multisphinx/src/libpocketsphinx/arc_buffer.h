@@ -63,25 +63,7 @@ typedef struct sarc_s {
     bitvec_t rc_bits[0];
 } sarc_t;
 
-typedef struct arc_buffer_s {
-    int refcount;
-    char *name;
-    sbmtx_t *mtx;
-    sbevent_t *evt;
-    garray_t *arcs;
-    garray_t *sf_idx;
-    garray_t *rc_deltas;
-    bptbl_t *input_bptbl;
-    int32 *tmp_rcscores;
-    int max_n_rc;
-    int final;
-    int scores;
-    int arc_size;
-    int active_sf; /**< First frame of incoming arcs. */
-    int next_sf;   /**< First frame not containing arcs (last frame + 1). */
-    bpidx_t next_idx;  /**< Next bptbl index to scan from. */
-    int active_arc; /**< First incoming arc. */
-} arc_buffer_t;
+typedef struct arc_buffer_s arc_buffer_t;
 
 /**
  * Create a new arc buffer.
@@ -100,22 +82,14 @@ arc_buffer_t *arc_buffer_retain(arc_buffer_t *fab);
 int arc_buffer_free(arc_buffer_t *fab);
 
 /**
- * Clear the contents of an arc buffer and mark it non-final.
- */
-void arc_buffer_reset(arc_buffer_t *fab);
-
-/**
  * Dump contents of arc buffer for debugging.
  */
 void arc_buffer_dump(arc_buffer_t *fab, dict_t *dict);
 
 /**
- * Extend the arc buffer up to the given frame index.
- *
- * @param next_sf Index of last start frame to be added to the buffer,
- * plus one.
+ * Start processing for an utterance and wake up consumer.
  */
-int arc_buffer_extend(arc_buffer_t *fab, int next_sf);
+void arc_buffer_producer_start_utt(arc_buffer_t *fab);
 
 /**
  * Sweep newly available arcs from the bptbl into the arc buffer and
@@ -127,23 +101,26 @@ int arc_buffer_extend(arc_buffer_t *fab, int next_sf);
  *         backpointer index which must be preserved for the next pass
  *         of arc addition.
  */
-bpidx_t arc_buffer_sweep(arc_buffer_t *fab, int release);
+bpidx_t arc_buffer_producer_sweep(arc_buffer_t *fab, int release);
 
 /**
  * Sweep all remaining arcs from the bptbl into the arc buffer and
  * mark it as final.
-
- * @param release If true, elease arcs from input_bptbl.
+ *
+ * @param release If true, release arcs from input_bptbl.
  * @return 0 or <0 for failure.
  */
-int arc_buffer_finalize(arc_buffer_t *fab, int release);
+int arc_buffer_producer_end_utt(arc_buffer_t *fab, int release);
 
 /**
- * Mostly internal function for adding bps.
+ * Cancel the consumer thread.
  */
-bpidx_t arc_buffer_add_bps(arc_buffer_t *fab,
-                           bptbl_t *bptbl, bpidx_t start,
-                           bpidx_t end);
+int arc_buffer_producer_shutdown(arc_buffer_t *fab);
+
+/**
+ * Query end-of-utterance condition.
+ */
+int arc_buffer_eou(arc_buffer_t *fab);
 
 /**
  * Commit extended arcs to the arc buffer.
@@ -152,10 +129,10 @@ bpidx_t arc_buffer_add_bps(arc_buffer_t *fab,
  * arc_buffer_extend().  No more arcs with these start frames may be
  * added to the arc buffer.
  *
- * It also signals the consumer thread.  IMPORTANT: It is assumed that
- * there is only one consumer thread.
+ * It also signals the consumer thread.  IMPORTANT: It is assumed for
+ * now that there is only one consumer thread.
  */
-int arc_buffer_commit(arc_buffer_t *fab);
+int arc_buffer_producer_commit(arc_buffer_t *fab);
 
 /**
  * Iterate over arcs in the arc buffer starting at given frame.
@@ -168,7 +145,7 @@ arc_t *arc_buffer_iter(arc_buffer_t *fab, int sf);
 /**
  * Move the arc pointer forward.
  */
-arc_t *arc_next(arc_buffer_t *fab, arc_t *ab);
+arc_t *arc_buffer_iter_next(arc_buffer_t *fab, arc_t *ab);
 
 /**
  * Lock the arc buffer.
@@ -186,6 +163,11 @@ void arc_buffer_lock(arc_buffer_t *fab);
 void arc_buffer_unlock(arc_buffer_t *fab);
 
 /**
+ * Wait for a new utterance to start.
+ */
+int arc_buffer_consumer_start_utt(arc_buffer_t *fab, int timeout);
+
+/**
  * Wait until new arcs are committed (or the buffer is finalized)
  *
  * IMPORTANT: It is currently assumed that only one thread will ever
@@ -195,7 +177,7 @@ void arc_buffer_unlock(arc_buffer_t *fab);
  * @return Next start frame which will be available (i.e. currently
  * available frame plus one).
  */
-int arc_buffer_wait(arc_buffer_t *fab, int timeout);
+int arc_buffer_consumer_wait(arc_buffer_t *fab, int timeout);
 
 /**
  * Release old arcs from the arc buffer.
@@ -203,6 +185,14 @@ int arc_buffer_wait(arc_buffer_t *fab, int timeout);
  * This releases all arcs starting in frames before first_sf.  It
  * should be called from the consumer thread only.
  */
-int arc_buffer_release(arc_buffer_t *fab, int first_sf);
+int arc_buffer_consumer_release(arc_buffer_t *fab, int first_sf);
+
+/**
+ * Clean up after the end of an utterance.
+ *
+ * This function must be called at the end of utterance processing.
+ * It releases all remaining arcs being waited on.
+ */
+int arc_buffer_consumer_end_utt(arc_buffer_t *fab);
 
 #endif /* __ARC_BUFFER_H__ */

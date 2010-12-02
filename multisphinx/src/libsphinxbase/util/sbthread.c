@@ -47,6 +47,16 @@
 #include "sphinxbase/ckd_alloc.h"
 #include "sphinxbase/err.h"
 
+/**
+ * Semaphore debugging
+ */
+#define SBTHREAD_SEMDBG
+#if defined SBTHREAD_SEMDBG
+#define SEMDBG(x) E_INFO x
+#else
+#define SEMDBG(x)
+#endif
+
 /*
  * Platform-specific parts: threads, mutexes, and signals.
  */
@@ -79,7 +89,7 @@ sbthread_internal_main(LPVOID arg)
     int rv;
 
     logfp_index_alloc();
-    E_INFO("Started thread %p\n", th);
+    SEMDBG(("Started thread %p\n", th));
     rv = (*th->func)(th);
     return (DWORD)rv;
 }
@@ -245,6 +255,7 @@ struct sbmtx_s {
 struct sbsem_s {
     pthread_mutex_t mtx;
     pthread_cond_t cond;
+    char *name;
     int value;
 };
 
@@ -430,7 +441,7 @@ sbmtx_free(sbmtx_t *mtx)
 }
 
 sbsem_t *
-sbsem_init(int value)
+sbsem_init(char const *name, int value)
 {
     sbsem_t *sem;
     int rv;
@@ -447,6 +458,7 @@ sbsem_init(int value)
         ckd_free(sem);
         return NULL;
     }
+    sem->name = ckd_salloc(name);
     sem->value = value;
     return sem;
 }
@@ -456,6 +468,7 @@ sbsem_free(sbsem_t *sem)
 {
     pthread_mutex_destroy(&sem->mtx);
     pthread_cond_destroy(&sem->cond);
+    ckd_free(sem->name);
     ckd_free(sem);
 }
 
@@ -463,6 +476,7 @@ int
 sbsem_down(sbsem_t *sem, int sec, int nsec)
 {
     pthread_mutex_lock(&sem->mtx);
+    SEMDBG(("entering sbsem_down(%s),%d\n", sem->name, sem->value));
     while (sem->value <= 0) {
         int rv;
         rv = cond_timed_wait(&sem->cond, &sem->mtx, sec, nsec);
@@ -472,6 +486,7 @@ sbsem_down(sbsem_t *sem, int sec, int nsec)
         }
     }
     --sem->value;
+    SEMDBG(("exiting sbsem_down(%s),%d\n", sem->name, sem->value));
     pthread_mutex_unlock(&sem->mtx);
     return 0;
 }
@@ -484,6 +499,7 @@ sbsem_up(sbsem_t *sem)
     pthread_mutex_lock(&sem->mtx);
     if (++sem->value > 0)
         rv = pthread_cond_broadcast(&sem->cond);
+    SEMDBG(("sbsem_up(%s),%d\n", sem->name, sem->value));
     pthread_mutex_unlock(&sem->mtx);
     return rv;
 }
@@ -496,6 +512,7 @@ sbsem_set(sbsem_t *sem, int count)
     pthread_mutex_lock(&sem->mtx);
     sem->value = count;
     rv = pthread_cond_broadcast(&sem->cond);
+    SEMDBG(("sbsem_set(%s),%d\n", sem->name, count));
     pthread_mutex_unlock(&sem->mtx);
     return rv;
 }

@@ -66,14 +66,14 @@ main(int argc, char *argv[])
 		E_FATAL_SYSTEM("Failed to open "TESTDATADIR"/i960711p.raw");
 		return 1;
 	}
-	featbuf_start_utt(fb);
+	featbuf_producer_start_utt(fb);
 	while ((nsamp = fread(buf, 2, 2048, rawfh)) > 0)
-		featbuf_process_raw(fb, buf, nsamp, FALSE);
+		featbuf_producer_process_raw(fb, buf, nsamp, FALSE);
 	fclose(rawfh);
 
 	/* This will wait for search to complete. */
 	E_INFO("Waiting for end of utt\n");
-	featbuf_end_utt(fb, -1);
+	featbuf_producer_end_utt(fb, -1);
 	E_INFO("Done waiting\n");
 
 	/* Retrieve the hypothesis from the search thread. */
@@ -82,7 +82,9 @@ main(int argc, char *argv[])
 
 	/* Reap the search thread. */
 	E_INFO("Reaping the search threads\n");
-	featbuf_shutdown(fb);
+	featbuf_producer_shutdown(fb);
+	ps_search_wait(fwdtree);
+	ps_search_wait(fwdflat);
 	E_INFO("Done reaping\n");
 	ps_search_free(fwdflat);
 	acmod_free(acmod);

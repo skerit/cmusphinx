@@ -95,7 +95,7 @@ feat_t *featbuf_get_fcb(featbuf_t *fb);
  * @param timeout Maximum time to wait, in nanoseconds, or -1 to wait forever.
  * @return 0, or <0 on timeout or failure.
  */
-int featbuf_wait_utt(featbuf_t *fb, int timeout);
+int featbuf_consumer_start_utt(featbuf_t *fb, int timeout);
 
 /**
  * Get the index of the next frame to become available.
@@ -136,7 +136,7 @@ int featbuf_next(featbuf_t *fb);
  * @param out_frame Memory region to which the requested frame will be copied.
  * @return 0, or <0 for timeout or failure.
  */
-int featbuf_wait(featbuf_t *fb, int fidx, int timeout, mfcc_t *out_frame);
+int featbuf_consumer_wait(featbuf_t *fb, int fidx, int timeout, mfcc_t *out_frame);
 
 /**
  * Relinquish interest in a series of frames.
@@ -165,7 +165,7 @@ int featbuf_wait(featbuf_t *fb, int fidx, int timeout, mfcc_t *out_frame);
  *             release all remaining frames.
  * @return 0, or <0 on error (but that is unlikely)
  */
-int featbuf_release(featbuf_t *fb, int sidx, int eidx);
+int featbuf_consumer_release(featbuf_t *fb, int sidx, int eidx);
 
 /**
  * Relinquish interest in a series of frames.
@@ -178,7 +178,7 @@ int featbuf_release(featbuf_t *fb, int sidx, int eidx);
  * @param sidx Index of first frame to be released.
  * @return 0, or <0 on error (but that is unlikely)
  */
-int featbuf_release_all(featbuf_t *fb, int sidx);
+int featbuf_consumer_end_utt(featbuf_t *fb, int sidx);
 
 /**
  * Start processing for an utterance.
@@ -186,7 +186,7 @@ int featbuf_release_all(featbuf_t *fb, int sidx);
  * @param fb Feature buffer.
  * @return 0, or <0 on error (but that is unlikely)
  */
-int featbuf_start_utt(featbuf_t *fb);
+int featbuf_producer_start_utt(featbuf_t *fb);
 
 /**
  * End processing for an utterance.
@@ -198,7 +198,7 @@ int featbuf_start_utt(featbuf_t *fb);
  * @param timeout Maximum time to wait, in nanoseconds, or -1 to wait forever.
  * @return 0, or <0 on error (but that is unlikely)
  */
-int featbuf_end_utt(featbuf_t *fb, int timeout);
+int featbuf_producer_end_utt(featbuf_t *fb, int timeout);
 
 /**
  * Shut down utterance processing.
@@ -209,7 +209,7 @@ int featbuf_end_utt(featbuf_t *fb, int timeout);
  * @param fb Feature buffer.
  * @return 0, or <0 on error (in which case you have Problems)
  */
-int featbuf_shutdown(featbuf_t *fb);
+int featbuf_producer_shutdown(featbuf_t *fb);
 
 /**
  * Process audio data, adding to the buffer.
@@ -225,10 +225,10 @@ int featbuf_shutdown(featbuf_t *fb);
  * @param full_utt Does this represent an entire utterance?
  * @return 0, or <0 on error.
  */
-int featbuf_process_raw(featbuf_t *fb,
-			int16 const *raw,
-			size_t n_samps,
-			int full_utt);
+int featbuf_producer_process_raw(featbuf_t *fb,
+                                 int16 const *raw,
+                                 size_t n_samps,
+                                 int full_utt);
 
 /**
  * Process acoustic feature data, adding to the buffer.
@@ -244,10 +244,10 @@ int featbuf_process_raw(featbuf_t *fb,
  * @param full_utt Does this represent an entire utterance?
  * @return 0, or <0 on error.
  */
-int featbuf_process_cep(featbuf_t *fb,
-			mfcc_t **cep,
-			size_t n_frames,
-			int full_utt);
+int featbuf_producer_process_cep(featbuf_t *fb,
+                                 mfcc_t **cep,
+                                 size_t n_frames,
+                                 int full_utt);
 
 /**
  * Process one frame of dynamic feature data, adding to the buffer.
@@ -261,7 +261,7 @@ int featbuf_process_cep(featbuf_t *fb,
  * @param feat Input feature data.
  * @return 0, or <0 on error.
  */
-int featbuf_process_feat(featbuf_t *fb,
-			 mfcc_t **feat);
+int featbuf_producer_process_feat(featbuf_t *fb,
+                                  mfcc_t **feat);
 
 #endif /* __FEATBUF_H__ */

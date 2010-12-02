@@ -668,7 +668,7 @@ fwdtree_search_start(ps_search_t *base)
     fts->oldest_bp = NO_BP;
 
     /* Reset output arc buffer. */
-    arc_buffer_reset(ps_search_output_arcs(fts));
+    arc_buffer_producer_start_utt(ps_search_output_arcs(fts));
 
     /* Reset word lattice. */
     for (i = 0; i < n_words; ++i)
@@ -1713,8 +1713,13 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     int16 const *senscr;
     int fi, frame_idx;
 
-    if ((frame_idx = acmod_wait(acmod, -1)) == -1)
-        return 0;
+    if ((frame_idx = acmod_consumer_wait(acmod, -1)) < 0) {
+        /* Normal end of utterance... */
+        if (acmod_eou(acmod))
+            return 0;
+        /* Or something bad (i.e. cancellation)? */
+        return -1;
+    }
     E_DEBUG(2,("Searching frame %d\n", frame_idx));
     ptmr_start(&fts->base.t);
     /* Activate our HMMs for the current frame if need be. */
@@ -1733,7 +1738,7 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     assert(fi == frame_idx);
 
     /* Forward retired backpointers to the arc buffer. */
-    arc_buffer_sweep(ps_search_output_arcs(fts), TRUE);
+    arc_buffer_producer_sweep(ps_search_output_arcs(fts), TRUE);
 
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
@@ -1762,7 +1767,7 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     deactivate_channels(fts, frame_idx);
 
     /* Release the frame just searched. */
-    acmod_release(acmod, frame_idx);
+    acmod_consumer_release(acmod, frame_idx);
 
     /* Return the number of frames processed. */
     ptmr_stop(&fts->base.t);
@@ -1786,7 +1791,7 @@ fwdtree_search_finish(ps_search_t *base)
     bptbl_finalize(fts->bptbl);
 
     /* Finalize the output arc buffer. */
-    arc_buffer_finalize(ps_search_output_arcs(fts), TRUE);
+    arc_buffer_producer_end_utt(ps_search_output_arcs(fts), TRUE);
 
     /* Deactivate channels lined up for the next frame */
     /* First, root channels of HMM tree */
@@ -1815,6 +1820,10 @@ fwdtree_search_finish(ps_search_t *base)
     }
     ptmr_stop(&fts->base.t);
 
+    /* Finalize the input acmod (signals producer) */
+    acmod_consumer_end_utt(base->acmod);
+    base->total_frames += base->acmod->output_frame;
+
     /*
      * The previous search code did a postprocessing of the
      * backpointer table here, but we will postpone this until it is
@@ -1839,6 +1848,10 @@ fwdtree_search_finish(ps_search_t *base)
                fts->st.n_word_lastchan_eval / (cf + 1));
         E_INFO("%8d candidate words for entering last phone (%d/fr)\n",
                fts->st.n_lastphn_cand_utt, fts->st.n_lastphn_cand_utt / (cf + 1));
+        E_INFO("time %f wall %.2f xRT\n",
+               base->t.t_elapsed,
+               base->t.t_elapsed / base->acmod->output_frame
+               * cmd_ln_int32_r(base->config, "-frate"));
     }
     /* bptbl_dump(fts->bptbl); */
 
@@ -1851,16 +1864,25 @@ fwdtree_search_decode(ps_search_t *base)
     fwdtree_search_t *fts = (fwdtree_search_t *)base;
     int nfr, k;
 
+    if (acmod_consumer_start_utt(base->acmod, -1) < 0) {
+        arc_buffer_producer_shutdown(base->output_arcs);
+        return -1;
+    }
+
     nfr = 0;
     fwdtree_search_start(base);
     while ((k = fwdtree_search_one_frame(fts)) > 0) {
         nfr += k;
     }
-    fwdtree_search_finish(base);
-    /* This means we were canceled.  FIXME: Not clear whether calling
-     * fwdtree_search_finish() is necessary in this case. */
-    if (k < 0)
+
+    /* Abnormal termination (cancellation, error) */
+    if (k < 0) {
+        arc_buffer_producer_shutdown(base->output_arcs);
         return k;
+    }
+
+    /* This calls arc_buffer_finalize() for us. */
+    fwdtree_search_finish(base);
     return nfr;
 }
 

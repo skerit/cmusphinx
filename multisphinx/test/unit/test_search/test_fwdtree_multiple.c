@@ -75,6 +75,7 @@ main(int argc, char *argv[])
 				  TESTDATADIR "/bn.10000.arpa.DMP");
 	searches[3] = init_search(config, acmod, dict, d2p,
 				  TESTDATADIR "/bn.20000.arpa.DMP");
+	acmod_free(acmod);
 
 	/* Feed them a bunch of data. */
 	if ((rawfh = fopen(TESTDATADIR "/i960711p.raw", "rb")) == NULL) {
@@ -83,16 +84,16 @@ main(int argc, char *argv[])
 	}
 	ptmr_init(&total);
 	ptmr_start(&total);
-	featbuf_start_utt(fb);
+	featbuf_producer_start_utt(fb);
 	tsamp = 0;
 	while ((nsamp = fread(buf, 2, 2048, rawfh)) > 0) {
 		tsamp += nsamp;
-		featbuf_process_raw(fb, buf, nsamp, FALSE);
+		featbuf_producer_process_raw(fb, buf, nsamp, FALSE);
 	}
 	fclose(rawfh);
 	/* Wait for searches to complete. */
 	E_INFO("Waiting for end of utt\n");
-	featbuf_end_utt(fb, -1);
+	featbuf_producer_end_utt(fb, -1);
 	E_INFO("Done waiting\n");
 	ptmr_stop(&total);
 	E_INFO("%f secs of speech, %f elapsed, %f CPU\n",
@@ -113,10 +114,12 @@ main(int argc, char *argv[])
 
 	/* Reap the search threads. */
 	E_INFO("Reaping the search threads\n");
-	featbuf_shutdown(fb);
-	E_INFO("Done reaping\n");
-	for (i = 0; i < 4; ++i)
+	featbuf_producer_shutdown(fb);
+	for (i = 0; i < 4; ++i) {
+		ps_search_wait(searches[i]);
 		ps_search_free(searches[i]);
+	}
+	E_INFO("Done reaping\n");
 	featbuf_free(fb);
 
 	/* Clean everything else up. */

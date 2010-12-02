@@ -79,6 +79,9 @@ main(int argc, char *argv[])
 	/* Reap the search thread. */
 	E_INFO("Reaping the search threads\n");
 	featbuf_shutdown(fb);
+	ps_search_wait(fwdtree);
+	ps_search_wait(fwdflat);
+	ps_search_wait(latgen);
 	E_INFO("Done reaping\n");
 	ps_search_free(fwdflat);
 	acmod_free(acmod);

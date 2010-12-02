@@ -217,12 +217,13 @@ acmod_copy(acmod_t *other)
 }
 
 int
-acmod_wait(acmod_t *acmod, int timeout)
+acmod_consumer_wait(acmod_t *acmod, int timeout)
 {
     int rv;
 
-    if ((rv = featbuf_wait(acmod->fb, acmod->output_frame,
-                           timeout, acmod->feat_buf[0][0])) < 0) {
+    if ((rv = featbuf_consumer_wait(acmod->fb, acmod->output_frame,
+                                    timeout, acmod->feat_buf[0][0])) < 0) {
+        E_INFO("EOU in frame %d\n", acmod->output_frame);
         /* This means end of utterance. */
         acmod->eou = TRUE;
         return rv;
@@ -234,7 +235,8 @@ int16 const *
 acmod_score(acmod_t *acmod, int frame_idx)
 {
     /* Obtain the frame to be scored. */
-    if (featbuf_wait(acmod->fb, frame_idx, 0, acmod->feat_buf[0][0]) < 0)
+    if (featbuf_consumer_wait(acmod->fb, frame_idx,
+                              0, acmod->feat_buf[0][0]) < 0)
         return NULL;
 
     /* Build active senone list. */
@@ -253,9 +255,9 @@ acmod_score(acmod_t *acmod, int frame_idx)
 }
 
 int
-acmod_release(acmod_t *acmod, int frame_idx)
+acmod_consumer_release(acmod_t *acmod, int frame_idx)
 {
-    return featbuf_release(acmod->fb, frame_idx, frame_idx + 1);
+    return featbuf_consumer_release(acmod->fb, frame_idx, frame_idx + 1);
 }
 
 int
@@ -271,13 +273,14 @@ acmod_frame(acmod_t *acmod)
 }
 
 int
-acmod_start_utt(acmod_t *acmod, int timeout)
+acmod_consumer_start_utt(acmod_t *acmod, int timeout)
 {
     int rc;
 
-    if ((rc = featbuf_wait_utt(acmod->fb, timeout)) < 0) {
+    if ((rc = featbuf_consumer_start_utt(acmod->fb, timeout)) < 0) {
         return rc;
     }
+    
     E_INFO("Finished waiting for start of utt\n");
     acmod->output_frame = 0;
     acmod->eou = FALSE;
@@ -286,9 +289,9 @@ acmod_start_utt(acmod_t *acmod, int timeout)
 }
 
 int
-acmod_end_utt(acmod_t *acmod)
+acmod_consumer_end_utt(acmod_t *acmod)
 {
-    featbuf_release_all(acmod->fb, acmod->output_frame);
+    featbuf_consumer_end_utt(acmod->fb, acmod->output_frame);
     acmod->eou = TRUE;
 
     return 0;

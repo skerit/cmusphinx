@@ -245,15 +245,6 @@ bpidx_t bptbl_retired_idx(bptbl_t *bptbl);
 int bptbl_active_sf(bptbl_t *bptbl);
 
 /**
- * Wait for new backpointers to be retired.
- *
- * This function should be called from a consumer thread.
- *
- * Returns 0 on success or <0 on timeout or error.
- */
-int bptbl_wait(bptbl_t *bptbl, int timeout);
-
-/**
  * Get a backpointer entry.
  */
 int bptbl_get_bp(bptbl_t *bptbl, bpidx_t bpidx, bp_t *out_ent);

@@ -151,6 +151,7 @@ sync_array_wait(sync_array_t *sa, size_t idx, int sec, int nsec)
             return 0;
         }
         if (idx >= sa->final_next_idx) {
+            E_INFO("idx %d is final (%d)\n", idx, sa->final_next_idx);
             sbmtx_unlock(sa->mtx);
             return -1;
         }

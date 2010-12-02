@@ -52,13 +52,13 @@ main(int argc, char *argv[])
 	if ((nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
 				   ".mfc", 0, -1, feat, -1)) < 0)
 		E_FATAL("Failed to read mfc file\n");
-	featbuf_start_utt(fb);
+	featbuf_producer_start_utt(fb);
 	for (i = 0; i < nfr; ++i)
-		featbuf_process_feat(fb, feat[i]);
+		featbuf_producer_process_feat(fb, feat[i]);
 
 	/* This will wait for search to complete. */
 	printf("Waiting for end of utt\n");
-	featbuf_end_utt(fb, -1);
+	featbuf_producer_end_utt(fb, -1);
 	printf("Done waiting\n");
 
 	/* Retrieve the hypothesis from the search thread. */
@@ -67,7 +67,8 @@ main(int argc, char *argv[])
 
 	/* Reap the search thread. */
 	printf("Reaping the search thread\n");
-	featbuf_shutdown(fb);
+	featbuf_producer_shutdown(fb);
+	ps_search_wait(fwdtree);
 	printf("Done reaping\n");
 	ps_search_free(fwdtree);
 	acmod_free(acmod);

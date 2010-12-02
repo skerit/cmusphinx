@@ -185,7 +185,7 @@ int acmod_free(acmod_t *acmod);
  * @return Index of next available frame, or <0 on timeout or end of
  *         utterance.
  */
-int acmod_wait(acmod_t *acmod, int timeout);
+int acmod_consumer_wait(acmod_t *acmod, int timeout);
 
 /**
  * Get the number of frames processed so far.
@@ -220,7 +220,7 @@ int16 const *acmod_score(acmod_t *acmod, int frame_idx);
  * @param frame_idx Index of frame to release.
  * @return 0, or <0 on error.
  */
-int acmod_release(acmod_t *acmod, int frame_idx);
+int acmod_consumer_release(acmod_t *acmod, int frame_idx);
 
 /**
  * Report an end-of-utterance condition.
@@ -239,7 +239,7 @@ int acmod_eou(acmod_t *acmod);
  * @param acmod Acoustic model.
  * @return 0, or <0 on timeout or error
  */
-int acmod_start_utt(acmod_t *acmod, int timeout);
+int acmod_consumer_start_utt(acmod_t *acmod, int timeout);
 
 /**
  * Clean up after the end of an utterance.
@@ -250,7 +250,7 @@ int acmod_start_utt(acmod_t *acmod, int timeout);
  *
  * @return 0, or <0 on timeout or error
  */
-int acmod_end_utt(acmod_t *acmod);
+int acmod_consumer_end_utt(acmod_t *acmod);
 
 /**
  * Get best score and senone index for current frame.

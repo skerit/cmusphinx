@@ -228,12 +228,12 @@ ps_init(cmd_ln_t *config)
                                               fwdtree_search_lmset(ps->fwdtree));
         }
         acmod_free(acmod2);
-        ps->latgen = latgen_init(config, d2p, ps_search_output_arcs(ps->fwdflat));
+        /* ps->latgen = latgen_init(config, d2p, ps_search_output_arcs(ps->fwdflat)); */
     }
     else {
         /* FIXME: Eventually this will take a language model too so it
          * can do N-Gram expansion. */
-        ps->latgen = latgen_init(config, d2p, ps_search_output_arcs(ps->fwdtree));
+        /* ps->latgen = latgen_init(config, d2p, ps_search_output_arcs(ps->fwdtree)); */
     }
 
     /* Release pointers to things now owned by the searches. */
@@ -248,7 +248,6 @@ ps_init(cmd_ln_t *config)
     ps_search_run(ps->fwdtree);
     if (ps->fwdflat)
         ps_search_run(ps->fwdflat);
-    /* Don't do this quite yet since it does not work... */
     /* ps_search_run(ps->latgen); */
 
     return ps;
@@ -282,10 +281,21 @@ ps_free(ps_decoder_t *ps)
     if (--ps->refcount > 0)
         return ps->refcount;
 
-    featbuf_shutdown(ps->fb);
-    ps_search_free(ps->fwdtree);
-    ps_search_free(ps->fwdflat);
-    ps_search_free(ps->latgen);
+    featbuf_producer_shutdown(ps->fb);
+    if (ps->fwdtree) {
+        ps_search_wait(ps->fwdtree);
+        ps_search_free(ps->fwdtree);
+    }
+    if (ps->fwdflat) {
+        ps_search_wait(ps->fwdflat);
+        ps_search_free(ps->fwdflat);
+    }
+#if 0
+    if (ps->latgen) {
+        ps_search_wait(ps->latgen);
+        ps_search_free(ps->latgen);
+    }
+#endif
     featbuf_free(ps->fb);
     logmath_free(ps->lmath);
     cmd_ln_free_r(ps->config);
@@ -383,7 +393,7 @@ ps_start_utt(ps_decoder_t *ps, char const *uttid)
         ++ps->uttno;
     }
 
-    return featbuf_start_utt(ps->fb);
+    return featbuf_producer_start_utt(ps->fb);
 }
 
 int
@@ -393,8 +403,8 @@ ps_process_raw(ps_decoder_t *ps,
                int no_search,
                int full_utt)
 {
-    return featbuf_process_raw(ps->fb, data,
-                               n_samples, full_utt);
+    return featbuf_producer_process_raw(ps->fb, data,
+                                        n_samples, full_utt);
 }
 
 int
@@ -404,8 +414,8 @@ ps_process_cep(ps_decoder_t *ps,
                int no_search,
                int full_utt)
 {
-    return featbuf_process_cep(ps->fb, data,
-                               n_frames, full_utt);
+    return featbuf_producer_process_cep(ps->fb, data,
+                                        n_frames, full_utt);
 }
 
 int
@@ -414,9 +424,10 @@ ps_end_utt(ps_decoder_t *ps)
     int rv;
 
     /* Mark the end of the utterance and wait for it to complete. */
-    rv = featbuf_end_utt(ps->fb, -1);
+    rv = featbuf_producer_end_utt(ps->fb, -1);
     ptmr_stop(&ps->perf);
     ps->n_frame += ps->acmod->output_frame;
+
     /* Log a backtrace if requested. */
     if (cmd_ln_boolean_r(ps->config, "-backtrace")) {
         char const *uttid, *hyp;

@@ -181,7 +181,7 @@ int sbevent_wait(sbevent_t *evt, int sec, int nsec);
  * Initialize a semaphore.
  */
 SPHINXBASE_EXPORT
-sbsem_t *sbsem_init(int value);
+sbsem_t *sbsem_init(char const *name, int value);
 
 /**
  * Free a semaphore.
