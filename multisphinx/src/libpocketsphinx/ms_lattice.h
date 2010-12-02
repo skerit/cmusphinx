@@ -89,6 +89,8 @@ typedef struct ms_latlink_t {
 ms_lattice_t *ms_lattice_init(logmath_t *lmath, dict_t *dict);
 ms_lattice_t *ms_lattice_retain(ms_lattice_t *l);
 int ms_lattice_free(ms_lattice_t *l);
+dict_t *ms_lattice_dict(ms_lattice_t *l);
+logmath_t *ms_lattice_lmath(ms_lattice_t *l);
 
 /**
  * Create a language model state.

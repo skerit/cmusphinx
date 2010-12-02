@@ -159,6 +159,18 @@ ms_lattice_free(ms_lattice_t *l)
     return 0;
 }
 
+dict_t *
+ms_lattice_dict(ms_lattice_t *l)
+{
+    return l->dict;
+}
+
+logmath_t *
+ms_lattice_lmath(ms_lattice_t *l)
+{
+    return l->lmath;
+}
+
 int32
 ms_lattice_lmstate_init(ms_lattice_t *l, int32 w,
                         int32 const *hist, int32 n_hist)
@@ -644,7 +656,7 @@ print_dot_nodeid(ms_lattice_t *l, ms_latnode_t *node, FILE *fh)
 {
     if (node->id.lmstate != -1) {
         int32 wid;
-        wid = ms_lattice_get_lmstate_idx(l, node->id.lmstate, NULL, 0);
+        ms_lattice_get_lmstate_wids(l, node->id.lmstate, &wid, NULL);
         return fprintf(fh, " \"%s/%d\"",
                        dict_wordstr(l->dict, wid),
                        node->id.sf);
