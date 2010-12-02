@@ -43,20 +43,30 @@
 #include "arc_buffer.h"
 
 arc_buffer_t *
-arc_buffer_init(bptbl_t *input_bptbl)
+arc_buffer_init(char const *name, bptbl_t *input_bptbl, int keep_scores)
 {
     arc_buffer_t *fab;
 
     fab = ckd_calloc(1, sizeof(*fab));
     fab->refcount = 1;
-    fab->arcs = garray_init(0, sizeof(arc_t));
+    fab->name = ckd_salloc(name);
     fab->sf_idx = garray_init(0, sizeof(int));
     fab->evt = sbevent_init(FALSE);
     fab->mtx = sbmtx_init();
-    /* FIXME: In theory we should retain this, not sure why that does
-     * not work... */
-    if (input_bptbl)
-        fab->input_bptbl = input_bptbl;
+    fab->input_bptbl = bptbl_retain(input_bptbl);
+    fab->scores = keep_scores;
+    if (keep_scores) {
+        fab->rc_deltas = garray_init(0, sizeof(rcdelta_t));
+        fab->arcs = garray_init(0, sizeof(sarc_t));
+        fab->arc_size = sizeof(sarc_t)
+            + bitvec_size(bin_mdef_n_ciphone(input_bptbl->d2p->mdef));
+    }
+    else {
+        fab->arcs = garray_init(0, sizeof(arc_t));
+        fab->arc_size = sizeof(arc_t);
+    }
+    E_INFO("Initialized arc buffer '%s', each arc occupies %d bytes\n",
+           fab->name, fab->arc_size);
 
     return fab;
 }
@@ -78,8 +88,11 @@ arc_buffer_free(arc_buffer_t *fab)
 
     garray_free(fab->sf_idx);
     garray_free(fab->arcs);
+    garray_free(fab->rc_deltas);
     sbevent_free(fab->evt);
     sbmtx_free(fab->mtx);
+    bptbl_free(fab->input_bptbl);
+    ckd_free(fab->name);
     ckd_free(fab);
     return 0;
 }
@@ -102,7 +115,7 @@ arc_buffer_dump(arc_buffer_t *fab, dict_t *dict)
     size_t i, n_arcs;
 
     n_arcs = garray_next_idx(fab->arcs);
-    E_INFO("Arc buffer %p: %d arcs:\n", fab, n_arcs);
+    E_INFO("Arc buffer '%s': %d arcs:\n", fab->name, n_arcs);
     for (i = garray_base(fab->arcs); i < n_arcs; ++i) {
         arc_t *arc = garray_ptr(fab->arcs, arc_t, i);
         E_INFO_NOFN("%s sf %d ef %d\n",
@@ -137,11 +150,11 @@ arc_buffer_add_bps(arc_buffer_t *fab,
 
         /* Convert it to an arc. */
         bptbl_get_bp(bptbl, idx, &ent);
-        arc.wid = ent.wid;
         arc.src = bptbl_sf(bptbl, idx);
         arc.dest = ent.frame;
         /* If it's inside the appropriate frame span, add it. */
         if (arc.src >= fab->active_sf && arc.src < fab->next_sf) {
+            arc.wid = ent.wid;
             garray_append(fab->arcs, &arc);
             /* Increment the frame counter for its start frame. */
             ++garray_ent(fab->sf_idx, int, arc.src);
@@ -201,6 +214,16 @@ arc_buffer_finalize(arc_buffer_t *fab, int release)
         arc_buffer_commit(fab);
     }
     arc_buffer_unlock(fab);
+    E_INFO("%s: allocated %d arcs (%d KiB)\n", fab->name,
+           garray_alloc_size(fab->arcs),
+           garray_alloc_size(fab->arcs) * fab->arc_size / 1024);
+    E_INFO("%s: allocated %d start frame entries (%d KiB)\n", fab->name,
+           garray_alloc_size(fab->sf_idx),
+           garray_alloc_size(fab->sf_idx) * sizeof(int) / 1024);
+    if (fab->rc_deltas)
+        E_INFO("%s: allocated %d right context deltas (%d KiB)\n", fab->name,
+               garray_alloc_size(fab->rc_deltas),
+               garray_alloc_size(fab->rc_deltas) * sizeof(rcdelta_t) / 1024);
     return 0;
 }
 

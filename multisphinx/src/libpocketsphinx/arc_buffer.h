@@ -45,25 +45,36 @@
 /* SphinxBase headers. */
 #include <sphinxbase/garray.h>
 #include <sphinxbase/sbthread.h>
+#include <sphinxbase/bitvec.h>
 
 /* Local headers. */
 #include "bptbl.h"
 
 typedef struct arc_s {
     int32 wid;
-    int32 score;
     int32 src;
     int32 dest;
 } arc_t;
 
+typedef struct sarc_s {
+    arc_t arc;
+    int32 score;
+    int32 rc_idx;
+    bitvec_t rc_bits[0];
+} sarc_t;
+
 typedef struct arc_buffer_s {
     int refcount;
+    char *name;
     sbmtx_t *mtx;
     sbevent_t *evt;
     garray_t *arcs;
     garray_t *sf_idx;
+    garray_t *rc_deltas;
     bptbl_t *input_bptbl;
     int final;
+    int scores;
+    int arc_size;
     int active_sf; /**< First frame of incoming arcs. */
     int next_sf;   /**< First frame not containing arcs (last frame + 1). */
     bpidx_t next_idx;  /**< Next bptbl index to scan from. */
@@ -73,7 +84,8 @@ typedef struct arc_buffer_s {
 /**
  * Create a new arc buffer.
  */
-arc_buffer_t *arc_buffer_init(bptbl_t *input_bptbl);
+arc_buffer_t *arc_buffer_init(char const *name,
+                              bptbl_t *input_bptbl, int keep_scores);
 
 /**
  * Retain a pointer to an arc buffer.

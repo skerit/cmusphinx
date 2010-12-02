@@ -84,6 +84,7 @@ typedef struct bp_s {
  */
 typedef struct bptbl_s {
     int refcount;        /**< Reference count. */
+    char *name;          /**< Name for diagnostic output. */
     dict2pid_t *d2p;     /**< Tied state mapping. */
 
     ptmr_t t_bptbl;      /**< Performance timer. */
@@ -134,11 +135,21 @@ typedef struct bptbl_seg_s {
     int16 cur;      /**< Current position in bpidx. */
 } bptbl_seg_t;
 
+/**
+ * Data type used to score right-context score deltas.
+ */
+typedef uint8 rcdelta_t;
+
+/**
+ * Indicates no such right-context exists.
+ */
+#define NO_RC ((rcdelta_t)-1)
 
 /**
  * Create a new bptbl.
  */
-bptbl_t *bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc);
+bptbl_t *bptbl_init(char const *name,
+                    dict2pid_t *d2p, int n_alloc, int n_frame_alloc);
 
 /**
  * Retain a pointer to a bptbl.

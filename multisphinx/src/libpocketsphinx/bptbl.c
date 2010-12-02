@@ -67,9 +67,6 @@ static int bptbl_ef_count_internal(bptbl_t *bptbl, int frame_idx);
 #define E_DEBUGCONT(level,x) E_INFOCONT x
 #endif
 
-typedef uint8 rcdelta_t;
-#define NO_RC ((rcdelta_t)-1)
-
 static void
 bptbl_lock(bptbl_t *bptbl)
 {
@@ -83,12 +80,13 @@ bptbl_unlock(bptbl_t *bptbl)
 }
 
 bptbl_t *
-bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
+bptbl_init(char const *name, dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
 {
     bptbl_t *bptbl = ckd_calloc(1, sizeof(*bptbl));
 
+    bptbl->refcount = 1;
+    bptbl->name = ckd_salloc(name);
     bptbl->d2p = dict2pid_retain(d2p);
-
     bptbl->ent = garray_init(0, sizeof(bp_t));
     garray_reserve(bptbl->ent, n_alloc / 2);
     bptbl->retired = garray_init(0, sizeof(bp_t));
@@ -121,7 +119,7 @@ bptbl_free(bptbl_t *bptbl)
     if (--bptbl->refcount > 0)
         return bptbl->refcount;
 
-    E_INFO("TOTAL bptbl %f CPU %f wall\n",
+    E_INFO("%s: TOTAL bptbl %f CPU %f wall\n", bptbl->name,
            bptbl->t_bptbl.t_tot_cpu, bptbl->t_bptbl.t_tot_elapsed);
     dict2pid_free(bptbl->d2p);
     garray_free(bptbl->ent);
@@ -130,6 +128,7 @@ bptbl_free(bptbl_t *bptbl)
     garray_free(bptbl->ef_idx);
     garray_free(bptbl->rc);
     bitvec_free(bptbl->valid_fr);
+    ckd_free(bptbl->name);
     ckd_free(bptbl);
     return 0;
 }
@@ -154,8 +153,8 @@ bptbl_dump(bptbl_t *bptbl)
 {
     int i;
 
-    E_INFO("Retired backpointers (%d entries, oldest active %d):\n",
-           bptbl_retired_idx(bptbl), bptbl->oldest_bp);
+    E_INFO("%s: retired backpointers (%d entries, oldest active %d):\n",
+           bptbl->name, bptbl_retired_idx(bptbl), bptbl->oldest_bp);
     for (i = garray_base(bptbl->retired);
          i < bptbl_retired_idx(bptbl); ++i) {
         bp_t *ent = garray_ptr(bptbl->retired, bp_t, i);
@@ -169,8 +168,8 @@ bptbl_dump(bptbl_t *bptbl)
                     ent->real_wid,
                     ent->prev_real_wid);
     }
-    E_INFO("Active backpointers (%d entries starting at %d):\n",
-           bptbl_end_idx(bptbl) - bptbl_active_idx(bptbl),
+    E_INFO("%s: active backpointers (%d entries starting at %d):\n",
+           bptbl->name, bptbl_end_idx(bptbl) - bptbl_active_idx(bptbl),
            bptbl_active_idx(bptbl));
     for (i = bptbl_active_idx(bptbl); i < bptbl_end_idx(bptbl); ++i) {
         bp_t *ent = garray_ptr(bptbl->ent, bp_t, i);
@@ -665,18 +664,22 @@ bptbl_finalize(bptbl_t *bptbl)
                bptbl_end_idx(bptbl) - bptbl_active_idx(bptbl),
                bptbl->oldest_bp == NO_BP
                ? 0 : garray_ent(bptbl->retired, bp_t, bptbl->oldest_bp).frame + 1));
-    E_INFO("Allocated %d active and %d retired entries (%d + %d KiB)\n",
+    E_INFO("%s: allocated %d active and %d retired entries (%d + %d KiB)\n",
+           bptbl->name,
            garray_alloc_size(bptbl->ent),
            garray_alloc_size(bptbl->retired),
            garray_alloc_size(bptbl->ent) * sizeof(bp_t) / 1024,
            garray_alloc_size(bptbl->retired) * sizeof(bp_t) / 1024);
-    E_INFO("Allocated %d right context deltas (%d KiB)\n",
+    E_INFO("%s: allocated %d right context deltas (%d KiB)\n",
+           bptbl->name,
            garray_alloc_size(bptbl->rc),
            garray_alloc_size(bptbl->rc) * sizeof(rcdelta_t) / 1024);
-    E_INFO("Allocated %d permutation entries and %d end frame entries\n",
+    E_INFO("%s: allocated %d permutation entries and %d end frame entries\n",
+           bptbl->name,
            garray_alloc_size(bptbl->permute), garray_alloc_size(bptbl->ef_idx));
     bptbl_unlock(bptbl);
-    E_INFO("bptbl %f CPU %f wall %f xRT\n",
+    E_INFO("%s: bptbl %f CPU %f wall %f xRT\n",
+           bptbl->name,
            bptbl->t_bptbl.t_cpu, bptbl->t_bptbl.t_elapsed,
            bptbl->t_bptbl.t_elapsed / bptbl->n_frame * 100);
     return n_retired;

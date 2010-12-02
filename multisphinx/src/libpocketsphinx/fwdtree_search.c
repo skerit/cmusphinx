@@ -143,9 +143,10 @@ fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
     fts->last_ltrans = ckd_calloc(dict_size(dict),
                                   sizeof(*fts->last_ltrans));
 
-    fts->bptbl = bptbl_init(d2p, cmd_ln_int32_r(config, "-latsize"), 256);
+    fts->bptbl = bptbl_init("fwdtree",
+                            d2p, cmd_ln_int32_r(config, "-latsize"), 256);
     fts->word_idx = ckd_calloc(dict_size(dict), sizeof(*fts->word_idx));
-    ps_search_output_arcs(fts) = arc_buffer_init(fts->bptbl);
+    ps_search_output_arcs(fts) = arc_buffer_init("fwdtree", fts->bptbl, FALSE);
 
     /* Allocate active word list array */
     fts->active_word_list = ckd_calloc_2d(2, dict_size(dict),

@@ -29,7 +29,7 @@ main(int argc, char *argv[])
 
 	bptbl = bptbl_init(d2p, 10, 10);
 
-	arcs = arc_buffer_init(NULL);
+	arcs = arc_buffer_init("noscore", NULL, FALSE);
 
 	/* Enter a bunch of initial bps (like silence) */
 	fi = bptbl_push_frame(bptbl, NO_BP);
