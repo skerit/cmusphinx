@@ -67,6 +67,9 @@ static int bptbl_ef_count_internal(bptbl_t *bptbl, int frame_idx);
 #define E_DEBUGCONT(level,x) E_INFOCONT x
 #endif
 
+typedef uint8 rcdelta_t;
+#define NO_RC ((rcdelta_t)-1)
+
 static void
 bptbl_lock(bptbl_t *bptbl)
 {
@@ -96,7 +99,7 @@ bptbl_init(dict2pid_t *d2p, int n_alloc, int n_frame_alloc)
     garray_reserve(bptbl->ef_idx, n_frame_alloc);
     bptbl->n_frame_alloc = n_frame_alloc;
     bptbl->valid_fr = bitvec_alloc(bptbl->n_frame_alloc);
-    bptbl->rc = garray_init(0, sizeof(int32));
+    bptbl->rc = garray_init(0, sizeof(rcdelta_t));
     garray_reserve(bptbl->rc, n_alloc * 20); /* 20 = guess at average number of rcs/word */
     ptmr_init(&bptbl->t_bptbl);
 
@@ -667,9 +670,9 @@ bptbl_finalize(bptbl_t *bptbl)
            garray_alloc_size(bptbl->retired),
            garray_alloc_size(bptbl->ent) * sizeof(bp_t) / 1024,
            garray_alloc_size(bptbl->retired) * sizeof(bp_t) / 1024);
-    E_INFO("Allocated %d right context scores (%d KiB)\n",
+    E_INFO("Allocated %d right context deltas (%d KiB)\n",
            garray_alloc_size(bptbl->rc),
-           garray_alloc_size(bptbl->rc) * sizeof(int32) / 1024);
+           garray_alloc_size(bptbl->rc) * sizeof(rcdelta_t) / 1024);
     E_INFO("Allocated %d permutation entries and %d end frame entries\n",
            garray_alloc_size(bptbl->permute), garray_alloc_size(bptbl->ef_idx));
     bptbl_unlock(bptbl);
@@ -945,9 +948,15 @@ void
 bptbl_set_rcscore(bptbl_t *bptbl, bpidx_t bpidx, int rc, int32 score)
 {
     bp_t *bpe;
+    int delta;
 
     bpe = bptbl_ent_internal(bptbl, bpidx);
-    garray_ent(bptbl->rc, int32, bpe->s_idx + rc) = score;
+    assert(score <= bpe->score);
+    delta = bpe->score - score;
+    if (score == WORST_SCORE || delta >= NO_RC)
+        garray_ent(bptbl->rc, rcdelta_t, bpe->s_idx + rc) = NO_RC;
+    else
+        garray_ent(bptbl->rc, rcdelta_t, bpe->s_idx + rc) = delta;
 }
 
 int
@@ -963,10 +972,15 @@ bptbl_get_rcscores(bptbl_t *bptbl, bpidx_t bpidx, int32 *out_rcscores)
         return 1;
     }
     else {
+        int i;
         assert(bpe->s_idx < garray_next_idx(bptbl->rc));
-        memcpy(out_rcscores,
-               garray_ptr(bptbl->rc, int32, bpe->s_idx),
-               rcsize * sizeof(int32));
+        for (i = 0; i < rcsize; ++i) {
+            int delta = garray_ent(bptbl->rc, rcdelta_t, bpe->s_idx + i);
+            if (delta == NO_RC)
+                out_rcscores[i] = WORST_SCORE;
+            else
+                out_rcscores[i] = bpe->score - delta;
+        }
         return rcsize;
     }
 }
@@ -1024,10 +1038,11 @@ bptbl_fake_lmstate_internal(bptbl_t *bptbl, bp_t *ent)
 bpidx_t
 bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
 {
-    int32 i, rcsize, *bss;
+    int32 i, rcsize;
     size_t bss_head;
     bpidx_t bpidx;
     bp_t be, *bpe;
+    rcdelta_t *bss;
 
     /* This might happen if recognition fails. */
     if (bptbl_end_idx(bptbl) == NO_BP) {
@@ -1058,10 +1073,10 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
     if (rcsize) {
         bss_head = be.s_idx;
         garray_expand_to(bptbl->rc, bss_head + rcsize);
-        bss = garray_ptr(bptbl->rc, int32, bss_head);
+        bss = garray_ptr(bptbl->rc, rcdelta_t, bss_head);
         for (i = 0; i < rcsize; ++i)
-            *bss++ = WORST_SCORE;
-        garray_ent(bptbl->rc, int32, bss_head + rc) = score;
+            *bss++ = NO_RC;
+        garray_ent(bptbl->rc, rcdelta_t, bss_head + rc) = 0;
     }
     E_DEBUG(3,("Entered bp %d sf %d ef %d s_idx %d active_fr %d\n",
                bptbl_end_idx(bptbl) - 1,
@@ -1078,11 +1093,30 @@ bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp,
                    bpidx_t new_prev, int32 new_score)
 {
     bp_t *ent;
+    int rcsize;
 
     assert(bp != NO_BP);
     ent = bptbl_ent_internal(bptbl, bp);
+    assert(new_score > ent->score);
     ent->bp = new_prev;
     ent->score = new_score;
+    rcsize = bptbl_rcsize(bptbl, ent);
+    if (rcsize != 0) {
+        int i, delta;
+        assert(ent->s_idx < garray_next_idx(bptbl->rc));
+        delta = new_score - ent->score;
+        for (i = 0; i < rcsize; ++i) {
+            int cur_score = garray_ent(bptbl->rc, rcdelta_t, ent->s_idx + i);
+            if (cur_score == NO_RC)
+                continue;
+            else if (cur_score + delta >= NO_RC) {
+                E_WARN("rc score overflow in bp %d rc %d\n", bp, i);
+                garray_ent(bptbl->rc, rcdelta_t, ent->s_idx + i) = NO_RC;
+            }
+            else
+                garray_ent(bptbl->rc, rcdelta_t, ent->s_idx + i) += delta;
+        }
+    }
     bptbl_fake_lmstate_internal(bptbl, ent);
 }
 

@@ -1965,8 +1965,10 @@ fwdtree_search_save_bp(fwdtree_search_t *fts, int frame_idx,
         assert(bp >= bptbl_ef_idx(fts->bptbl, frame_idx));
         bptbl_get_bp(fts->bptbl, bp, &bpe);
         assert(frame_idx == bpe.frame);
-        /* Keep only the best scoring one (this is a potential source
-         * of search errors...) */
+        /* Keep only the best scoring language model state (it's
+         * actually rare that it will change because the only reason
+         * there would be more than one exit for a word is due to
+         * multiple right contexts for its end phone) */
         if (bpe.score WORSE_THAN score) {
             bptbl_fake_lmstate(fts->bptbl, bp, path, score);
         }

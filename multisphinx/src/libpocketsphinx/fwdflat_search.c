@@ -738,7 +738,6 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
             int32 lmscore, n_used;
 
             w = ffs->expand_word_list[i];
-
             /* Get the exit score we recorded in save_bwd_ptr(), or
              * something approximating it. */
             if (rssid)
