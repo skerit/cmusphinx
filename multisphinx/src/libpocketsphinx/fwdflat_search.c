@@ -1020,7 +1020,7 @@ fwdflat_search_decode(ps_search_t *base)
         /* Stop timing and wait for the arc buffer. */
         ptmr_stop(&ffs->base.t);
         if (arc_buffer_wait(ffs->input_arcs, -1) < 0)
-            break; /* FIXME: Not sure what to do here. */
+            break;
 
         /* Figure out the last frame we need. */
         end_win = frame_idx + ffs->max_sf_win;

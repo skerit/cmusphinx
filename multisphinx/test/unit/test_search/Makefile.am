@@ -4,7 +4,8 @@ check_PROGRAMS = \
 	test_fwdtree \
 	test_fwdtree_fwdflat \
 	test_fwdtree_fwdflat_homos \
-	test_fwdtree_multiple
+	test_fwdtree_multiple \
+	test_latgen
 
 TESTS = $(check_PROGRAMS)
 

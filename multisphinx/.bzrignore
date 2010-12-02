@@ -133,3 +133,4 @@ test/unit/test_search/test_fwdtree_multiple.hyp
 massif.txt.*
 src/programs/ngram_homos
 test/unit/test_vocab_map/test_vocab_mapper
+test/unit/test_search/test_latgen

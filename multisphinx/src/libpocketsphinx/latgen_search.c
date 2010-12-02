@@ -60,6 +60,7 @@ latgen_init(cmd_ln_t *config,
 	latgen = ckd_calloc(1, sizeof(*latgen));
 	ps_search_init(&latgen->base, &latgen_funcs,
 		       config, NULL, d2p->dict, d2p);
+        latgen->input_arcs = input_arcs;
 	
 	return &latgen->base;
 }
@@ -67,7 +68,17 @@ latgen_init(cmd_ln_t *config,
 static int
 latgen_search_decode(ps_search_t *base)
 {
-	return 0;
+    latgen_t *latgen = (latgen_t *)base;
+
+    E_INFO("Latgen search starting\n");
+    while (arc_buffer_wait(latgen->input_arcs, -1) >= 0) {
+        E_INFO("Got some arcs (end frame %d)\n",
+               latgen->input_arcs->next_sf);
+        if (latgen->input_arcs->final)
+            break;
+    }
+    E_INFO("Latgen search stopping\n");
+    return 0;
 }
 
 static int

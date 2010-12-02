@@ -51,6 +51,7 @@
 
 typedef struct latgen_s {
     ps_search_t base;
+    arc_buffer_t *input_arcs;
 } latgen_t;
 
 /**
