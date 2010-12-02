@@ -1,13 +1,17 @@
 %module pocketsphinx
-%include <arrays_java.i>
+#ifdef SWIGJAVA
+%include "pocketsphinx_java.i"
+#endif
+#ifdef SWIGPYTHON
+%include "pocketsphinx_python.i"
+#endif
+
 %{
 #include <pocketsphinx.h>
 #include <sphinxbase/err.h>
 
 /* Typedefs to make Java-esque class names. */
 typedef struct cmd_ln_s Config;
-typedef struct ps_seg_s SegmentIterator;
-typedef struct ps_lattice_s Lattice;
 typedef struct ps_decoder_s Decoder;
 typedef int bool;
 #define false 0
@@ -21,19 +25,6 @@ typedef struct hyp_s {
 } Hypothesis;
 %}
 
-/* Special typemap for arrays of audio. */
-%typemap(in) (short const *SDATA, size_t NSAMP) {
-	$1 = (short const *) JCALL2(GetShortArrayElements, jenv, $input, NULL);
-	$2 = JCALL1(GetArrayLength, jenv, $input);
-};
-%typemap(freearg) (short const *SDATA, size_t NSAMP) {
-	JCALL3(ReleaseShortArrayElements, jenv, $input, $1, 0);
-};
-%typemap(jni) (short const *SDATA, size_t NSAMP) "jshortArray"
-%typemap(jtype) (short const *SDATA, size_t NSAMP) "short[]"
-%typemap(jstype) (short const *SDATA, size_t NSAMP) "short[]"
-%typemap(javain) (short const *SDATA, size_t NSAMP) "$javainput"
-
 /* Auxiliary types for returning multiple values. */
 typedef struct hyp_s {
 	char *hypstr;
@@ -44,10 +35,6 @@ typedef struct hyp_s {
 /* These are opaque types but we have to "define" them for SWIG. */
 typedef struct cmd_ln_s {
 } Config;
-typedef struct ps_seg_s {
-} SegmentIterator;
-typedef struct ps_lattice_s {
-} Lattice;
 typedef struct ps_decoder_s {
 } Decoder;
 
@@ -108,18 +95,6 @@ typedef struct ps_decoder_s {
 	}
 	char const *getString(char const *key) {
 		return cmd_ln_str_r($self, key);
-	}
-};
-
-%extend SegmentIterator {
-	SegmentIterator() {
-		return NULL;
-	}
-}
-
-%extend Lattice {
-	Lattice() {
-		return NULL;
 	}
 };
 
