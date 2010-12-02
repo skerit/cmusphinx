@@ -38,6 +38,9 @@
 /**
  * \file garray.h
  * \brief Generic expandable arrays.
+ *
+ * FIXME: Using these as double-ended queues is suboptimal, but we do
+ * it anyway. See <gq.h> for an alternative.
  */
 
 #ifndef __SPHINXBASE_GARRAY_H__

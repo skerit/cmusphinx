@@ -36,31 +36,27 @@
  */
 
 /**
- * \file garray.h
+ * \file garray.c
  * \brief Generic expandable arrays.
  */
 
-#include "garray.h"
+#include "garray_internal.h"
 #include "err.h"
 #include "ckd_alloc.h"
 
 #include <string.h>
 #include <assert.h>
 
-struct garray_s {
-    int refcount;
-    void *ent;
-    size_t ent_size;
-    size_t n_ent, n_ent_alloc;
-    size_t base_idx;
-    garray_cmp_t cmp;
-    void *udata;
-};
-
 garray_t *
 garray_init(size_t n_ent, size_t ent_size)
 {
     garray_t *gar = ckd_calloc(1, sizeof(*gar));
+    return garray_setup(gar, n_ent, ent_size);
+}
+
+garray_t *
+garray_setup(garray_t *gar, size_t n_ent, size_t ent_size)
+{
     gar->refcount = 1;
     if (n_ent == 0)
         gar->n_ent_alloc = 8; /* Arbitrary number. */

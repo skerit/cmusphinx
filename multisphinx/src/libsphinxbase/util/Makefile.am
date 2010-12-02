@@ -13,6 +13,7 @@ libsphinxutil_la_SOURCES = \
 	garray.c \
 	genrand.c \
         glist.c \
+	gq.c \
         hash_table.c \
         heap.c \
 	huff_code.c \
@@ -25,6 +26,8 @@ libsphinxutil_la_SOURCES = \
         strfuncs.c \
 	sync_array.c \
 	utf8.c
+
+noinst_HEADERS = garray_internal.h
 
 INCLUDES = -I$(top_srcdir)/include \
 	 -I$(top_srcdir)/include/sphinxbase \

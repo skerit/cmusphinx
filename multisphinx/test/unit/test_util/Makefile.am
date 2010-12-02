@@ -5,6 +5,7 @@ check_PROGRAMS = \
 	test_build_directory \
 	test_heap \
 	test_garray \
+	test_gq \
 	test_filename
 
 TESTS = $(check_PROGRAMS)

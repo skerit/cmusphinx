@@ -41,6 +41,7 @@
 
 #include <string.h>
 
+#include <sphinxbase/gq.h>
 #include <sphinxbase/pio.h>
 #include <sphinxbase/err.h>
 #include <sphinxbase/strfuncs.h>
@@ -90,6 +91,12 @@ struct ms_lattice_s {
      */
     int32 norm;
 };
+
+typedef struct ms_latnode_iter_s {
+    ms_lattice_t *l;
+    ms_latnode_t *n;
+    gq_t *q;
+} ms_latnode_iter_t;
 
 ms_lattice_t *
 ms_lattice_init(logmath_t *lmath, dict_t *dict)
