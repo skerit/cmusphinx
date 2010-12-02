@@ -138,3 +138,6 @@ test/unit/test_search/test_batch.hyp
 test/unit/test_search/test_batch.sh
 test/unit/test_lattice/test_nodeid_map
 test/unit/test_lattice/test_htk_lattice
+test/unit/test_lattice/test_build_lattice
+test/unit/test_lattice/test_forward_backward
+test/unit/test_lattice/test_partial_backward

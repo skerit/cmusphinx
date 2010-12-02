@@ -1,6 +1,9 @@
 check_PROGRAMS = \
 	test_nodeid_map \
-	test_htk_lattice
+	test_htk_lattice \
+	test_build_lattice \
+	test_forward_backward \
+	test_partial_backward
 
 TESTS = $(check_PROGRAMS)
 
