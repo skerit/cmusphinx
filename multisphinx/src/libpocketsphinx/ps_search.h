@@ -47,6 +47,7 @@
 #include <sphinxbase/cmd_ln.h>
 #include <sphinxbase/logmath.h>
 #include <sphinxbase/sbthread.h>
+#include <sphinxbase/profile.h>
 
 /* Local headers. */
 #include "pocketsphinx.h"

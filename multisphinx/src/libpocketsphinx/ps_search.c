@@ -40,7 +40,6 @@
  * @author David Huggins-Daines <dhuggins@cs.cmu.edu>
  */
 
-#include "pocketsphinx_internal.h"
 #include "ps_search.h"
 #include "arc_buffer.h"
 
@@ -104,17 +103,30 @@ ps_search_main(sbthread_t *thr)
 {
     ps_search_t *search = sbthread_arg(thr);
 
-    E_INFO("Waiting to start utt\n");
-    while (acmod_start_utt(search->acmod, -1) == 0) {
+    while (1) {
         ptmr_reset(&search->t);
+        /* Not everything has an acmod - in that case the waiting will
+         * be done internally to the decode function (FIXME: Not sure
+         * that actually is going to work) */
+        if (search->acmod) {
+            E_INFO("Waiting to start utt\n");
+            if (acmod_start_utt(search->acmod, -1) < 0) {
+                E_INFO("Interrupted\n");
+                break;
+            }
+        }
+
         (*search->vt->decode)(search);
-        acmod_end_utt(search->acmod);
-        search->total_frames += search->acmod->output_frame;
-        E_INFO("TOTAL %s %f wall %.2f xRT\n",
-               search->vt->name,
-               search->t.t_elapsed,
-               search->t.t_elapsed / search->acmod->output_frame
-               * cmd_ln_int32_r(search->config, "-frate"));
+
+        if (search->acmod) {
+            acmod_end_utt(search->acmod);
+            search->total_frames += search->acmod->output_frame;
+            E_INFO("TOTAL %s %f wall %.2f xRT\n",
+                   search->vt->name,
+                   search->t.t_elapsed,
+                   search->t.t_elapsed / search->acmod->output_frame
+                   * cmd_ln_int32_r(search->config, "-frate"));
+        }
 
     }
     return 0;

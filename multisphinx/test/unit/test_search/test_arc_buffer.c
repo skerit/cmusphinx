@@ -13,7 +13,8 @@ main(int argc, char *argv[])
 	cmd_ln_t *config;
 	bptbl_t *bptbl;
 	int fi, i, next_sf;
-	bp_t *bp;
+	bpidx_t bp;
+	bp_t bpe;
 
 	/* Get the API to initialize a bunch of stuff for us (but not the search). */
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
@@ -28,7 +29,7 @@ main(int argc, char *argv[])
 
 	bptbl = bptbl_init(d2p, 10, 10);
 
-	arcs = arc_buffer_init();
+	arcs = arc_buffer_init(NULL);
 
 	/* Enter a bunch of initial bps (like silence) */
 	fi = bptbl_push_frame(bptbl, NO_BP);
@@ -57,7 +58,7 @@ main(int argc, char *argv[])
 	E_INFO("next_sf %d\n", next_sf);
 	arc_buffer_extend(arcs, next_sf);
 	i = arc_buffer_add_bps(arcs, bptbl,
-				       0, bptbl_retired_idx(bptbl));
+			       0, bptbl_retired_idx(bptbl));
 	E_INFO("Added %d arcs\n", i);
 	arc_buffer_commit(arcs);
 
@@ -71,8 +72,8 @@ main(int argc, char *argv[])
 	}
 	fi = bptbl_push_frame(bptbl, 12);
 	bptbl_dump(bptbl);
-	next_sf = bptbl_ent(bptbl,
-			    bptbl->oldest_bp)->frame + 1;
+	bptbl_get_bp(bptbl, bptbl->oldest_bp, &bpe);
+	next_sf = bpe.frame + 1;
 	E_INFO("next_sf %d\n", next_sf);
 	arc_buffer_extend(arcs, next_sf);
 	i = arc_buffer_add_bps(arcs, bptbl,
@@ -85,8 +86,8 @@ main(int argc, char *argv[])
 	}
 	bptbl_finalize(bptbl);
 	bptbl_dump(bptbl);
-	next_sf = bptbl_ent(bptbl,
-			    bptbl->oldest_bp)->frame + 1;
+	bptbl_get_bp(bptbl, bptbl->oldest_bp, &bpe);
+	next_sf = bpe.frame + 1;
 	E_INFO("next_sf %d\n", next_sf);
 	arc_buffer_extend(arcs, next_sf);
 	i = arc_buffer_add_bps(arcs, bptbl,
@@ -108,7 +109,7 @@ main(int argc, char *argv[])
 		TEST_ASSERT(a->src >= 6 && a->src < 8);
 	}
 
-	arc_buffer_dump(arcs);
+	arc_buffer_dump(arcs, dict);
 	arc_buffer_release(arcs, 6);
 	for (a = arc_buffer_iter(arcs, 6);
 	     a != arc_buffer_iter(arcs, 8);
@@ -117,7 +118,7 @@ main(int argc, char *argv[])
 		TEST_ASSERT(a->wid == 42 || a->wid == 420);
 		TEST_ASSERT(a->src >= 6 && a->src < 8);
 	}
-	arc_buffer_dump(arcs);
+	arc_buffer_dump(arcs, dict);
 	arc_buffer_free(arcs);
 	bptbl_free(bptbl);
 	dict2pid_free(d2p);

@@ -23,7 +23,7 @@ init_search(cmd_ln_t *config, acmod_t *acmod,
 	search = fwdtree_search_init(config, acmod2, dict, d2p);
 	acmod3 = acmod_copy(acmod);
 	search2 = fwdflat_search_init(config, acmod3, dict, d2p,
-				      fwdtree_search_bptbl(search),
+				      ps_search_output_arcs(search),
 				      fwdtree_search_lmset(search));
 	acmod_free(acmod2);
 	acmod_free(acmod3);
@@ -84,6 +84,7 @@ main(int argc, char *argv[])
 	ptmr_init(&total);
 	ptmr_start(&total);
 	featbuf_start_utt(fb);
+	tsamp = 0;
 	while ((nsamp = fread(buf, 2, 2048, rawfh)) > 0) {
 		tsamp += nsamp;
 		featbuf_process_raw(fb, buf, nsamp, FALSE);

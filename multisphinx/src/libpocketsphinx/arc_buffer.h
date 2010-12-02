@@ -125,6 +125,13 @@ bpidx_t arc_buffer_sweep(arc_buffer_t *fab, int release);
 int arc_buffer_finalize(arc_buffer_t *fab, int release);
 
 /**
+ * Mostly internal function for adding bps.
+ */
+bpidx_t arc_buffer_add_bps(arc_buffer_t *fab,
+                           bptbl_t *bptbl, bpidx_t start,
+                           bpidx_t end);
+
+/**
  * Commit extended arcs to the arc buffer.
  *
  * This freezes in place the start frames added since the last call to

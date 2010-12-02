@@ -44,8 +44,6 @@
 
 #include "ngram_model_internal.h"
 
-static ngram_funcs_t ngram_model_dmp32_funcs;
-
 ngram_model_t *
 ngram_model_dmp32_read(cmd_ln_t *config,
                        const char *file_name,
@@ -60,40 +58,3 @@ ngram_model_dmp32_write(ngram_model_t *model,
 {
     return -1;
 }
-
-static int
-ngram_model_dmp32_apply_weights(ngram_model_t *model, float32 lw,
-                              float32 wip, float32 uw)
-{
-    return 0;
-}
-
-static int32
-ngram_model_dmp32_score(ngram_model_t *model, int32 wid,
-                        int32 *history, int32 n_hist,
-                        int32 *n_used)
-{
-    return model->log_zero;
-}
-
-static int32
-ngram_model_dmp32_raw_score(ngram_model_t *model, int32 wid,
-                            int32 *history, int32 n_hist,
-                            int32 *n_used)
-{
-    return model->log_zero;
-}
-
-static void
-ngram_model_dmp32_free(ngram_model_t *base)
-{
-    ckd_free(base);
-}
-
-static ngram_funcs_t ngram_model_dmp32_funcs = {
-    ngram_model_dmp32_free,          /* free */
-    ngram_model_dmp32_apply_weights, /* apply_weights */
-    ngram_model_dmp32_score,         /* score */
-    ngram_model_dmp32_raw_score,     /* raw_score */
-    NULL                             /* add_ug */
-};
