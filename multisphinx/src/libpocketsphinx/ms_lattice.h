@@ -109,8 +109,8 @@ int32 ms_lattice_get_lmstate_idx(ms_lattice_t *l, int32 w,
  *
  * @return number of history entries.
  */
-int32 ms_lattice_get_lmstate_wids(ms_lattice_t *l, int32 idx,
-                                  int32 *out_w, int32 *out_hist);
+int ms_lattice_get_lmstate_wids(ms_lattice_t *l, int32 idx,
+                                int32 *out_w, int32 *out_hist);
 
 /**
  * Create a node.

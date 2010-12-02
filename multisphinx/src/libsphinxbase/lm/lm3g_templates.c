@@ -212,7 +212,8 @@ lm3g_template_score(ngram_model_t *base, int32 wid,
     switch (n_hist) {
     case 0:
         /* Access mode: unigram */
-        *n_used = 1;
+        if (n_used)
+            *n_used = 1;
         return model->lm3g.unigrams[wid].prob1.l;
     case 1:
         return lm3g_bg_score(model, history[0], wid, n_used);
