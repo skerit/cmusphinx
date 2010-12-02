@@ -262,6 +262,7 @@ lineiter_start(FILE *fh)
     li->bsiz = 128;
     li->len = 0;
     li->fh = fh;
+    li->lineno = 0;
 
     return lineiter_next(li);
 }
@@ -273,7 +274,11 @@ lineiter_next(lineiter_t *li)
     if (fgets(li->buf, li->bsiz, li->fh) == NULL) {
         lineiter_free(li);
         return NULL;
+
     }
+    /* Successfully read at least part of a line. */
+    ++li->lineno;
+
     /* If we managed to read the whole thing, then we are done
      * (this will be by far the most common result). */
     li->len = strlen(li->buf);

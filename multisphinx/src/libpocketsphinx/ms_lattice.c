@@ -39,7 +39,10 @@
  * @file ms_lattice.c Word lattices for MultiSphinx.
  */
 
+#include <string.h>
+
 #include <sphinxbase/pio.h>
+#include <sphinxbase/err.h>
 #include <sphinxbase/strfuncs.h>
 #include <sphinxbase/ckd_alloc.h>
 
@@ -110,9 +113,148 @@ ms_lattice_link(ms_lattice_t *l,
 {
 }
 
+static int
+process_htk_node_line(ms_lattice_t *l, lineiter_t *li, garray_t *wptr, int n_wptr)
+{
+    int i;
+    for (i = 0; i < n_wptr; ++i) {
+        char *f = garray_ent(wptr, char *, i);
+        char *e = strchr(f, '=');
+        if (e == NULL) {
+            E_ERROR("Invalid field %s in line %d\n",
+                    f, (int)li->lineno);
+            return -1;
+        }
+        *e++ = '\0';
+        if (0 == strcmp(f, "I")) {
+        }
+        else if (0 == strcmp(f, "t")) {
+        }
+        else if (0 == strcmp(f, "W")) {
+        }
+        else if (0 == strcmp(f, "v")) {
+        }
+        else {
+            E_WARN("Unknown field type %s in line %d\n",
+                   f, (int)li->lineno);
+        }
+    }
+}
+
+static int
+process_htk_arc_line(ms_lattice_t *l, lineiter_t *li, garray_t *wptr, int n_wptr)
+{
+    int i;
+    for (i = 0; i < n_wptr; ++i) {
+        char *f = garray_ent(wptr, char *, i);
+        char *e = strchr(f, '=');
+        if (e == NULL) {
+            E_ERROR("Invalid field %s in line %d\n",
+                    f, (int)li->lineno);
+            return -1;
+        }
+        *e++ = '\0';
+        if (0 == strcmp(f, "J")) {
+        }
+        else if (0 == strcmp(f, "S")) {
+        }
+        else if (0 == strcmp(f, "E")) {
+        }
+        else if (0 == strcmp(f, "a")) {
+        }
+        else if (0 == strcmp(f, "p")) {
+        }
+        else {
+            E_WARN("Unknown field type %s in line %d\n",
+                   f, (int)li->lineno);
+        }
+    }
+    return 0;
+}
+
 int
 ms_lattice_read_htk(ms_lattice_t *l, FILE *fh)
 {
+    lineiter_t *li;
+    garray_t *wptr;
+    int n_wptr;
+    int n_nodes = 0, n_arcs = 0;
+    int start_idx = -1, end_idx = -1;
+    enum {
+        HEADER, ENTRIES
+    } state = HEADER;
+
+    wptr = garray_init(0, sizeof(char *));
+    for (li = lineiter_start(fh); li; li = lineiter_next(li)) {
+        string_trim(li->buf, STRING_BOTH);
+        if (li->buf[0] == '#')
+            continue;
+        switch (state) {
+        case HEADER:
+        {
+            char *e;
+            if (0 == strncmp(li->buf, "N=", 2)) {
+                n_nodes = atoi(li->buf + 2);
+                if ((e = strchr(li->buf + 2, '=')) == NULL) {
+                    E_ERROR("Invalid node/link count line %d: %s\n",
+                            (int)li->lineno, li->buf);
+                    goto error_out;
+                }
+                n_arcs = atoi(e + 1);
+                state = ENTRIES;
+            }
+            else {
+                if ((e = strchr(li->buf, '=')) == NULL) {
+                    E_ERROR("Invalid header count line %d: %s\n",
+                            (int)li->lineno, li->buf);
+                    goto error_out;
+                }
+                *e++ = '\0';
+                if (0 == strcmp(li->buf, "start"))
+                    start_idx = atoi(e);
+                else if (0 == strcmp(li->buf, "end"))
+                    end_idx = atoi(e);
+            }
+            break;
+        }
+        case ENTRIES: {
+            int i;
+
+            n_wptr = str2words(li->buf, NULL, 0);
+            garray_expand(wptr, n_wptr);
+            str2words(li->buf, garray_void(wptr, 0), n_wptr);
+            for (i = 0; i < n_wptr; ++i) {
+                char *f = garray_ent(wptr, char *, i);
+                if (0 == strncmp(f, "I=", 2)) {
+                    if (process_htk_node_line(l, li, wptr, n_wptr) < 0)
+                        goto error_out;
+                    break;
+                }
+                if (0 == strncmp(f, "J=", 2)) {
+                    if (process_htk_arc_line(l, li, wptr, n_wptr) < 0)
+                        goto error_out;
+                    break;
+                }
+            }
+            if (i == n_wptr)
+                E_WARN("Not a node or arc on line %d\n", (int)li->lineno);
+            break;
+        }
+        }
+    }
+    if (start_idx == -1) {
+        E_WARN("No explicit start node, using first node\n");
+        start_idx = 0;
+    }
+    if (end_idx == -1) {
+        end_idx = garray_size(l->node_list) - 1;
+        E_WARN("No explicit end node, using last node %d\n", end_idx);
+    }
+    return 0;
+
+error_out:
+    lineiter_free(li);
+    return -1;
 }
 
 int
