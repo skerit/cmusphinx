@@ -42,6 +42,7 @@
 #include <string.h>
 
 #include <sphinxbase/garray.h>
+#include <sphinxbase/bitvec.h>
 #include <sphinxbase/gq.h>
 #include <sphinxbase/pio.h>
 #include <sphinxbase/err.h>
@@ -694,6 +695,8 @@ ms_lattice_write_htk(ms_lattice_t *l, FILE *fh, int frate)
 static int
 print_dot_nodeid(ms_lattice_t *l, ms_latnode_t *node, FILE *fh)
 {
+    if (node->id.lmstate == 0xdeadbeef)
+        return -1;
     if (node->id.lmstate != -1) {
         int32 wid;
         ms_lattice_get_lmstate_wids(l, node->id.lmstate, &wid, NULL);
@@ -716,7 +719,7 @@ ms_lattice_write_dot(ms_lattice_t *l, FILE *fh)
     fprintf(fh, "\tnode [shape=circle];");
     for (i = 0; i < garray_size(l->node_list); ++i) {
         node = garray_ptr(l->node_list, ms_latnode_t, i);
-        if (i != l->end_idx) 
+        if (i != l->end_idx)
             print_dot_nodeid(l, node, fh);
     }
     fprintf(fh, "\n");
@@ -731,7 +734,7 @@ ms_lattice_write_dot(ms_lattice_t *l, FILE *fh)
             continue;
         for (j = 0; j < ms_latnode_n_exits(node); ++j) {
             ms_latlink_t *link = ms_latnode_get_exit(l, node, j);
-            ms_latnode_t *node2;
+            ms_latnode_t *node2, *node3;
             double weight;
 
             /* FIXME: Ad hoc behaviour for weights, should be configurable. */
@@ -744,12 +747,16 @@ ms_lattice_write_dot(ms_lattice_t *l, FILE *fh)
             else
                 weight = logmath_log_to_ln(l->lmath, link->ascr);
 
-            fprintf(fh, "\t");
             node2 = ms_lattice_get_node_idx(l, link->src);
+            if (node2->id.lmstate == 0xdeadbeef)
+                continue;
+            node3 = ms_lattice_get_node_idx(l, link->dest);
+            if (node3->id.lmstate == 0xdeadbeef)
+                continue;
+            fprintf(fh, "\t");
             print_dot_nodeid(l, node2, fh);
             fprintf(fh, " ->");
-            node2 = ms_lattice_get_node_idx(l, link->dest);
-            print_dot_nodeid(l, node2, fh);
+            print_dot_nodeid(l, node3, fh);
 
             if (link->wid != -1)
                 fprintf(fh, " [label=\"%s/%.2g\"];\n",
@@ -965,7 +972,9 @@ ms_latnode_unlink(ms_lattice_t *l, ms_latnode_t *node)
         int32 linkid = ms_lattice_get_idx_link(l, link);
         link_array_remove(dest->entries, linkid);
     }
-
+    garray_free(node->exits);
+    garray_free(node->entries);
+    node->exits = node->entries = NULL;
 }
 
 void
@@ -979,6 +988,52 @@ ms_latlink_unlink(ms_lattice_t *l, ms_latlink_t *link)
     link_array_remove(src->exits, linkid);
     link_array_remove(dest->entries, linkid);
 }
+
+/**
+ * Remove unreachable nodes.
+ *
+ * This just unlinks them, it does not garbage collect.
+ */
+void
+ms_lattice_unlink_unreachable(ms_lattice_t *l)
+{
+    bitvec_t *forward_reachable, *backward_reachable;
+    ms_latnode_iter_t *itor;
+    int i;
+
+    forward_reachable = bitvec_alloc(garray_size(l->node_list));
+    backward_reachable = bitvec_alloc(garray_size(l->node_list));
+    bitvec_set(forward_reachable, l->start_idx);
+    bitvec_set(backward_reachable, l->start_idx);
+    bitvec_set(forward_reachable, l->end_idx);
+    bitvec_set(backward_reachable, l->end_idx);
+    for (itor = ms_lattice_traverse_topo(l, NULL);
+         itor; itor = ms_latnode_iter_next(itor)) {
+        ms_latnode_t *node = ms_latnode_iter_get(itor);
+        int32 nodeid = ms_lattice_get_idx_node(l, node);
+        assert(nodeid < garray_size(l->node_list));
+        bitvec_set(forward_reachable, nodeid);
+    }
+    for (itor = ms_lattice_reverse_topo(l, NULL);
+         itor; itor = ms_latnode_iter_next(itor)) {
+        ms_latnode_t *node = ms_latnode_iter_get(itor);
+        int32 nodeid = ms_lattice_get_idx_node(l, node);
+        assert(nodeid < garray_size(l->node_list));
+        bitvec_set(backward_reachable, nodeid);
+    }
+    for (i = 0; i < garray_size(l->node_list); ++i) {
+        ms_latnode_t *node = garray_ptr(l->node_list, ms_latnode_t, i);
+        if (node->id.lmstate == 0xdeadbeef
+            || !(bitvec_is_set(forward_reachable, i)
+                 && bitvec_is_set(backward_reachable, i))) {
+            ms_latnode_unlink(l, node);
+        }
+    }
+    bitvec_free(forward_reachable);
+    bitvec_free(backward_reachable);
+}
+
+
 
 /**
  * Rotate a head word into a language model state.
@@ -1001,14 +1056,16 @@ rotate_lmstate(int32 wid, int32 *hist, int n_hist, int max_n_hist)
  * Copy outgoing arcs from @a backoff to @a dest.
  */
 static void
-merge_exits(ms_lattice_t *l, ms_latnode_t *dest,
-            ms_latnode_t *backoff, int32 lscr)
+merge_exits(ms_lattice_t *l, ms_latnode_t *new,
+            ms_latnode_t *old, int32 lscr)
 {
     int y;
+    int32 newwid;
+    ms_lattice_get_lmstate_wids(l, new->id.lmstate, &newwid, NULL);
 
-    assert(dest != backoff);
-    for (y = 0; y < ms_latnode_n_exits(backoff); ++y) {
-        ms_latlink_t *ylink = ms_latnode_get_exit(l, backoff, y);
+    assert(new != old);
+    for (y = 0; y < ms_latnode_n_exits(old); ++y) {
+        ms_latlink_t *ylink = ms_latnode_get_exit(l, old, y);
         ms_latnode_t *ydest = ms_lattice_get_node_idx(l, ylink->dest);
         ms_latnode_t *ysrc = ms_lattice_get_node_idx(l, ylink->src);
         ms_latlink_t *yylink;
@@ -1018,14 +1075,15 @@ merge_exits(ms_lattice_t *l, ms_latnode_t *dest,
         ms_lattice_get_lmstate_wids(l, ydest->id.lmstate, &ydestwid, NULL);
         ydestwid = dict_basewid(l->dict, ydestwid);
         duplicate = FALSE;
-        for (z = 0; z < ms_latnode_n_exits(dest); ++z) {
-            ms_latlink_t *zlink = ms_latnode_get_exit(l, dest, z);
+        for (z = 0; z < ms_latnode_n_exits(new); ++z) {
+            ms_latlink_t *zlink = ms_latnode_get_exit(l, new, z);
             ms_latnode_t *zdest = ms_lattice_get_node_idx(l, zlink->dest);
             ms_latnode_t *zsrc = ms_lattice_get_node_idx(l, zlink->src);
             int32 zdestwid;
             ms_lattice_get_lmstate_wids(l, zdest->id.lmstate, &zdestwid, NULL);
             zdestwid = dict_basewid(l->dict, zdestwid);
-            if (ylink->wid == zlink->wid
+            if (dict_basewid(l->dict, ylink->wid)
+                == dict_basewid(l->dict, zlink->wid)
                 && ydestwid == zdestwid
                 && ysrc->id.sf == zsrc->id.sf) {
                 if (ylink->ascr > zlink->ascr)
@@ -1035,9 +1093,18 @@ merge_exits(ms_lattice_t *l, ms_latnode_t *dest,
         }
         if (duplicate)
             continue;
-        yylink = ms_lattice_link(l, dest, ydest, ylink->wid, ylink->ascr);
+        yylink = ms_lattice_link(l, new, ydest, ylink->wid, ylink->ascr);
         yylink->lscr = lscr;
-    }    
+        E_INFO("Created new link %s/%d -> %s/%d / %s\n",
+               newwid == -1 ? "&epsilon;" : dict_basestr(l->dict, newwid),
+               new->id.sf,
+               ydestwid == -1 ? "&epsilon;" : dict_basestr(l->dict, ydestwid),
+               ydest->id.sf, dict_basestr(l->dict, ylink->wid));
+    }
+    E_INFO("%p %s/%d now has %d exits\n",
+           new, 
+           newwid == -1 ? "&epsilon;" : dict_wordstr(l->dict, newwid),
+           new->id.sf, ms_latnode_n_exits(new));
 }
 
 /**
@@ -1078,10 +1145,9 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
     /* Keep track of which entry links are moved to newly created
      * nodes, and which are deleted as duplicates. */
     ms_lattice_get_lmstate_wids(l, backoff->id.lmstate, &node_latwid, NULL);
-    E_INFO("%s/%d %d entries\n",
+    E_INFO("Considering node %s/%d\n",
            node_latwid == -1 ? "&epsilon;" : dict_wordstr(l->dict, node_latwid),
-           backoff->id.sf,
-           ms_latnode_n_entries(backoff));
+           backoff->id.sf);
     node_lmwid = map_lmwid(l->dict, lm, node_latwid);
     /* Expand this node with unique incoming N-gram histories. */
     for (j = 0; j < ms_latnode_n_entries(backoff); ++j) {
@@ -1095,6 +1161,9 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
         int32 lmstate;
         int n_hist, i;
 
+        /* Skip arcs with deleted source nodes. */
+        if (src->id.lmstate == 0xdeadbeef)
+            continue;
         /* Construct the maximum language model state for this
          * incoming arc.  This consists of the language model
          * state from its source node plus the arc's base word
@@ -1116,12 +1185,6 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
         /* Set up pointers for language model state iteration. */
         lmstate = -1;
         while (n_hist > 0) {
-            E_INFO("Searching for N-Gram: %s |",
-                   node_latwid == -1 ? "&epsilon;"
-                   : dict_wordstr(l->dict, node_latwid));
-            for (i = 0; i < n_hist; ++i)
-                E_INFOCONT(" %s", ngram_word(lm, lmhist[i]));
-            E_INFOCONT("\n");
             /* First check if it exists in the language model. */
             if ((ni = ngram_ng_iter(lm, node_lmwid, lmhist,
                                     n_hist)) != NULL) {
@@ -1143,44 +1206,36 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
                     ngram_iter_get(ni, NULL, &bowt);
                 else
                     bowt = 0;
-                E_INFO("No history of length %d found\n", n_hist);
                 if (--n_hist == 0)
                     lmstate = -1;
             }
         }
-        E_INFO("Language model state(%d): %s |",
-               lmstate,
-               node_latwid == -1 ? "&epsilon;"
-               : dict_wordstr(l->dict, node_latwid));
-        for (i = 0; i < n_hist; ++i)
-            E_INFOCONT(" %s", ngram_word(lm, lmhist[i]));
-        E_INFOCONT("\n");
         if (lmstate != -1) {
             /* FIXME: This is problematic because we have abused
              * lmstates for node words.  It will probably
              * break. */
-            ms_latnode_t *dest;
+            ms_latnode_t *new;
             int k, duplicate;
             /* If we found an appropriate non-null language model
              * state, look for a node with the desired language model
              * state in this frame, and create one if it does not yet
              * exist. */
-            dest = ms_lattice_get_node_id(l, backoff->id.sf, lmstate);
-            if (dest) {
-                /* Copy outgoing arcs from original node to the
-                 * newly discovered node. */
-                merge_exits(l, dest, backoff, lscr);
-                /* that could move memory, so update this pointer. */
-                link = garray_ptr(l->link_list, ms_latlink_t, linkid);
-            }
-            else {
+            new = ms_lattice_get_node_id(l, backoff->id.sf, lmstate);
+            if (new == NULL) {
                 int32 backoffid = ms_lattice_get_idx_node(l, backoff);
                 /* Copy outgoing arcs from original node to the
                  * newly created node. */
-                dest = ms_lattice_node_init(l, backoff->id.sf, lmstate);
+                new = ms_lattice_node_init(l, backoff->id.sf, lmstate);
+                ms_lattice_get_lmstate_wids(l, new->id.lmstate,
+                                            &node_latwid, NULL);
+                E_INFO("Created node %d/%s/%d\n",
+                       new->id.lmstate,
+                       node_latwid == -1 ? "&epsilon;"
+                       : dict_wordstr(l->dict, node_latwid),
+                       new->id.sf);
                 /* That could cause memory to move so update this pointer. */
                 backoff = ms_lattice_get_node_idx(l, backoffid);
-                merge_exits(l, dest, backoff, lscr);
+                merge_exits(l, new, backoff, lscr);
                 /* Update this pointer too. */
                 link = garray_ptr(l->link_list, ms_latlink_t, linkid);
                 /* If this is a final node then also link it to the new
@@ -1189,7 +1244,7 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
                     ms_latlink_t *end_link;
                     ms_latnode_t *end;
                     end = ms_lattice_get_node_idx(l, endid);
-                    end_link = ms_lattice_link(l, dest, end,
+                    end_link = ms_lattice_link(l, new, end,
                                                dict_finishwid(l->dict),
                                                0 /* FIXME: final_node_ascr. */);
                     end_link->lscr = lscr;
@@ -1198,13 +1253,27 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
                     link = garray_ptr(l->link_list, ms_latlink_t, linkid);
                 }
             }
+            else {
+                ms_lattice_get_lmstate_wids(l, new->id.lmstate,
+                                            &node_latwid, NULL);
+                E_INFO("Found node %d/%s/%d\n",
+                       new->id.lmstate,
+                       node_latwid == -1 ? "&epsilon;"
+                       : dict_wordstr(l->dict, node_latwid),
+                       new->id.sf);
+                /* Copy outgoing arcs from original node to the
+                 * newly discovered node. */
+                merge_exits(l, new, backoff, lscr);
+                /* that could move memory, so update this pointer. */
+                link = garray_ptr(l->link_list, ms_latlink_t, linkid);
+            }
             /* This incoming link might be a duplicate of one already
              * entering the given node, if so, mark it as such, so we
              * can remove it below. */
             duplicate = FALSE;
-            for (k = 0; dest->entries
-                     && k < ms_latnode_n_entries(dest); ++k) {
-                ms_latlink_t *xlink = ms_latnode_get_entry(l, dest, k);
+            for (k = 0; new->entries
+                     && k < ms_latnode_n_entries(new); ++k) {
+                ms_latlink_t *xlink = ms_latnode_get_entry(l, new, k);
                 if (link->wid == xlink->wid && link->src == xlink->src) {
                     /* Tropical semiring assumption... */
                     if (link->ascr > xlink->ascr)
@@ -1218,11 +1287,11 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
             else {
                 /* Otherwise, repoint link at the newly created/found
                  * node and add the necessary backoff weight, if any. */
-                link->dest = ms_lattice_get_idx_node(l, dest);
+                link->dest = ms_lattice_get_idx_node(l, new);
                 link->lscr += bowt;
-                if (dest->entries == NULL)
-                    dest->entries = garray_init(0, sizeof(int32));
-                garray_append(dest->entries, &linkid);
+                if (new->entries == NULL)
+                    new->entries = garray_init(0, sizeof(int32));
+                garray_append(new->entries, &linkid);
             }
         }
         else {
@@ -1265,10 +1334,6 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
         /* Change it to an epsilon node. */
         ms_lattice_set_node_id(l, backoff, backoff->id.sf, -1);
         ms_lattice_get_lmstate_wids(l, backoff->id.lmstate, &node_latwid, NULL);
-        E_INFO("%s/%d %d entries\n",
-               node_latwid == -1 ? "&epsilon;" : dict_wordstr(l->dict, node_latwid),
-               backoff->id.sf,
-               ms_latnode_n_entries(backoff));
         /* If this is a final node then link it to the new final node
          * created above. */
         if (backoff == ms_lattice_get_end(l)) { 
@@ -1285,7 +1350,11 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
     else  {
         /* If the backoff node has no more entries (and is not the
          * start node), then make it unreachable. */
-        ms_latnode_unlink(l, backoff);
+        ms_lattice_get_lmstate_wids(l, backoff->id.lmstate, &node_latwid, NULL);
+        E_INFO("Dead node: %s/%d\n",
+               node_latwid == -1 ? "&epsilon;" : dict_wordstr(l->dict, node_latwid),
+               backoff->id.sf);
+        backoff->id.lmstate = 0xdeadbeef;
     }
 
     ckd_free(lathist);
@@ -1297,7 +1366,7 @@ ms_lattice_expand(ms_lattice_t *l, ngram_model_t *lm)
 {
     ms_latnode_t *end;
     ms_latnode_iter_t *itor;
-    int32 endid;
+    int32 endid, i;
 
     /* New final node (in theory, there are a bunch of different final
      * language model histories, but since nothing follows this there
@@ -1317,6 +1386,16 @@ ms_lattice_expand(ms_lattice_t *l, ngram_model_t *lm)
     /* Update final node. */
     end = ms_lattice_get_node_idx(l, endid);
     ms_lattice_set_end(l, end);
+
+    /* Remove nodes marked for death. */
+    for (i = 0; i < garray_size(l->node_list); ++i) {
+        ms_latnode_t *node = ms_lattice_get_node_idx(l, i);
+        if (node->id.lmstate == 0xdeadbeef)
+            ms_latnode_unlink(l, node);
+    }
+
+    /* Clean up unreachable nodes. */
+    ms_lattice_unlink_unreachable(l);
 
     return 0;
 }
