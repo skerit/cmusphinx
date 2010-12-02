@@ -63,6 +63,7 @@ gq_init(size_t ent_size)
     gq_t *q = ckd_calloc(1, sizeof(*q));
     q->order = 3;
     garray_setup(&q->base, 1<<q->order, ent_size);
+    q->head = gq_alloc_size(q) / 2;
     return q;
 }
 
