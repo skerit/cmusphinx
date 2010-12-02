@@ -50,25 +50,6 @@
 #include "ps_alignment.h"
 #include "hmm.h"
 
-/**
- * Phone loop search structure.
- */
-struct state_align_search_s {
-    ps_search_t base;       /**< Base search structure. */
-    hmm_context_t *hmmctx;  /**< HMM context structure. */
-    ps_alignment_t *al;     /**< Alignment structure being operated on. */
-    hmm_t *hmms;            /**< Vector of HMMs corresponding to phone level. */
-    int n_phones;	    /**< Number of HMMs (phones). */
-
-    int frame;              /**< Current frame being processed. */
-    int32 best_score;       /**< Best score in current frame. */
-
-    int n_emit_state;       /**< Number of emitting states (tokens per frame) */
-    uint16 *tokens;         /**< Tokens (backpointers) for state alignment. */
-    int n_fr_alloc;         /**< Number of frames of tokens allocated. */
-};
-typedef struct state_align_search_s state_align_search_t;
-
 ps_search_t *state_align_search_init(cmd_ln_t *config,
                                      acmod_t *acmod,
                                      ps_alignment_t *al);

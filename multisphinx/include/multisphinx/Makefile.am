@@ -15,5 +15,4 @@ multisphinxinclude_HEADERS =			\
 	ps_alignment.h				\
 	s3types.h				\
 	state_align_search.h			\
-	vocab_map.h				\
-	vocab_mapper.h
+	vocab_map.h

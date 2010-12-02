@@ -41,6 +41,26 @@
 
 #include "state_align_search.h"
 
+/**
+ * State alignment search structure.
+ */
+struct state_align_search_s {
+    ps_search_t base;       /**< Base search structure. */
+    hmm_context_t *hmmctx;  /**< HMM context structure. */
+    ps_alignment_t *al;     /**< Alignment structure being operated on. */
+    hmm_t *hmms;            /**< Vector of HMMs corresponding to phone level. */
+    int n_phones;	    /**< Number of HMMs (phones). */
+
+    int frame;              /**< Current frame being processed. */
+    int32 best_score;       /**< Best score in current frame. */
+
+    int n_emit_state;       /**< Number of emitting states (tokens per frame) */
+    uint16 *tokens;         /**< Tokens (backpointers) for state alignment. */
+    int n_fr_alloc;         /**< Number of frames of tokens allocated. */
+};
+typedef struct state_align_search_s state_align_search_t;
+
+
 static int
 state_align_search_start(ps_search_t *search)
 {
@@ -270,9 +290,6 @@ state_align_search_free(ps_search_t *search)
 static ps_searchfuncs_t state_align_search_funcs = {
     /* name: */   "state_align",
     /* free: */   state_align_search_free,
-    /* hyp: */      NULL,
-    /* prob: */     NULL,
-    /* seg_iter: */ NULL,
 };
 
 ps_search_t *

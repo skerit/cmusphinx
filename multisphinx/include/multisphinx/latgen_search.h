@@ -49,11 +49,6 @@
 #include "arc_buffer.h"
 #include "ps_search.h"
 
-typedef struct latgen_s {
-    ps_search_t base;
-    arc_buffer_t *input_arcs;
-} latgen_t;
-
 /**
  * Create a new lattice generator.
  */

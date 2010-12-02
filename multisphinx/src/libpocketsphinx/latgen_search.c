@@ -58,12 +58,17 @@ static ps_searchfuncs_t latgen_funcs = {
     /* seg_iter: */ latgen_search_seg_iter,
 };
 
+typedef struct latgen_search_s {
+    ps_search_t base;
+    arc_buffer_t *input_arcs;
+} latgen_search_t;
+
 ps_search_t *
 latgen_init(cmd_ln_t *config,
 	    dict2pid_t *d2p,
 	    arc_buffer_t *input_arcs)
 {
-    latgen_t *latgen;
+    latgen_search_t *latgen;
 
     latgen = ckd_calloc(1, sizeof(*latgen));
     ps_search_init(&latgen->base, &latgen_funcs,
@@ -76,7 +81,7 @@ latgen_init(cmd_ln_t *config,
 static int
 latgen_search_decode(ps_search_t *base)
 {
-    latgen_t *latgen = (latgen_t *)base;
+    latgen_search_t *latgen = (latgen_search_t *)base;
     int frame_idx;
 
     frame_idx = 0;
@@ -111,7 +116,7 @@ latgen_search_decode(ps_search_t *base)
 static int
 latgen_search_free(ps_search_t *base)
 {
-    latgen_t *latgen = (latgen_t *)base;
+    latgen_search_t *latgen = (latgen_search_t *)base;
 
     arc_buffer_free(latgen->input_arcs);
     return 0;
