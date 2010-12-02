@@ -59,6 +59,11 @@
 typedef struct ms_lattice_s ms_lattice_t;
 
 /**
+ * Lattice node iterator.
+ */
+typedef struct ms_latnode_iter_s ms_latnode_iter_t;
+
+/**
  * Lattice node structure.
  */
 typedef struct ms_latnode_s {
@@ -161,6 +166,35 @@ int ms_lattice_write_htk(ms_lattice_t *l, FILE *fh, int frate);
  * Write a lattice in DOT format.
  */
 int ms_lattice_write_dot(ms_lattice_t *l, FILE *fh);
+
+/**
+ * Begin a topological traversal of lattice nodes.
+ */
+ms_latnode_iter_t *ms_lattice_traverse_topo(ms_lattice_t *l,
+                                            ms_latnode_t *start,
+                                            ms_latnode_t *end);
+
+/**
+ * Begin a reverse topological traversal of lattice nodes.
+ */
+ms_latnode_iter_t *ms_lattice_reverse_topo(ms_lattice_t *l,
+                                           ms_latnode_t *start,
+                                           ms_latnode_t *end);
+
+/**
+ * Move to the next node in traversal.
+ */
+ms_latnode_iter_t *ms_latnode_iter_next(ms_latnode_iter_t *itor);
+
+/**
+ * Get current node in traversal.
+ */
+ms_latnode_t *ms_latnode_iter_get(ms_latnode_iter_t *itor);
+
+/**
+ * Terminate traversal over lattice nodes.
+ */
+void ms_latnode_iter_free(ms_latnode_iter_t *itor);
 
 /**
  * Perform bigram expansion on a lattice and assign language model

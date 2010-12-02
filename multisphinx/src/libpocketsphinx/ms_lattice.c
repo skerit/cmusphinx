@@ -92,11 +92,13 @@ struct ms_lattice_s {
     int32 norm;
 };
 
-typedef struct ms_latnode_iter_s {
+struct ms_latnode_iter_s {
     ms_lattice_t *l;
     ms_latnode_t *n;
+    ms_latnode_t *start; /**< Only for reverse iteration. */
+    ms_latnode_t *end;   /**< Only for forward iteration. */
     gq_t *q;
-} ms_latnode_iter_t;
+};
 
 ms_lattice_t *
 ms_lattice_init(logmath_t *lmath, dict_t *dict)
@@ -650,6 +652,112 @@ ms_lattice_write_dot(ms_lattice_t *l, FILE *fh)
     }
     fprintf(fh, "}\n");
     return 0;
+}
+
+ms_latnode_iter_t *
+ms_lattice_traverse_topo(ms_lattice_t *l,
+                         ms_latnode_t *start,
+                         ms_latnode_t *end)
+{
+    ms_latnode_iter_t *itor;
+
+    itor = ckd_calloc(1, sizeof(*itor));
+    itor->l = l;
+    if (start == NULL)
+        itor->n = ms_lattice_get_start(l);
+    else
+        itor->n = start;
+    if (end == NULL)
+        itor->end = ms_lattice_get_end(l);
+    else
+        itor->end = end;
+    itor->q = gq_init(sizeof(ms_latnode_t *));
+
+    return itor;
+}
+
+ms_latnode_iter_t *
+ms_lattice_reverse_topo(ms_lattice_t *l,
+                        ms_latnode_t *start,
+                        ms_latnode_t *end)
+{
+    ms_latnode_iter_t *itor;
+
+    itor = ckd_calloc(1, sizeof(*itor));
+    itor->l = l;
+    if (start == NULL)
+        itor->start = ms_lattice_get_start(l);
+    else
+        itor->start = start;
+    if (end == NULL)
+        itor->n = ms_lattice_get_end(l);
+    else
+        itor->n = end;
+    itor->q = gq_init(sizeof(ms_latnode_t *));
+
+    return itor;
+}
+
+ms_latnode_iter_t *
+ms_latnode_iter_next(ms_latnode_iter_t *itor)
+{
+    garray_t *links;
+    int i;
+
+    if (itor->n == NULL) {
+        ms_latnode_iter_free(itor);
+        return NULL;
+    }
+    if (itor->n == itor->start || itor->n == itor->end) {
+        ms_latnode_iter_free(itor);
+        return NULL;
+    }
+
+    /* Figure out which direction we're going. */
+    if (itor->start)
+        links = itor->n->entries;
+    else
+        links = itor->n->exits;
+    if (links == NULL) {
+        ms_latnode_iter_free(itor);
+        return NULL;
+    }
+    
+    for (i = 0; i < garray_size(links); ++i) {
+        int32 linkid = garray_ent(links, int32, i);
+        ms_latlink_t *link = garray_ptr(itor->l->link_list,
+                                        ms_latlink_t, linkid);
+        ms_latnode_t *next;
+
+        if (itor->start)
+            next = garray_ptr(itor->l->node_list, ms_latnode_t,
+                              link->src);
+        else
+            next = garray_ptr(itor->l->node_list, ms_latnode_t,
+                              link->dest);
+        if (--next->fan == 0)
+            gq_append(itor->q, &next);
+    }
+    if (gq_size(itor->q) == 0) {
+        ms_latnode_iter_free(itor);
+        return NULL;
+    }
+    itor->n = gq_head(itor->q, ms_latnode_t *);
+    gq_shift(itor->q, 1);
+    return itor;
+}
+
+ms_latnode_t *
+ms_latnode_iter_get(ms_latnode_iter_t *itor)
+{
+    return itor->n;
+}
+
+void
+ms_latnode_iter_free(ms_latnode_iter_t *itor)
+{
+    gq_free(itor->q);
+    ckd_free(itor);
 }
 
 int
