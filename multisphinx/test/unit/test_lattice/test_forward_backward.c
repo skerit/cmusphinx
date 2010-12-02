@@ -27,6 +27,9 @@ main(int argc, char *argv[])
 
 	/* Do N-gram expansion on it. */
 	ms_lattice_expand(l, lm);
+	TEST_ASSERT(fh = fopen("expanded.dot", "w"));
+	TEST_ASSERT(0 == ms_lattice_write_dot(l, fh));
+	TEST_ASSERT(0 == fclose(fh));
 
 	/* Run forward-backward on it. */
 	ms_lattice_forward(l, 10);

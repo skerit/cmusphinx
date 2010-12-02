@@ -460,19 +460,21 @@ lm3g_template_iter_get(ngram_iter_t *base,
 
     switch (base->m) {
     case 0:
-        *out_score = itor->ug->prob1.l;
-        *out_bowt = itor->ug->bo_wt1.l;
+        if (out_score) *out_score = itor->ug->prob1.l;
+        if (out_bowt) *out_bowt = itor->ug->bo_wt1.l;
         break;
     case 1:
-        *out_score = model->lm3g.prob2[itor->bg->prob2].l;
-        if (model->lm3g.bo_wt2)
-            *out_bowt = model->lm3g.bo_wt2[itor->bg->bo_wt2].l;
-        else
-            *out_bowt = 0;
+        if (out_score) *out_score = model->lm3g.prob2[itor->bg->prob2].l;
+        if (out_bowt) {
+            if (model->lm3g.bo_wt2)
+                *out_bowt = model->lm3g.bo_wt2[itor->bg->bo_wt2].l;
+            else
+                *out_bowt = 0;
+        }
         break;
     case 2:
-        *out_score = model->lm3g.prob3[itor->tg->prob3].l;
-        *out_bowt = 0;
+        if (out_score) *out_score = model->lm3g.prob3[itor->tg->prob3].l;
+        if (out_bowt) *out_bowt = 0;
         break;
     default: /* Should not happen. */
         return NULL;

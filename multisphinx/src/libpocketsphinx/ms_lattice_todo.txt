@@ -1,0 +1,7 @@
+* Language model state mapping
+  - Easiest thing is to abuse ngram_trie_t for this (DONE)
+  - Use the prob and bowt fields to store the state id (DONE)
+* Language model state formatting for htk and dot
+* Language model state for start/end nodes
+* Language model / dictionary mapping
+* Alternate pronunciations in expansion input?

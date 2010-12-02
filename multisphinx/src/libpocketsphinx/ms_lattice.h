@@ -128,6 +128,12 @@ ms_latnode_t *ms_lattice_get_node_idx(ms_lattice_t *l, int32 idx);
 ms_latnode_t *ms_lattice_get_node_id(ms_lattice_t *l, int sf, int32 lmstate);
 
 /**
+ * Update a node's ID.
+ */
+ms_latnode_t *ms_lattice_set_node_id(ms_lattice_t *l, ms_latnode_t *node,
+                                     int sf, int32 lmstate);
+
+/**
  * Get the index of a node.
  */
 int32 ms_lattice_get_idx_node(ms_lattice_t *l, ms_latnode_t *node);
