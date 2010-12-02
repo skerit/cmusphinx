@@ -40,5 +40,6 @@ main(int argc, char *argv[])
 
 	ms_lattice_free(l);
 	ngram_model_free(lm);
+	logmath_free(lmath);
 	return 0;
 }

@@ -163,6 +163,7 @@ ms_lattice_retain(ms_lattice_t *l)
 int
 ms_lattice_free(ms_lattice_t *l)
 {
+    int i;
     if (l == NULL)
         return 0;
     if (--l->refcount > 0)
@@ -170,8 +171,16 @@ ms_lattice_free(ms_lattice_t *l)
 
     ckd_free(l->lmhist);
     ckd_free(l->lathist);
+    for (i = 0; i < garray_size(l->node_list); ++i) {
+        ms_latnode_t *node = ms_lattice_get_node_idx(l, i);
+        garray_free(node->entries);
+        garray_free(node->exits);
+    }
     garray_free(l->node_list);
+    garray_free(l->link_list);
     nodeid_map_free(l->node_map);
+    garray_free(l->lms);
+    ngram_trie_free(l->lmsids);
     logmath_free(l->lmath);
     dict_free(l->dict);
     ckd_free(l);
@@ -639,10 +648,12 @@ ms_lattice_read_htk(ms_lattice_t *l, FILE *fh, int frate)
     }
     l->start_idx = start_idx;
     l->end_idx = end_idx;
+    garray_free(wptr);
     return 0;
 
 error_out:
     lineiter_free(li);
+    garray_free(wptr);
     return -1;
 }
 
@@ -1108,6 +1119,7 @@ merge_exits(ms_lattice_t *l, ms_latnode_t *new,
                 == dict_basewid(l->dict, zlink->wid)
                 && ydestwid == zdestwid
                 && ysrc->id.sf == zsrc->id.sf) {
+                /* Tropical semiring assumption... */
                 if (ylink->ascr > zlink->ascr)
                     zlink->ascr = ylink->ascr;
                 duplicate = TRUE;
@@ -1194,7 +1206,6 @@ create_lmstate_node(ms_lattice_t *l, ms_latnode_t *node,
     new = ms_lattice_node_init(l, node->id.sf, lmstate);
     /* That could cause memory to move so update this pointer. */
     node = ms_lattice_get_node_idx(l, nodeid);
-    merge_exits(l, new, node, lscr);
 
     /* If this is a final node then also link it to the new
      * final node created above. */
@@ -1261,6 +1272,8 @@ build_lmstate(ms_lattice_t *l, ngram_model_t *lm,
                 lmstate = ms_lattice_lmstate_init(l, l->lathist[0],
                                                   l->lathist + 1, n_hist - 1);
             ngram_iter_get(ni, out_lscr, NULL);
+            /* We are the knights who say... */
+            ngram_iter_free(ni);
             break;
         }
         else {
@@ -1269,8 +1282,10 @@ build_lmstate(ms_lattice_t *l, ngram_model_t *lm,
              * find an N-Gram or we run out of history. */
             assert(n_hist > 0);
             if ((ni = ngram_ng_iter
-                 (lm, l->lmhist[0], l->lmhist + 1, n_hist - 1)) != NULL)
+                 (lm, l->lmhist[0], l->lmhist + 1, n_hist - 1)) != NULL) {
                 ngram_iter_get(ni, NULL, out_bowt);
+                ngram_iter_free(ni);
+            }
             else
                 *out_bowt = 0;
             if (--n_hist == 0)
@@ -1278,6 +1293,60 @@ build_lmstate(ms_lattice_t *l, ngram_model_t *lm,
         }
     }
     return lmstate;
+}
+
+static ms_latlink_t *
+expand_entry(ms_lattice_t *l, int32 nodeid, int32 linkid,
+             int32 endid, int32 lmstate, int32 lscr, int32 bowt)
+{
+    ms_latlink_t *link;
+    ms_latnode_t *node, *new;
+    int k, duplicate;
+
+    /* If we found an appropriate non-null language model
+     * state, look for a node with the desired language model
+     * state in this frame, and create one if it does not yet
+     * exist. */
+    node = ms_lattice_get_node_idx(l, nodeid);
+    /* FIXME: This is problematic because we have abused lmstates for
+     * node words.  I can't think of a situation where that would
+     * actually cause a problem but it could happen. */
+    new = ms_lattice_get_node_id(l, node->id.sf, lmstate);
+    if (new == NULL) {
+        new = create_lmstate_node(l, node, lmstate, lscr, endid);
+        /* Creating a node can move memory so update this pointer. */
+        node = ms_lattice_get_node_idx(l, nodeid);
+    }
+    merge_exits(l, new, node, lscr);
+    /* This incoming link might be a duplicate of one already
+     * entering the given node, if so, mark it as such, so we
+     * can remove it below. */
+    duplicate = FALSE;
+    link = garray_ptr(l->link_list, ms_latlink_t, linkid);
+    for (k = 0; new->entries
+             && k < ms_latnode_n_entries(new); ++k) {
+        ms_latlink_t *xlink = ms_latnode_get_entry(l, new, k);
+        if (link->wid == xlink->wid && link->src == xlink->src) {
+            /* Tropical semiring assumption... */
+            if (link->ascr > xlink->ascr)
+                xlink->ascr = link->ascr;
+            duplicate = TRUE;
+        }
+    }
+    if (duplicate)
+        return NULL;
+    else {
+        ms_latlink_t *link;
+        /* Otherwise, repoint link at the newly created/found
+         * node and add the necessary backoff weight, if any. */
+        link = garray_ptr(l->link_list, ms_latlink_t, linkid);
+        link->dest = ms_lattice_get_idx_node(l, new);
+        link->lscr += bowt;
+        if (new->entries == NULL)
+            new->entries = garray_init(0, sizeof(int32));
+        garray_append(new->entries, &linkid);
+        return link;
+    }
 }
 
 static void
@@ -1299,6 +1368,7 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
      * nodes, and which are deleted as duplicates. */
     /* Expand this node with unique incoming N-gram histories. */
     for (j = 0; j < n_entries; ++j) {
+        ms_latlink_t *link;
         int32 lscr, bowt;
         int32 lmstate;
         int32 linkid;
@@ -1308,62 +1378,13 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
         lmstate = build_lmstate(l, lm, node,
                                 node_lmwid, linkid,
                                 &lscr, &bowt);
+        /* This means the source of this arc is a deleted node. */
         if (lmstate == 0xdeadbeef)
             continue;
 
-        /* FIXME: This is problematic because we have abused lmstates
-         * for node words.  I can't think of a situation where that
-         * would actually cause a problem but it could happen. */
-        if (lmstate != -1) {
-            ms_latlink_t *link;
-            ms_latnode_t *new;
-            int k, duplicate;
-            /* If we found an appropriate non-null language model
-             * state, look for a node with the desired language model
-             * state in this frame, and create one if it does not yet
-             * exist. */
-            new = ms_lattice_get_node_id(l, node->id.sf, lmstate);
-            node = ms_lattice_get_node_idx(l, nodeid);
-            if (new == NULL) {
-                new = create_lmstate_node(l, node, lmstate, lscr, endid);
-            }
-            else {
-                /* Copy outgoing arcs from original node to the
-                 * newly discovered node. */
-                merge_exits(l, new, node, lscr);
-            }
-            /* This incoming link might be a duplicate of one already
-             * entering the given node, if so, mark it as such, so we
-             * can remove it below. */
-            duplicate = FALSE;
-            link = garray_ptr(l->link_list, ms_latlink_t, linkid);
-            for (k = 0; new->entries
-                     && k < ms_latnode_n_entries(new); ++k) {
-                ms_latlink_t *xlink = ms_latnode_get_entry(l, new, k);
-                if (link->wid == xlink->wid && link->src == xlink->src) {
-                    /* Tropical semiring assumption... */
-                    if (link->ascr > xlink->ascr)
-                        xlink->ascr = link->ascr;
-                    duplicate = TRUE;
-                }
-            }
-            if (duplicate) {
-                garray_append(duplicate_entries, &linkid);
-            }
-            else {
-                ms_latlink_t *link;
-                /* Otherwise, repoint link at the newly created/found
-                 * node and add the necessary backoff weight, if any. */
-                link = garray_ptr(l->link_list, ms_latlink_t, linkid);
-                link->dest = ms_lattice_get_idx_node(l, new);
-                link->lscr += bowt;
-                if (new->entries == NULL)
-                    new->entries = garray_init(0, sizeof(int32));
-                garray_append(new->entries, &linkid);
-            }
-        }
+        if (lmstate != -1)
+            link = expand_entry(l, nodeid, linkid, endid, lmstate, lscr, bowt);
         else {
-            ms_latlink_t *link;
             /* If we run out of history do nothing, the original node
              * becomes a null backoff node, and this incoming arc gets
              * a backoff weight added to it. */
@@ -1371,6 +1392,8 @@ expand_node(ms_lattice_t *l, ngram_model_t *lm,
             link->lscr += bowt;
             garray_append(keep_entries, &linkid);
         }
+        if (link == NULL)
+            garray_append(duplicate_entries, &linkid);
     }
 
     /* Remove duplicate incoming arcs. */
