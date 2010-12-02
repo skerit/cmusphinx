@@ -74,7 +74,7 @@ lm3g_bg_score(NGRAM_MODEL_TYPE *model,
     bigram_t *bg;
 
     if (lw1 < 0 || model->base.n < 2) {
-        *n_used = 1;
+        if (n_used) *n_used = 1;
         return model->lm3g.unigrams[lw2].prob1.l;
     }
 
@@ -84,12 +84,12 @@ lm3g_bg_score(NGRAM_MODEL_TYPE *model,
 
     if ((i = find_bg(bg, n, lw2)) >= 0) {
         /* Access mode = bigram */
-        *n_used = 2;
+        if (n_used) *n_used = 2;
         score = model->lm3g.prob2[bg[i].prob2].l;
     }
     else {
         /* Access mode = unigram */
-        *n_used = 1;
+        if (n_used) *n_used = 1;
         score = model->lm3g.unigrams[lw1].bo_wt1.l + model->lm3g.unigrams[lw2].prob1.l;
     }
 
@@ -192,7 +192,7 @@ lm3g_tg_score(NGRAM_MODEL_TYPE *model, int32 lw1,
     tg = tginfo->tg;
     if ((i = find_tg(tg, n, lw3)) >= 0) {
         /* Access mode = trigram */
-        *n_used = 3;
+        if (n_used) *n_used = 3;
         score = model->lm3g.prob3[tg[i].prob3].l;
     }
     else {
@@ -212,8 +212,7 @@ lm3g_template_score(ngram_model_t *base, int32 wid,
     switch (n_hist) {
     case 0:
         /* Access mode: unigram */
-        if (n_used)
-            *n_used = 1;
+        if (n_used) *n_used = 1;
         return model->lm3g.unigrams[wid].prob1.l;
     case 1:
         return lm3g_bg_score(model, history[0], wid, n_used);
@@ -235,7 +234,7 @@ lm3g_template_raw_score(ngram_model_t *base, int32 wid,
     switch (n_hist) {
     case 0:
         /* Access mode: unigram */
-        *n_used = 1;
+        if (n_used) *n_used = 1;
         /* Undo insertion penalty. */
         score = model->lm3g.unigrams[wid].prob1.l - base->log_wip;
         /* Undo language weight. */
