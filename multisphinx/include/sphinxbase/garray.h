@@ -58,6 +58,8 @@ extern "C" {
 
 typedef struct garray_s garray_t;
 
+#define GARRAY_INVALID_INDEX ((size_t)-1)
+
 /**
  * Create a new garray_t of the given size.
  */
@@ -204,7 +206,7 @@ size_t garray_find_first(garray_t *gar, void *ent);
 void garray_heapify(garray_t *gar);
 
 /**
-pnnnnnnnnnnnnn * Sort an array in-place using heapsort.
+ * Sort an array in-place using heapsort.
  */
 void garray_sort(garray_t *gar);
 
@@ -281,6 +283,11 @@ size_t garray_move(garray_t *gar, size_t dest, size_t src, size_t n_ent);
  * Get a pointer to an element in the array.
  */
 void *garray_void(garray_t *gar, size_t idx);
+
+/**
+ * Get the element index of a pointer in the array.
+ */
+size_t garray_idx(garray_t *gar, void *ent);
 
 /**
  * Get the underlying data store.

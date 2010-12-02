@@ -141,3 +141,4 @@ test/unit/test_lattice/test_htk_lattice
 test/unit/test_lattice/test_build_lattice
 test/unit/test_lattice/test_forward_backward
 test/unit/test_lattice/test_partial_backward
+test/unit/test_lattice/test_htk_lattice.slf

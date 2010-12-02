@@ -151,6 +151,19 @@ garray_void(garray_t *gar, size_t idx)
     return (char *)gar->ent + (idx - gar->base_idx) * gar->ent_size;
 }
 
+size_t
+garray_idx(garray_t *gar, void *ent)
+{
+    size_t diff;
+
+    if (ent < gar->ent)
+        return GARRAY_INVALID_INDEX;
+    diff = (char *)ent - (char *)gar->ent;
+    if (diff % gar->ent_size != 0)
+        return GARRAY_INVALID_INDEX;
+    return diff / gar->ent_size + gar->base_idx;
+}
+
 void *
 garray_append(garray_t *gar, void const *ent)
 {

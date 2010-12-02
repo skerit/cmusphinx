@@ -425,6 +425,27 @@ dict_word2basestr(char *word)
     return -1;
 }
 
+int
+dict_altid(dict_t *d, int32 wid)
+{
+    char const *basestr, *wordstr, *c;
+
+    if (wid < 0 || wid >= d->n_word)
+        return 0;
+
+    if (wid == dict_basewid(d, wid))
+        return 1;
+    /* FIXME: the order in which they appear in nextalt is unrelated
+     * to the actual alterate indices in the words... */
+    wordstr = dict_wordstr(d, wid);
+    basestr = dict_basestr(d, wid);
+    assert(strlen(wordstr) > strlen(basestr));
+    c = wordstr + strlen(basestr);
+    assert(*c == '(');
+    ++c;
+    return atoi(c);
+}
+
 dict_t *
 dict_retain(dict_t *d)
 {

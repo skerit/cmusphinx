@@ -17,6 +17,9 @@ main(int argc, char *argv[])
 	TEST_ASSERT(l = ms_lattice_init(lmath, NULL));
 	TEST_ASSERT(fh = fopen(TESTDATADIR "/050c0103.slf", "r"));
 	TEST_ASSERT(0 == ms_lattice_read_htk(l, fh, 100));
+	TEST_ASSERT(0 == fclose(fh))
+	TEST_ASSERT(fh = fopen("test_htk_lattice.slf", "w"));
+	TEST_ASSERT(0 == ms_lattice_write_htk(l, fh, 100));
 
 	ms_lattice_free(l);
 	return 0;

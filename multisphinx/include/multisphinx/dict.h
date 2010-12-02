@@ -193,6 +193,11 @@ const char *dict_ciphone_str(dict_t *d,	/**< In: Dictionary to look up */
 int32 dict_word2basestr(char *word);
 
 /**
+ * Get the pronunciation alternative index for a word
+ */
+int dict_altid(dict_t *d, int32 wid);
+
+/**
  * Retain a pointer to an dict_t.
  */
 dict_t *dict_retain(dict_t *d);

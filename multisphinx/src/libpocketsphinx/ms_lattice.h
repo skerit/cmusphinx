@@ -90,6 +90,12 @@ typedef struct ms_lattice_s {
      * Mapping of lattice node IDs to node list indices.
      */
     nodeid_map_t *node_map;
+    int32 start_idx;
+    int32 end_idx;
+    /**
+     * Total probability of this lattice (normalizer for posteriors)
+     */
+    int32 norm;
 } ms_lattice_t;
 
 /**
@@ -107,6 +113,8 @@ typedef struct ms_latnode_s {
  */
 typedef struct ms_latlink_t {
     int32 wid;    /**< Word ID. */
+    int32 src;    /**< Source node ID. */
+    int32 dest;   /**< Destination node ID. */
     int32 ascr;   /**< Acoustic score. */
     int32 lscr;   /**< Language score. */
     int32 alpha;  /**< Forward log-probability. */
