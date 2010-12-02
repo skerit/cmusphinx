@@ -227,12 +227,10 @@ void ms_latnode_unlink(ms_lattice_t *l, ms_latnode_t *node);
 void ms_latlink_unlink(ms_lattice_t *l, ms_latlink_t *link);
 
 /**
- * Perform bigram expansion on a lattice and assign language model
+ * Perform N-Gram expansion on a lattice and assign language model
  * probabilities.
- *
- * FIXME: This needs to also support trigrams.
  */
-int ms_lattice_bigram_expand(ms_lattice_t *l, ngram_model_t *lm);
+int ms_lattice_expand(ms_lattice_t *l, ngram_model_t *lm);
 
 /**
  * Run the forward algorithm on a lattice.

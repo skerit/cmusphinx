@@ -838,7 +838,7 @@ ms_latlink_unlink(ms_lattice_t *l, ms_latlink_t *link)
 }
 
 int
-ms_lattice_bigram_expand(ms_lattice_t *l, ngram_model_t *lm)
+ms_lattice_expand(ms_lattice_t *l, ngram_model_t *lm)
 {
     ms_latnode_t *end;
     ms_latnode_iter_t *itor;
