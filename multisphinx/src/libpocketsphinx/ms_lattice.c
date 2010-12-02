@@ -49,11 +49,15 @@
 #include "ms_lattice.h"
 
 ms_lattice_t *
-ms_lattice_init(logmath_t *lmath)
+ms_lattice_init(logmath_t *lmath, dict_t *dict)
 {
     ms_lattice_t *l = ckd_calloc(1, sizeof(*l));
     l->refcount = 1;
     l->lmath = logmath_retain(lmath);
+    if (dict)
+        l->dict = dict_retain(dict);
+    else
+        l->dict = dict_init(NULL, NULL);
     l->node_list = garray_init(0, sizeof(ms_latnode_t));
     l->node_map = nodeid_map_init();
     return l;
@@ -77,23 +81,30 @@ ms_lattice_free(ms_lattice_t *l)
     garray_free(l->node_list);
     nodeid_map_free(l->node_map);
     logmath_free(l->lmath);
+    dict_free(l->dict);
     ckd_free(l);
     return 0;
 }
 
-int32
-ms_lattice_node(ms_lattice_t *l, int32 lmstate, int sf)
+ms_latnode_t *
+ms_lattice_node_init(ms_lattice_t *l, int sf, int32 lmstate)
 {
+    return NULL;
 }
 
 ms_latnode_t *
 ms_lattice_get_node_idx(ms_lattice_t *l, int32 idx)
 {
+    return garray_ptr(l->node_list, ms_latnode_t, idx);
 }
 
 ms_latnode_t *
-ms_lattice_get_node_id(ms_lattice_t *l, nodeid_t id)
+ms_lattice_get_node_id(ms_lattice_t *l, int sf, int32 lmstate)
 {
+    int32 idx = nodeid_map_map(l->node_map, sf, lmstate);
+    if (idx == -1)
+        return NULL;
+    return ms_lattice_get_node_idx(l, idx);
 }
 
 ms_latnode_t *
@@ -114,9 +125,13 @@ ms_lattice_link(ms_lattice_t *l,
 }
 
 static int
-process_htk_node_line(ms_lattice_t *l, lineiter_t *li, garray_t *wptr, int n_wptr)
+process_htk_node_line(ms_lattice_t *l, lineiter_t *li,
+                      garray_t *wptr, int n_wptr, int frate)
 {
-    int i;
+    ms_latnode_t *n = NULL;
+    int32 wid;
+    int i, sf, alt;
+
     for (i = 0; i < n_wptr; ++i) {
         char *f = garray_ent(wptr, char *, i);
         char *e = strchr(f, '=');
@@ -127,12 +142,18 @@ process_htk_node_line(ms_lattice_t *l, lineiter_t *li, garray_t *wptr, int n_wpt
         }
         *e++ = '\0';
         if (0 == strcmp(f, "I")) {
+            int nodeidx = atoi(e);
+            garray_expand(l->node_list, nodeidx + 1);
+            n = garray_ptr(l->node_list, ms_latnode_t, nodeidx);
         }
         else if (0 == strcmp(f, "t")) {
+            sf = (int)(atof_c(e) * frate);
         }
         else if (0 == strcmp(f, "W")) {
+            wid = dict_wordid(l->dict, e);
         }
         else if (0 == strcmp(f, "v")) {
+            alt = atoi(e);
         }
         else {
             E_WARN("Unknown field type %s in line %d\n",
@@ -144,7 +165,11 @@ process_htk_node_line(ms_lattice_t *l, lineiter_t *li, garray_t *wptr, int n_wpt
 static int
 process_htk_arc_line(ms_lattice_t *l, lineiter_t *li, garray_t *wptr, int n_wptr)
 {
-    int i;
+    ms_latnode_t *src = NULL, *dest = NULL;
+    ms_latlink_t *arc = NULL;
+    int32 wid, ascr, prob;
+    int i, alt;
+
     for (i = 0; i < n_wptr; ++i) {
         char *f = garray_ent(wptr, char *, i);
         char *e = strchr(f, '=');
@@ -155,14 +180,22 @@ process_htk_arc_line(ms_lattice_t *l, lineiter_t *li, garray_t *wptr, int n_wptr
         }
         *e++ = '\0';
         if (0 == strcmp(f, "J")) {
+            /* Link ID is irrelevant (for now at least). */
         }
         else if (0 == strcmp(f, "S")) {
+            src = ms_lattice_get_node_idx(l, atoi(e));
         }
         else if (0 == strcmp(f, "E")) {
+            dest = ms_lattice_get_node_idx(l, atoi(e));
+        }
+        else if (0 == strcmp(f, "W")) {
+            wid = dict_wordid(l->dict, e);
         }
         else if (0 == strcmp(f, "a")) {
+            prob = logmath_ln_to_log(l->lmath, atof_c(e));
         }
         else if (0 == strcmp(f, "p")) {
+            prob = logmath_log(l->lmath, atof_c(e));
         }
         else {
             E_WARN("Unknown field type %s in line %d\n",
@@ -173,7 +206,7 @@ process_htk_arc_line(ms_lattice_t *l, lineiter_t *li, garray_t *wptr, int n_wptr
 }
 
 int
-ms_lattice_read_htk(ms_lattice_t *l, FILE *fh)
+ms_lattice_read_htk(ms_lattice_t *l, FILE *fh, int frate)
 {
     lineiter_t *li;
     garray_t *wptr;
@@ -226,7 +259,7 @@ ms_lattice_read_htk(ms_lattice_t *l, FILE *fh)
             for (i = 0; i < n_wptr; ++i) {
                 char *f = garray_ent(wptr, char *, i);
                 if (0 == strncmp(f, "I=", 2)) {
-                    if (process_htk_node_line(l, li, wptr, n_wptr) < 0)
+                    if (process_htk_node_line(l, li, wptr, n_wptr, frate) < 0)
                         goto error_out;
                     break;
                 }
@@ -258,7 +291,7 @@ error_out:
 }
 
 int
-ms_lattice_write_htk(ms_lattice_t *l, FILE *fh)
+ms_lattice_write_htk(ms_lattice_t *l, FILE *fh, int frate)
 {
 }
 

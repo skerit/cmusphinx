@@ -91,7 +91,8 @@ latgen_search_decode(ps_search_t *base)
     E_INFO("latgen: waiting for arc buffer start\n");
     if (arc_buffer_consumer_start_utt(latgen->input_arcs, -1) < 0)
         return -1;
-    latgen->output_lattice = ms_lattice_init(ps_search_acmod(base)->lmath);
+    latgen->output_lattice = ms_lattice_init(ps_search_acmod(base)->lmath,
+                                             ps_search_dict(base));
     while (arc_buffer_consumer_wait(latgen->input_arcs, -1) >= 0) {
         /* Process any incoming arcs. */
         ptmr_start(&base->t);

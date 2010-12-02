@@ -48,6 +48,8 @@
 #include <sphinxbase/garray.h>
 #include <sphinxbase/logmath.h>
 
+#include <multisphinx/dict.h>
+
 #include "nodeid_map.h"
 
 /**
@@ -59,6 +61,10 @@ typedef struct ms_lattice_s {
      * Log base calculation.
      */
     logmath_t *lmath;
+    /**
+     * Dictionary for mapping language model states.
+     */
+    dict_t *dict;
     /**
      * List of lattice nodes
      *
@@ -97,14 +103,14 @@ typedef struct ms_latlink_t {
     int32 beta;   /**< Backward log-probability. */
 } ms_latlink_t;
 
-ms_lattice_t *ms_lattice_init(logmath_t *lmath);
+ms_lattice_t *ms_lattice_init(logmath_t *lmath, dict_t *dict);
 ms_lattice_t *ms_lattice_retain(ms_lattice_t *l);
 int ms_lattice_free(ms_lattice_t *l);
 
 /**
  * Create a node.
  */
-int32 ms_lattice_node(ms_lattice_t *l, int32 lmstate, int sf);
+ms_latnode_t *ms_lattice_node_init(ms_lattice_t *l, int sf, int32 lmstate);
 
 /**
  * Get a node by index.
@@ -114,7 +120,7 @@ ms_latnode_t *ms_lattice_get_node_idx(ms_lattice_t *l, int32 idx);
 /**
  * Get a node by ID.
  */
-ms_latnode_t *ms_lattice_get_node_id(ms_lattice_t *l, nodeid_t id);
+ms_latnode_t *ms_lattice_get_node_id(ms_lattice_t *l, int sf, int32 lmstate);
 
 /**
  * Get the start node.
@@ -136,12 +142,12 @@ ms_latlink_t *ms_lattice_link(ms_lattice_t *l,
 /**
  * Read a lattice in HTK format.
  */
-int ms_lattice_read_htk(ms_lattice_t *l, FILE *fh);
+int ms_lattice_read_htk(ms_lattice_t *l, FILE *fh, int frate);
 
 /**
  * Write a lattice in HTK format.
  */
-int ms_lattice_write_htk(ms_lattice_t *l, FILE *fh);
+int ms_lattice_write_htk(ms_lattice_t *l, FILE *fh, int frate);
 
 /**
  * Write a lattice in DOT format.
