@@ -57,9 +57,10 @@ arc_buffer_init(char const *name, bptbl_t *input_bptbl, int keep_scores)
     fab->scores = keep_scores;
     if (keep_scores) {
         fab->rc_deltas = garray_init(0, sizeof(rcdelta_t));
-        fab->arcs = garray_init(0, sizeof(sarc_t));
-        fab->arc_size = sizeof(sarc_t)
-            + bitvec_size(bin_mdef_n_ciphone(input_bptbl->d2p->mdef));
+        fab->max_n_rc = bin_mdef_n_ciphone(input_bptbl->d2p->mdef);
+        fab->arc_size = sizeof(sarc_t) + sizeof(bitvec_t) * bitvec_size(fab->max_n_rc);
+        fab->arcs = garray_init(0, fab->arc_size);
+        fab->tmp_rcscores = ckd_calloc(fab->max_n_rc, sizeof(*fab->tmp_rcscores));
     }
     else {
         fab->arcs = garray_init(0, sizeof(arc_t));
@@ -92,6 +93,7 @@ arc_buffer_free(arc_buffer_t *fab)
     sbevent_free(fab->evt);
     sbmtx_free(fab->mtx);
     bptbl_free(fab->input_bptbl);
+    ckd_free(fab->tmp_rcscores);
     ckd_free(fab->name);
     ckd_free(fab);
     return 0;
@@ -145,23 +147,45 @@ arc_buffer_add_bps(arc_buffer_t *fab,
     n_arcs = 0;
     next_idx = -1;
     for (idx = start; idx < end; ++idx) {
-        arc_t arc;
+        sarc_t sarc;
         bp_t ent;
 
         /* Convert it to an arc. */
         bptbl_get_bp(bptbl, idx, &ent);
-        arc.src = bptbl_sf(bptbl, idx);
-        arc.dest = ent.frame;
+        sarc.arc.wid = ent.wid;
+        sarc.arc.src = bptbl_sf(bptbl, idx);
+        sarc.arc.dest = ent.frame;
         /* If it's inside the appropriate frame span, add it. */
-        if (arc.src >= fab->active_sf && arc.src < fab->next_sf) {
-            arc.wid = ent.wid;
-            garray_append(fab->arcs, &arc);
+        if (sarc.arc.src >= fab->active_sf && sarc.arc.src < fab->next_sf) {
+            /* Have to do this with a pointer because of the variable
+             * length array rc_bits. */
+            sarc_t *sp = garray_append(fab->arcs, &sarc);
+
+            if (fab->scores) {
+                /* Compress and add right context deltas.  FIXME: We
+                 * can do this more efficiently using the guts of
+                 * bptbl_t now that there are no thread issues. */
+                int i, rcsize = bptbl_get_rcscores(bptbl, idx, fab->tmp_rcscores);
+                sp->score = ent.score;
+                sp->rc_idx = garray_next_idx(fab->rc_deltas);
+                bitvec_clear_all(sp->rc_bits, fab->max_n_rc);
+                for (i = 0; i < rcsize; ++i) {
+                    if (fab->tmp_rcscores[i] != NO_RC) {
+                        rcdelta_t delta;
+                        assert(fab->tmp_rcscores[i] <= ent.score);
+                        bitvec_set(sp->rc_bits, i);
+                        delta = ent.score - fab->tmp_rcscores[i];
+                        garray_append(fab->rc_deltas, &delta);
+                    }
+                }
+            }
             /* Increment the frame counter for its start frame. */
-            ++garray_ent(fab->sf_idx, int, arc.src);
+            ++garray_ent(fab->sf_idx, int, sarc.arc.src);
             ++n_arcs;
         }
         else {
-            if (arc.src >= fab->active_sf && next_idx == -1)
+            /* Find the first index of an arc outside the span. */
+            if (sarc.arc.src >= fab->active_sf && next_idx == -1)
                 next_idx = idx;
         }
     }
@@ -299,7 +323,7 @@ arc_buffer_iter(arc_buffer_t *fab, int sf)
 arc_t *
 arc_next(arc_buffer_t *fab, arc_t *ab)
 {
-    ab += 1;
+    ab = (arc_t *)((char *)ab + fab->arc_size);
     if (ab >= garray_ptr(fab->arcs, arc_t, fab->active_arc))
         return NULL;
     return ab;
@@ -331,6 +355,8 @@ arc_buffer_release(arc_buffer_t *fab, int first_sf)
     garray_set_base(fab->sf_idx, first_sf);
     garray_shift_from(fab->arcs, next_first_arc);
     garray_set_base(fab->arcs, next_first_arc);
+    /* FIXME: Have to also release rc deltas, but they are not in the
+     * same order so this may not be entirely safe. */
     arc_buffer_unlock(fab);
 
     return 0;

@@ -72,6 +72,8 @@ typedef struct arc_buffer_s {
     garray_t *sf_idx;
     garray_t *rc_deltas;
     bptbl_t *input_bptbl;
+    int32 *tmp_rcscores;
+    int max_n_rc;
     int final;
     int scores;
     int arc_size;

@@ -34,7 +34,7 @@ main(int argc, char *argv[])
 	dict = dict_init(config, mdef);
 	d2p = dict2pid_build(mdef, dict);
 
-	bptbl = bptbl_init(d2p, 10, 10);
+	bptbl = bptbl_init("test", d2p, 10, 10);
 
 	/* Enter a few bps starting at frame zero. */
 	fi = bptbl_push_frame(bptbl, NO_BP);
