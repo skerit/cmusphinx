@@ -66,6 +66,10 @@ typedef struct ms_lattice_s {
      */
     dict_t *dict;
     /**
+     * Do we create new dictionary entries as needed?
+     */
+    int autodict;
+    /**
      * List of lattice nodes
      *
      * Lattice nodes are identified by the combination of language model

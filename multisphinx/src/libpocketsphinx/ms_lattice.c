@@ -54,10 +54,14 @@ ms_lattice_init(logmath_t *lmath, dict_t *dict)
     ms_lattice_t *l = ckd_calloc(1, sizeof(*l));
     l->refcount = 1;
     l->lmath = logmath_retain(lmath);
-    if (dict)
+    if (dict) {
         l->dict = dict_retain(dict);
-    else
+        l->autodict = FALSE;
+    }
+    else {
         l->dict = dict_init(NULL, NULL);
+        l->autodict = TRUE;
+    }
     l->node_list = garray_init(0, sizeof(ms_latnode_t));
     l->node_map = nodeid_map_init();
     return l;
@@ -125,12 +129,45 @@ ms_lattice_link(ms_lattice_t *l,
 }
 
 static int
+get_or_create_wid(ms_lattice_t *l, char *word, int alt)
+{
+    int32 wid;
+
+    /* HACK, but what can we do... */
+    if (0 == strcmp(word, "!SENT_END"))
+        strcpy(word, "</s>");
+    if (0 == strcmp(word, "!SENT_START"))
+        strcpy(word, "<s>");
+    /* NOTE: In reality we want to collapse alternate pronunciations,
+     * but at this point it's best to be faithful to the input.
+     * Therefore we include the alternate pronunciation in the
+     * language model state, even though that makes no sense in the
+     * grand scheme of things. */
+    if (alt != 1) {
+        /* First make sure the base word exists. */
+        wid = dict_wordid(l->dict, word);
+        if (wid == -1 && l->autodict)
+            wid = dict_add_word(l->dict, word, NULL, 0);
+        if (wid == -1) {
+            E_ERROR("No base word for %s(%d) in dictionary\n", word, alt);
+            return -1;
+        }
+        sprintf(word + strlen(word), "(%d)", alt);
+    }
+    wid = dict_wordid(l->dict, word);
+    if (wid == -1 && l->autodict)
+        wid = dict_add_word(l->dict, word, NULL, 0);
+    return wid;
+}
+
+static int
 process_htk_node_line(ms_lattice_t *l, lineiter_t *li,
                       garray_t *wptr, int n_wptr, int frate)
 {
-    ms_latnode_t *n = NULL;
-    int32 wid;
-    int i, sf, alt;
+    ms_latnode_t *node = NULL;
+    char *word = NULL;
+    int32 nodeidx, wid;
+    int i, sf, alt = 1;
 
     for (i = 0; i < n_wptr; ++i) {
         char *f = garray_ent(wptr, char *, i);
@@ -138,33 +175,59 @@ process_htk_node_line(ms_lattice_t *l, lineiter_t *li,
         if (e == NULL) {
             E_ERROR("Invalid field %s in line %d\n",
                     f, (int)li->lineno);
+            ckd_free(word);
             return -1;
         }
         *e++ = '\0';
         if (0 == strcmp(f, "I")) {
-            int nodeidx = atoi(e);
+            nodeidx = atoi(e);
             garray_expand(l->node_list, nodeidx + 1);
-            n = garray_ptr(l->node_list, ms_latnode_t, nodeidx);
+            node = garray_ptr(l->node_list, ms_latnode_t, nodeidx);
         }
         else if (0 == strcmp(f, "t")) {
             sf = (int)(atof_c(e) * frate);
         }
         else if (0 == strcmp(f, "W")) {
-            wid = dict_wordid(l->dict, e);
+            word = ckd_calloc(1, strlen(e) + 16);
+            strcpy(word, e);
         }
         else if (0 == strcmp(f, "v")) {
             alt = atoi(e);
+            if (alt < 1 || alt > 255) {
+                E_ERROR("Invalid pronunciation alternate %s at line %d\n",
+                        e, (int)li->lineno);
+                ckd_free(word);
+                return -1;
+            }
         }
         else {
             E_WARN("Unknown field type %s in line %d\n",
                    f, (int)li->lineno);
         }
     }
+    if (node == NULL) {
+        E_ERROR("Found no node ID in line %d\n", (int)li->lineno);
+        ckd_free(word);
+        return -1;
+    }
+    wid = get_or_create_wid(l, word, alt);
+    if (wid == -1) {
+        E_ERROR("Failed to add word %s to dictionary\n", word);
+        ckd_free(word);
+        return -1;
+    }
+    node->id.sf = sf;
+    node->id.lmstate = wid; /* This may get updated later. */
+    nodeid_map_add(l->node_map, sf, wid, nodeidx);
+
+    ckd_free(word);
+    return 0;
 }
 
 static int
 process_htk_arc_line(ms_lattice_t *l, lineiter_t *li, garray_t *wptr, int n_wptr)
 {
+    char *word = NULL;
     ms_latnode_t *src = NULL, *dest = NULL;
     ms_latlink_t *arc = NULL;
     int32 wid, ascr, prob;
@@ -176,6 +239,7 @@ process_htk_arc_line(ms_lattice_t *l, lineiter_t *li, garray_t *wptr, int n_wptr
         if (e == NULL) {
             E_ERROR("Invalid field %s in line %d\n",
                     f, (int)li->lineno);
+            ckd_free(word);
             return -1;
         }
         *e++ = '\0';
@@ -189,10 +253,20 @@ process_htk_arc_line(ms_lattice_t *l, lineiter_t *li, garray_t *wptr, int n_wptr
             dest = ms_lattice_get_node_idx(l, atoi(e));
         }
         else if (0 == strcmp(f, "W")) {
-            wid = dict_wordid(l->dict, e);
+            word = ckd_calloc(1, strlen(e) + 16);
+            strcpy(word, e);
+        }
+        else if (0 == strcmp(f, "v")) {
+            alt = atoi(e);
+            if (alt < 1 || alt > 255) {
+                E_ERROR("Invalid pronunciation alternate %s at line %d\n",
+                        e, (int)li->lineno);
+                ckd_free(word);
+                return -1;
+            }
         }
         else if (0 == strcmp(f, "a")) {
-            prob = logmath_ln_to_log(l->lmath, atof_c(e));
+            ascr = logmath_ln_to_log(l->lmath, atof_c(e));
         }
         else if (0 == strcmp(f, "p")) {
             prob = logmath_log(l->lmath, atof_c(e));
@@ -202,6 +276,8 @@ process_htk_arc_line(ms_lattice_t *l, lineiter_t *li, garray_t *wptr, int n_wptr
                    f, (int)li->lineno);
         }
     }
+
+    ckd_free(word);
     return 0;
 }
 
