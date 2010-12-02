@@ -43,6 +43,7 @@
 #include "ps_search.h"
 #include "arc_buffer.h"
 #include "nodeid_map.h"
+#include "ms_lattice.h"
 
 static int latgen_search_decode(ps_search_t *base);
 static int latgen_search_free(ps_search_t *base);
@@ -62,51 +63,8 @@ static ps_searchfuncs_t latgen_funcs = {
 typedef struct latgen_search_s {
     ps_search_t base;
     arc_buffer_t *input_arcs;
+    ms_lattice_t *output_lattice;
 } latgen_search_t;
-
-/**
- * Word lattice.
- */
-typedef struct ms_lattice_s {
-    int refcount;
-    /**
-     * List of lattice nodes
-     *
-     * Lattice nodes are identified by the combination of language model
-     * state and start frame - because the sort order may change in the
-     * lattice structure we maintain an auxiliary table to preserve this
-     * mapping.
-     */
-    garray_t *node_list;
-    /**
-     * Mapping of lattice node IDs to node list indices.
-     */
-    nodeid_map_t *node_map;
-    /**
-     * Node IDs for start and end node. 
-     */
-    int32 start_node, end_node;
-} ms_lattice_t;
-
-/**
- * Lattice node structure.
- */
-typedef struct ms_latnode_s {
-    nodeid_t id;
-    int16 fan;     /**< Fan-in count for traversal. */
-    garray_t *exits;
-    garray_t *entries;
-} ms_latnode_t;
-
-typedef struct ms_latlink_t {
-    int32 wid;    /**< Word ID. */
-    int32 src;    /**< Source node ID. */
-    int32 dest;   /**< Destination node ID. */
-    int32 ascr;   /**< Acoustic score. */
-    int32 lscr;   /**< Language score. */
-    int32 alpha;  /**< Forward log-probability. */
-    int32 beta;   /**< Backward log-probability. */
-} ms_latlink_t;
 
 ps_search_t *
 latgen_init(cmd_ln_t *config,
@@ -133,7 +91,7 @@ latgen_search_decode(ps_search_t *base)
     E_INFO("latgen: waiting for arc buffer start\n");
     if (arc_buffer_consumer_start_utt(latgen->input_arcs, -1) < 0)
         return -1;
-    /* Create an incomplete node for the first frame. */
+    latgen->output_lattice = ms_lattice_init(ps_search_acmod(base)->lmath);
     while (arc_buffer_consumer_wait(latgen->input_arcs, -1) >= 0) {
         /* Process any incoming arcs. */
         ptmr_start(&base->t);

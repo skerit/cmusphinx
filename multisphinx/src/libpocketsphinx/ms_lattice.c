@@ -35,49 +35,92 @@
  *
  */
 
-#ifndef __NODEID_MAP_H__
-#define __NODEID_MAP_H__
-
 /**
- * @file nodeid_map.h Node ID maps.
+ * @file ms_lattice.c Word lattices for MultiSphinx.
  */
 
-#include <sphinxbase/prim_type.h>
+#include <sphinxbase/pio.h>
+#include <sphinxbase/strfuncs.h>
+#include <sphinxbase/ckd_alloc.h>
 
-/**
- * Lattice node ID.
- */
-typedef struct nodeid_s {
-    int32 lmstate; /**< Language model state ID. */
-    int16 sf;   /**< Start frame. */
-} nodeid_t;
+#include "ms_lattice.h"
 
-/**
- * Map of node IDs (LM state/frame pairs) to lattice indices.
- */
-typedef struct nodeid_map_s nodeid_map_t;
+ms_lattice_t *
+ms_lattice_init(logmath_t *lmath)
+{
+    ms_lattice_t *l = ckd_calloc(1, sizeof(*l));
+    l->refcount = 1;
+    l->lmath = logmath_retain(lmath);
+    l->node_list = garray_init(0, sizeof(ms_latnode_t));
+    l->node_map = nodeid_map_init();
+    return l;
+}
 
-/**
- * Iterator over node IDs
- */
-typedef struct nodeid_iter_s nodeid_iter_t;
+ms_lattice_t *
+ms_lattice_retain(ms_lattice_t *l)
+{
+    ++l->refcount;
+    return l;
+}
 
-nodeid_map_t *nodeid_map_init(void);
-int nodeid_map_free(nodeid_map_t *nmap);
-int32 nodeid_map_add(nodeid_map_t *nmap, int sf, int32 lmstate, int32 idx);
-int32 nodeid_map_remap(nodeid_map_t *nmap, int sf, int32 lmstate, int32 idx);
-int32 nodeid_map_delete(nodeid_map_t *nmap, int sf, int32 lmstate);
-int32 nodeid_map_map(nodeid_map_t *nmap, int sf, int32 lmstate);
+int
+ms_lattice_free(ms_lattice_t *l)
+{
+    if (l == NULL)
+        return 0;
+    if (--l->refcount > 0)
+        return l->refcount;
 
-/**
- * Iterate over node IDs in frame order.
- *
- * If no start frame is given then all nodes will be iterated over in
- * frame order.
- */
-nodeid_iter_t *nodeid_map_iter(nodeid_map_t *nmap, int sf);
-nodeid_iter_t *nodeid_iter_next(nodeid_iter_t *itor);
-int32 nodeid_iter_get(nodeid_iter_t *itor, int32 *out_lmstate);
-void nodeid_iter_free(nodeid_iter_t *itor);
+    garray_free(l->node_list);
+    nodeid_map_free(l->node_map);
+    logmath_free(l->lmath);
+    ckd_free(l);
+    return 0;
+}
 
-#endif /* __NODEID_MAP_H__ */
+int32
+ms_lattice_node(ms_lattice_t *l, int32 lmstate, int sf)
+{
+}
+
+ms_latnode_t *
+ms_lattice_get_node_idx(ms_lattice_t *l, int32 idx)
+{
+}
+
+ms_latnode_t *
+ms_lattice_get_node_id(ms_lattice_t *l, nodeid_t id)
+{
+}
+
+ms_latnode_t *
+ms_lattice_get_start(ms_lattice_t *l)
+{
+}
+
+ms_latnode_t *
+ms_lattice_get_end(ms_lattice_t *l)
+{
+}
+
+ms_latlink_t *
+ms_lattice_link(ms_lattice_t *l,
+                ms_latnode_t *src, ms_latnode_t *dest,
+                int32 wid, int32 ascr)
+{
+}
+
+int
+ms_lattice_read_htk(ms_lattice_t *l, FILE *fh)
+{
+}
+
+int
+ms_lattice_write_htk(ms_lattice_t *l, FILE *fh)
+{
+}
+
+int
+ms_lattice_write_dot(ms_lattice_t *l, FILE *fh)
+{
+}

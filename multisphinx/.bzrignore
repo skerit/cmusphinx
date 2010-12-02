@@ -136,3 +136,4 @@ test/unit/test_vocab_map/test_vocab_mapper
 test/unit/test_search/test_latgen
 test/unit/test_search/test_batch.hyp
 test/unit/test_search/test_batch.sh
+test/unit/test_lattice/test_nodeid_map

@@ -21,6 +21,7 @@ libpocketsphinx_la_SOURCES =			\
 	latgen_search.c				\
 	mdef.c					\
 	ms_gauden.c				\
+	ms_lattice.c				\
 	ms_mgau.c				\
 	ms_senone.c				\
 	nodeid_map.c				\
@@ -40,6 +41,7 @@ noinst_HEADERS =				\
 	hmm.h					\
 	mdef.h					\
 	ms_gauden.h				\
+	ms_lattice.h				\
 	ms_mgau.h				\
 	ms_senone.h				\
 	nodeid_map.h				\

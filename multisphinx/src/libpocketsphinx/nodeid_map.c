@@ -95,7 +95,7 @@ nodeid_map_push_frame(nodeid_map_t *nmap, int32 sf)
     int32 next_sf = garray_next_idx(nmap->frame_maps);
     if (sf >= next_sf) {
 	garray_expand_to(nmap->frame_maps, sf + 1);
-	garray_clear(nmap->frame_maps, next_sf, sf + 1);
+	garray_clear(nmap->frame_maps, next_sf, sf + 1 - next_sf);
     }
     if (garray_ent(nmap->frame_maps, garray_t *, sf) == NULL)
 	garray_ent(nmap->frame_maps, garray_t *, sf)
@@ -103,7 +103,7 @@ nodeid_map_push_frame(nodeid_map_t *nmap, int32 sf)
     return nodeid_map_get_frame(nmap, sf);
 }
 
-int32
+static int32
 frame_map_add(garray_t *frame_map, int32 lmstate, int32 idx)
 {
     i32p_t map;
@@ -122,15 +122,15 @@ frame_map_add(garray_t *frame_map, int32 lmstate, int32 idx)
 }
 
 int32
-nodeid_map_add(nodeid_map_t *nmap, nodeid_t nid, int32 idx)
+nodeid_map_add(nodeid_map_t *nmap, int sf, int32 lmstate, int32 idx)
 {
     garray_t *frame_map;
 
-    frame_map = nodeid_map_push_frame(nmap, nid.sf);
-    return frame_map_add(frame_map, nid.lmstate, idx);
+    frame_map = nodeid_map_push_frame(nmap, sf);
+    return frame_map_add(frame_map, lmstate, idx);
 }
 
-int32
+static int32
 frame_map_remap(garray_t *frame_map, int32 lmstate, int32 idx)
 {
     int32 pos;
@@ -146,19 +146,19 @@ frame_map_remap(garray_t *frame_map, int32 lmstate, int32 idx)
 }
 
 int32
-nodeid_map_remap(nodeid_map_t *nmap, nodeid_t nid, int32 idx)
+nodeid_map_remap(nodeid_map_t *nmap, int sf, int32 lmstate, int32 idx)
 {
     garray_t *frame_map;
 
-    frame_map = nodeid_map_get_frame(nmap, nid.sf);
+    frame_map = nodeid_map_get_frame(nmap, sf);
     if (frame_map == NULL)
 	return -1;
     else
-	return frame_map_remap(frame_map, nid.lmstate, idx);
+	return frame_map_remap(frame_map, lmstate, idx);
 }
 
 int32
-nodeid_map_delete_frame(nodeid_map_t *nmap, int32 sf)
+nodeid_map_delete_frame(nodeid_map_t *nmap, int sf)
 {
     garray_free(garray_ent(nmap->frame_maps, garray_t *, sf));
     garray_ent(nmap->frame_maps, garray_t *, sf) = NULL;
@@ -181,14 +181,14 @@ frame_map_delete(garray_t *frame_map, int32 lmstate)
 }
 
 int32
-nodeid_map_delete(nodeid_map_t *nmap, nodeid_t nid)
+nodeid_map_delete(nodeid_map_t *nmap, int sf, int32 lmstate)
 {
     garray_t *frame_map;
 
-    frame_map = nodeid_map_push_frame(nmap, nid.sf);
-    frame_map_delete(frame_map, nid.lmstate);
+    frame_map = nodeid_map_push_frame(nmap, sf);
+    frame_map_delete(frame_map, lmstate);
     if (garray_size(frame_map) == 0)
-	return nodeid_map_delete_frame(nmap, nid.sf);
+	return nodeid_map_delete_frame(nmap, sf);
     else
 	return garray_size(frame_map);
 }
@@ -208,15 +208,15 @@ frame_map_map(garray_t *frame_map, int32 lmstate)
 }
 
 int32
-nodeid_map_map(nodeid_map_t *nmap, nodeid_t nid)
+nodeid_map_map(nodeid_map_t *nmap, int sf, int32 lmstate)
 {
     garray_t *frame_map;
 
-    frame_map = nodeid_map_get_frame(nmap, nid.sf);
+    frame_map = nodeid_map_get_frame(nmap, sf);
     if (frame_map == NULL)
 	return -1;
     else
-	return frame_map_map(frame_map, nid.lmstate);
+	return frame_map_map(frame_map, lmstate);
 }
 
 nodeid_iter_t *
@@ -240,7 +240,7 @@ nodeid_map_iter(nodeid_map_t *nmap, int sf)
     }
     else {
 	/* Need to get a specific frame, or else. */
-	frame_map = nodeid_map_get_frame(nmap, 0);
+	frame_map = nodeid_map_get_frame(nmap, sf);
 	if (frame_map == NULL)
 	    return NULL;
 	itor = ckd_calloc(1, sizeof(*itor));
