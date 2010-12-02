@@ -352,26 +352,6 @@ featbuf_end_utt(featbuf_t *fb, int timeout)
 }
 
 int
-featbuf_abort_utt(featbuf_t *fb)
-{
-    int i, rc, nth;
-
-    /* Figure out how many threads we are going to be waiting for
-     * before we force quit (since they may exit after that...) */
-    nth = fb->refcount - 1;
-
-    /* Abort any utterance processing. */
-    sync_array_force_quit(fb->sa);
-
-    /* Wait for everybody to be done. */
-    for (i = 0; i < nth; ++i)
-        if ((rc = sbsem_down(fb->release, -1, -1)) < 0)
-            return rc;
-
-    return 0;
-}
-
-int
 featbuf_shutdown(featbuf_t *fb)
 {
     /* Wake up anybody waiting for an utterance, but first set a flag

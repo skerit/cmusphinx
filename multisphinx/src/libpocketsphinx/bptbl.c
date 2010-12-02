@@ -958,17 +958,25 @@ bptbl_get_rcscores(bptbl_t *bptbl, bpidx_t bpidx, int32 *out_rcscores)
 
     bpe = bptbl_ent_internal(bptbl, bpidx);
     rcsize = bptbl_rcsize(bptbl, bpe);
-    assert(bpe->s_idx < garray_next_idx(bptbl->rc));
-    memcpy(out_rcscores,
-           garray_ptr(bptbl->rc, int32, bpe->s_idx),
-           rcsize * sizeof(int32));
-    return rcsize;
+    if (rcsize == 0) {
+        out_rcscores[0] = bpe->score;
+        return 1;
+    }
+    else {
+        assert(bpe->s_idx < garray_next_idx(bptbl->rc));
+        memcpy(out_rcscores,
+               garray_ptr(bptbl->rc, int32, bpe->s_idx),
+               rcsize * sizeof(int32));
+        return rcsize;
+    }
 }
 
 /**
  * Get the number of right context entries for a backpointer.
  *
- * This is only used internally, so it has no locking.
+ * This is only used internally.  It returns the correct rcsize of
+ * zero rather than a "cooked" value of one (see bptbl_get_rcscores())
+ * in the case where there are no right contexts.
  */
 static int
 bptbl_rcsize(bptbl_t *bptbl, bp_t *be)
@@ -977,7 +985,7 @@ bptbl_rcsize(bptbl_t *bptbl, bp_t *be)
 
     if (dict_is_single_phone(bptbl->d2p->dict, be->wid)) {
         be->last2_phone = -1;
-        rcsize = 1;
+        rcsize = 0;
     }
     else {
         be->last2_phone = dict_second_last_phone(bptbl->d2p->dict, be->wid);
@@ -1047,13 +1055,14 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
     rcsize = bptbl_rcsize(bptbl, bpe);
     /* Allocate some space on the bptbl->bscore_stack for all of these triphones. */
     /* Expand the bss table if necessary. */
-    bss_head = be.s_idx;
-    garray_expand_to(bptbl->rc, bss_head + rcsize);
-    bss = garray_ptr(bptbl->rc, int32, bss_head);
-      for (i = 0; i < rcsize; ++i)
-        *bss++ = WORST_SCORE;
-    garray_ent(bptbl->rc, int32, bss_head + rc) = score;
-
+    if (rcsize) {
+        bss_head = be.s_idx;
+        garray_expand_to(bptbl->rc, bss_head + rcsize);
+        bss = garray_ptr(bptbl->rc, int32, bss_head);
+        for (i = 0; i < rcsize; ++i)
+            *bss++ = WORST_SCORE;
+        garray_ent(bptbl->rc, int32, bss_head + rc) = score;
+    }
     E_DEBUG(3,("Entered bp %d sf %d ef %d s_idx %d active_fr %d\n",
                bptbl_end_idx(bptbl) - 1,
                bptbl_sf_internal(bptbl, bptbl_end_idx(bptbl) - 1),

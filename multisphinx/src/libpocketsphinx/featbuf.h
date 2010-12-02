@@ -114,8 +114,7 @@ int featbuf_next(featbuf_t *fb);
  * requested frame becomes available.  If the timeout is reached it
  * will return -1.  It will also return -1 in the case where the
  * end of the utterance has been established by featbuf_end_utt() and
- * the frame requested is beyond the end of the utterance, or if
- * utterance processing has been aborted by featbuf_abort_utt().
+ * the frame requested is beyond the end of the utterance.
  *
  * In effect there is a semaphore attached to each frame index, and
  * this can be thought of as the "down" operation for a frame index.
@@ -200,18 +199,6 @@ int featbuf_start_utt(featbuf_t *fb);
  * @return 0, or <0 on error (but that is unlikely)
  */
 int featbuf_end_utt(featbuf_t *fb, int timeout);
-
-/**
- * Abort processing for an utterance.
- *
- * This function immediately ends utterance processing, canceling any
- * pending wait operations, as noted in the documentation for
- * featbuf_wait().
- *
- * @param fb Feature buffer.
- * @return 0, or <0 on error (in which case you have Problems)
- */
-int featbuf_abort_utt(featbuf_t *fb);
 
 /**
  * Shut down utterance processing.

@@ -449,6 +449,7 @@ ps_get_hyp(ps_decoder_t *ps, int32 *out_best_score, char const **out_uttid)
     char const *hyp;
 
     ptmr_start(&ps->perf);
+    /* Get the hypothesis string from the last search pass, whichever it was. */
     hyp = ps_search_hyp(ps->fwdflat ? ps->fwdflat : ps->fwdtree, out_best_score);
     if (out_uttid)
         *out_uttid = ps->uttid;
