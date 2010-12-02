@@ -49,6 +49,7 @@
 #include <pocketsphinx.h>
 
 /* S3kr3t headerz. */
+/* FIXME: These are becoming public and will be in <multisphinx/...> */
 #include "pocketsphinx_internal.h"
 
 /* Silvio Moioli: setbuf doesn't exist in Windows CE */

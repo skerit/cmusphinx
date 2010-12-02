@@ -1,4 +1,4 @@
-SUBDIRS = sphinxbase
+SUBDIRS = sphinxbase multisphinx
 
 pkginclude_HEADERS =				\
 	cmdln_macro.h				\

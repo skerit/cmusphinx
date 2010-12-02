@@ -87,6 +87,7 @@ AC_OUTPUT([
 multisphinx.pc
 Makefile
 include/Makefile
+include/multisphinx/Makefile
 include/sphinxbase/Makefile
 python/Makefile
 python/setup.py

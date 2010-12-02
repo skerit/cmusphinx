@@ -1,5 +1,3 @@
-ARCH   = `uname -m | sed s/i.86/i386/`_`uname -s | tr A-Z a-z`
-
 lib_LTLIBRARIES = libpocketsphinx.la
 
 # Confusing libtool version info means:
@@ -38,35 +36,22 @@ libpocketsphinx_la_SOURCES =			\
 
 noinst_HEADERS =				\
 	pocketsphinx_internal.h			\
-	acmod.h					\
-	arc_buffer.h				\
-	bptbl.h					\
-	bin_mdef.h				\
-	dict.h					\
-	dict2pid.h				\
-	featbuf.h				\
-	fwdtree_search.h			\
-	fwdflat_search.h			\
 	hmm.h					\
-	latgen_search.h				\
 	mdef.h					\
 	ms_gauden.h				\
 	ms_mgau.h				\
 	ms_senone.h				\
-	ngram_trie.h				\
-	ps_alignment.h				\
 	ps_search.h				\
 	posixwin32.h				\
 	ptm_mgau.h				\
 	sendump.h				\
 	s2_semi_mgau.h				\
-	s3types.h				\
 	tied_mgau_common.h			\
 	tmat.h					\
-	vocab_map.h				\
 	vector.h
 
 INCLUDES = -I$(top_srcdir)/include \
+	   -I$(top_srcdir)/include/multisphinx \
            -I$(top_builddir)/include \
 	   -DMODELDIR=\"${prefix}/share/pocketsphinx/model\"
 

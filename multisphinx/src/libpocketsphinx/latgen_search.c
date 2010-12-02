@@ -39,6 +39,8 @@
  * @file latgen_search.c Lattice generation (as a search pass).
  */
 
+#include <sphinxbase/garray.h>
+
 #include "latgen_search.h"
 
 static int latgen_search_decode(ps_search_t *base);
@@ -81,12 +83,12 @@ latgen_search_decode(ps_search_t *base)
     E_INFO("latgen: waiting for arc buffer start\n");
     if (arc_buffer_consumer_start_utt(latgen->input_arcs, -1) < 0)
         return -1;
+    /* Create an incomplete node for the first frame. */
     while (arc_buffer_consumer_wait(latgen->input_arcs, -1) >= 0) {
         /* Process any incoming arcs. */
         ptmr_start(&base->t);
         while (1) {
             arc_t *itor;
-            int narc;
 
             arc_buffer_lock(latgen->input_arcs);
             itor = arc_buffer_iter(latgen->input_arcs, frame_idx);
@@ -94,12 +96,6 @@ latgen_search_decode(ps_search_t *base)
                 arc_buffer_unlock(latgen->input_arcs);
                 break;
             }
-            narc = 0;
-            for (; itor;
-                 itor = arc_buffer_iter_next(latgen->input_arcs, itor)) {
-                ++narc;
-            }
-            E_INFO("Processed %d arcs in frame %d\n", narc, frame_idx);
             arc_buffer_unlock(latgen->input_arcs);
             ++frame_idx;
         }
@@ -121,20 +117,29 @@ latgen_search_free(ps_search_t *base)
     return 0;
 }
 
+/**
+ * Bestpath search over the lattice.
+ */
 static char const *
 latgen_search_hyp(ps_search_t *base, int32 *out_score)
 {
     return NULL;
 }
 
-static int32
-latgen_search_prob(ps_search_t *base)
-{
-    return 0;
-}
-
+/**
+ * Bestpath search over the lattice.
+ */
 static ps_seg_t *
 latgen_search_seg_iter(ps_search_t *base, int32 *out_score)
 {
     return NULL;
+}
+
+/**
+ * Forward-backward calculation over the lattice.
+ */
+static int32
+latgen_search_prob(ps_search_t *base)
+{
+    return 0;
 }

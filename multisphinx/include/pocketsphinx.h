@@ -32,7 +32,7 @@
  *
  */
 /**
- * @file pocketsphinx.h Main header file for the PocketSphinx decoder.
+ * @file pocketsphinx.h PocketSphinx API compatibility
  */
 
 #ifndef __POCKETSPHINX_H__
