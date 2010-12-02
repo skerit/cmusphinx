@@ -644,3 +644,22 @@ ms_lattice_write_dot(ms_lattice_t *l, FILE *fh)
     fprintf(fh, "}\n");
     return 0;
 }
+
+int
+ms_lattice_bigram_expand(ms_lattice_t *l, ngram_model_t *lm)
+{
+    return 0;
+}
+
+int32
+ms_lattice_forward(ms_lattice_t *l, int32 inv_aw)
+{
+    return l->norm;
+}
+
+int32
+ms_lattice_backward(ms_lattice_t *l, int32 inv_aw)
+{
+    return l->norm;
+}
+

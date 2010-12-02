@@ -47,6 +47,7 @@
 #include <sphinxbase/prim_type.h>
 #include <sphinxbase/garray.h>
 #include <sphinxbase/logmath.h>
+#include <sphinxbase/ngram_model.h>
 
 #include <multisphinx/dict.h>
 
@@ -110,7 +111,7 @@ ms_latnode_t *ms_lattice_node_init(ms_lattice_t *l, int sf, int32 lmstate);
 ms_latnode_t *ms_lattice_get_node_idx(ms_lattice_t *l, int32 idx);
 
 /**
- * Get a node by ID.
+ * Get a node by ID (start frame + lm state).
  */
 ms_latnode_t *ms_lattice_get_node_id(ms_lattice_t *l, int sf, int32 lmstate);
 
@@ -160,5 +161,27 @@ int ms_lattice_write_htk(ms_lattice_t *l, FILE *fh, int frate);
  * Write a lattice in DOT format.
  */
 int ms_lattice_write_dot(ms_lattice_t *l, FILE *fh);
+
+/**
+ * Perform bigram expansion on a lattice and assign language model
+ * probabilities.
+ *
+ * FIXME: This needs to also support trigrams.
+ */
+int ms_lattice_bigram_expand(ms_lattice_t *l, ngram_model_t *lm);
+
+/**
+ * Run the forward algorithm on a lattice.
+ *
+ * FIXME: This will be done incrementally very soon (hopefully later tonight).
+ */
+int32 ms_lattice_forward(ms_lattice_t *l, int32 inv_aw);
+
+/**
+ * Run the backward algorithm on a lattice.
+ *
+ * FIXME: Partial version of this coming soon (hopefully later tonight).
+ */
+int32 ms_lattice_backward(ms_lattice_t *l, int32 inv_aw);
 
 #endif /* __MS_LATTICE_H__ */
