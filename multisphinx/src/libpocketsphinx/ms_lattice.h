@@ -93,17 +93,22 @@ int ms_lattice_free(ms_lattice_t *l);
 /**
  * Create a language model state.
  */
-int32 ms_lattice_lmstate_init(ms_lattice_t *l, char const *name);
+int32 ms_lattice_lmstate_init(ms_lattice_t *l, int32 w,
+                              int32 const *hist, int32 n_hist);
 
 /**
- * Look up a language model state by name.
+ * Look up a language model state index by word IDs.
  */
-int32 ms_lattice_get_lmstate_idx(ms_lattice_t *l, char const *name);
+int32 ms_lattice_get_lmstate_idx(ms_lattice_t *l, int32 w,
+                                 int32 const *hist, int32 n_hist);
 
 /**
- * Look up a language model state by index.
+ * Look up a language model state's word IDs by index.
+ *
+ * @return number of history entries.
  */
-char const *ms_lattice_get_lmstate_name(ms_lattice_t *l, int32 idx);
+int32 ms_lattice_get_lmstate_wids(ms_lattice_t *l, int32 idx,
+                                  int32 *out_w, int32 *out_hist);
 
 /**
  * Create a node.

@@ -109,6 +109,17 @@ ngram_trie_node_t *ngram_trie_ngram_v(ngram_trie_t *t, int32 w,
 				      int32 const *hist, int32 n_hist);
 
 /**
+ * Create an N-Gram (and its parents) in the trie by strings.
+ */
+ngram_trie_node_t *ngram_trie_ngram_init(ngram_trie_t *t, char const *w, ...); 
+
+/**
+ * Create an N-Gram (and its parents) in the trie by strings.
+ */
+ngram_trie_node_t *ngram_trie_ngram_init_v(ngram_trie_t *t, int32 w,
+                                           int32 const *hist, int32 n_hist);
+
+/**
  * Get model probability (with backoff) for a word with history.
  */
 int32 ngram_trie_prob(ngram_trie_t *t, int *n_used, char const *w, ...);
@@ -180,6 +191,23 @@ void ngram_trie_node_set_params(ngram_trie_t *t,
                                 ngram_trie_node_t *node,
                                 int32 log_prob,
                                 int32 log_bowt);
+
+/**
+ * Get the "raw" (unscaled) probability and backoff weight values from
+ * a node.
+ */
+void ngram_trie_node_params_raw(ngram_trie_t *t,
+                                ngram_trie_node_t *node,
+                                int16 *out_log_prob,
+                                int16 *out_log_bowt);
+
+/**
+ * Set the "raw" (unscaled) probability and backoff weight values in a node.
+ */
+void ngram_trie_node_set_params_raw(ngram_trie_t *t,
+                                    ngram_trie_node_t *node,
+                                    int16 log_prob,
+                                    int16 log_bowt);
 
 /**
  * Look up a successor to an N-Gram.

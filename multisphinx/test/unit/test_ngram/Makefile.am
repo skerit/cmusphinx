@@ -15,6 +15,7 @@ TESTS = $(check_PROGRAMS)
 
 INCLUDES = \
 	-I$(top_srcdir)/include/sphinxbase \
+	-I$(top_srcdir)/include/multisphinx \
 	-I$(top_srcdir)/src/libpocketsphinx \
 	-I$(top_builddir)/include \
 	-DTESTDATADIR=\"$(top_srcdir)/test/data\" \

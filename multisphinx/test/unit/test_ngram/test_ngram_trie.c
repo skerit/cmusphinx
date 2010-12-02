@@ -1,7 +1,7 @@
-#include "ngram_trie.h"
-
 #include "test_macros.h"
 #include "pocketsphinx_internal.h"
+
+#include <multisphinx/ngram_trie.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,6 +58,59 @@ test_validation(ngram_trie_t *t)
 	return 0;
 }
 
+static int
+test_lookups(ngram_trie_t *t, logmath_t *lmath)
+{
+	int32 prob, n_used;
+
+	prob = ngram_trie_prob(t, &n_used, "THREE", "POINT", "ZERO", NULL);
+	printf("P(ZERO POINT THREE) = %d = %g = %f\n",
+	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
+	TEST_EQUAL_LOG(prob, -25776);
+	prob = ngram_trie_prob(t, &n_used, "THREE", "POINT", NULL);
+	printf("P(POINT THREE) = %d = %g = %f\n",
+	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
+	TEST_EQUAL_LOG(prob, -38960);
+	prob = ngram_trie_prob(t, &n_used, "THREE", NULL);
+	printf("P(THREE) = %d = %g = %f\n",
+	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
+	TEST_EQUAL_LOG(prob, -69328);
+
+	/* Test 3-gram probs with backoff. */
+	/* Backoff to 2-gram POINT FOUR + alpha(ZERO POINT) */
+	prob = ngram_trie_prob(t, &n_used, "FOUR", "POINT", "ZERO", NULL);
+	printf("P(ZERO POINT FOUR) = %d = %g = %f\n",
+	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
+	TEST_EQUAL_LOG(prob, -35600);
+	/* Backoff to 2-gram SIX FOUR + alpha(ZERO) */
+	prob = ngram_trie_prob(t, &n_used, "FOUR", "SIX", "ZERO", NULL);
+	printf("P(ZERO SIX FOUR) = %d = %g = %f\n",
+	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
+	TEST_EQUAL_LOG(prob, -56608);
+	/* Backoff to 1-gram FOUR + alpha(ZERO SEVEN) */
+	prob = ngram_trie_prob(t, &n_used, "FOUR", "SEVEN", "ZERO", NULL);
+	printf("P(ZERO SEVEN FOUR) = %d = %g = %f\n",
+	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
+	TEST_EQUAL_LOG(prob, -76496);
+	return 0;
+}
+
+static int
+test_add_nodes(ngram_trie_t *t, logmath_t *lmath)
+{
+	ngram_trie_node_t *ng;
+	int32 prob, n_used;
+
+	ng = ngram_trie_ngram_init(t, "FOUR", "POINT", "ZERO", NULL);
+	TEST_ASSERT(ng != NULL);
+	ngram_trie_node_set_params(t, ng, -25776, -42);
+	prob = ngram_trie_prob(t, &n_used, "FOUR", "POINT", "ZERO", NULL);
+	printf("P(ZERO POINT FOUR) = %d = %g = %f\n",
+	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
+	TEST_EQUAL_LOG(prob, -25776);
+	return 0;
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -67,8 +120,6 @@ main(int argc, char *argv[])
 	logmath_t *lmath;
 	cmd_ln_t *config;
 	FILE *arpafh;
-	int32 prob;
-	int n_used;
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
@@ -97,35 +148,7 @@ main(int argc, char *argv[])
 	test_validation(t);
 
 	/* Test 1, 2, 3-gram probs without backoff. */
-	prob = ngram_trie_prob(t, &n_used, "THREE", "POINT", "ZERO", NULL);
-	printf("P(ZERO POINT THREE) = %d = %g = %f\n",
-	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
-	TEST_EQUAL_LOG(prob, -25776);
-	prob = ngram_trie_prob(t, &n_used, "THREE", "POINT", NULL);
-	printf("P(POINT THREE) = %d = %g = %f\n",
-	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
-	TEST_EQUAL_LOG(prob, -38960);
-	prob = ngram_trie_prob(t, &n_used, "THREE", NULL);
-	printf("P(THREE) = %d = %g = %f\n",
-	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
-	TEST_EQUAL_LOG(prob, -69328);
-
-	/* Test 3-gram probs with backoff. */
-	/* Backoff to 2-gram POINT FOUR + alpha(ZERO POINT) */
-	prob = ngram_trie_prob(t, &n_used, "FOUR", "POINT", "ZERO", NULL);
-	printf("P(ZERO POINT FOUR) = %d = %g = %f\n",
-	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
-	TEST_EQUAL_LOG(prob, -35600);
-	/* Backoff to 2-gram SIX FOUR + alpha(ZERO) */
-	prob = ngram_trie_prob(t, &n_used, "FOUR", "SIX", "ZERO", NULL);
-	printf("P(ZERO SIX FOUR) = %d = %g = %f\n",
-	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
-	TEST_EQUAL_LOG(prob, -56608);
-	/* Backoff to 1-gram FOUR + alpha(ZERO SEVEN) */
-	prob = ngram_trie_prob(t, &n_used, "FOUR", "SEVEN", "ZERO", NULL);
-	printf("P(ZERO SEVEN FOUR) = %d = %g = %f\n",
-	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
-	TEST_EQUAL_LOG(prob, -76496);
+	test_lookups(t, lmath);
 
 	arpafh = fopen("tmp.bn10000.3g.arpa", "w");
 	ngram_trie_write_arpa(t, arpafh);
@@ -138,35 +161,10 @@ main(int argc, char *argv[])
 	fclose(arpafh);
 
 	/* Test 1, 2, 3-gram probs without backoff. */
-	prob = ngram_trie_prob(t, &n_used, "THREE", "POINT", "ZERO", NULL);
-	printf("P(ZERO POINT THREE) = %d = %g = %f\n",
-	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
-	TEST_EQUAL_LOG(prob, -25776);
-	prob = ngram_trie_prob(t, &n_used, "THREE", "POINT", NULL);
-	printf("P(POINT THREE) = %d = %g = %f\n",
-	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
-	TEST_EQUAL_LOG(prob, -38960);
-	prob = ngram_trie_prob(t, &n_used, "THREE", NULL);
-	printf("P(THREE) = %d = %g = %f\n",
-	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
-	TEST_EQUAL_LOG(prob, -69328);
+	test_lookups(t, lmath);
 
-	/* Test 3-gram probs with backoff. */
-	/* Backoff to 2-gram POINT FOUR + alpha(ZERO POINT) */
-	prob = ngram_trie_prob(t, &n_used, "FOUR", "POINT", "ZERO", NULL);
-	printf("P(ZERO POINT FOUR) = %d = %g = %f\n",
-	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
-	TEST_EQUAL_LOG(prob, -35600);
-	/* Backoff to 2-gram SIX FOUR + alpha(ZERO) */
-	prob = ngram_trie_prob(t, &n_used, "FOUR", "SIX", "ZERO", NULL);
-	printf("P(ZERO SIX FOUR) = %d = %g = %f\n",
-	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
-	TEST_EQUAL_LOG(prob, -56608);
-	/* Backoff to 1-gram FOUR + alpha(ZERO SEVEN) */
-	prob = ngram_trie_prob(t, &n_used, "FOUR", "SEVEN", "ZERO", NULL);
-	printf("P(ZERO SEVEN FOUR) = %d = %g = %f\n",
-	       prob, logmath_exp(lmath, prob), logmath_log_to_log10(lmath, prob));
-	TEST_EQUAL_LOG(prob, -76496);
+	/* Test adding nodes. */
+	test_add_nodes(t, lmath);
 
 	ngram_trie_free(t);
 	dict_free(dict);

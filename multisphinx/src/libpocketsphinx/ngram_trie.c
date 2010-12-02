@@ -294,6 +294,69 @@ ngram_trie_ngram_v(ngram_trie_t *t, int32 w,
     return ngram_trie_successor(t, node, w);
 }
 
+ngram_trie_node_t *
+ngram_trie_ngram_init(ngram_trie_t *t, char const *w, ...)
+{
+    ngram_trie_node_t *node;
+    char const *h;
+    va_list args;
+    int n_hist;
+    int32 *hist;
+    int32 wid;
+
+    wid = dict_wordid(t->dict, w);
+    va_start(args, w);
+    n_hist = 0;
+    while ((h = va_arg(args, char const *)) != NULL)
+        ++n_hist;
+    va_end(args);
+    hist = ckd_calloc(n_hist, sizeof(*hist));
+    va_start(args, w);
+    n_hist = 0;
+    while ((h = va_arg(args, char const *)) != NULL) {
+        hist[n_hist] = dict_wordid(t->dict, h);
+        ++n_hist;
+    }
+    va_end(args);
+
+    node = ngram_trie_ngram_init_v(t, wid, hist, n_hist);
+    ckd_free(hist);
+    return node;
+}
+
+ngram_trie_node_t *
+ngram_trie_ngram_init_v(ngram_trie_t *t, int32 w,
+                        int32 const *hist, int32 n_hist)
+{
+    ngram_trie_node_t *node, *nextnode;
+
+    node = ngram_trie_root(t);
+    if (n_hist > t->n - 1)
+        t->n = n_hist + 1;
+
+#if 0
+    E_INFO("Adding N-Gram %s |",
+           dict_wordstr(t->dict, w));
+    int i;
+    for (i = 0; i < n_hist; ++i) {
+        E_INFOCONT(" %s", dict_wordstr(t->dict, hist[n_hist - 1 - i]));
+    }
+    E_INFOCONT("\n");
+#endif
+
+    while (n_hist > 0) {
+        int32 nextwid = hist[n_hist - 1];
+        if ((nextnode = ngram_trie_successor(t, node, nextwid)) == NULL)
+            nextnode = ngram_trie_add_successor(t, node, nextwid);
+        node = nextnode;
+        --n_hist;
+    }
+
+    if ((nextnode = ngram_trie_successor(t, node, w)) == NULL)
+        nextnode = ngram_trie_add_successor(t, node, w);
+    return nextnode;
+}
+
 int32
 ngram_trie_prob(ngram_trie_t *t, int *n_used, char const *w, ...)
 {
@@ -525,6 +588,28 @@ ngram_trie_node_set_params(ngram_trie_t *t,
     assert(node != NULL);
     node->log_prob = log_prob >> t->shift;
     node->log_bowt = log_bowt >> t->shift;
+}
+
+void
+ngram_trie_node_params_raw(ngram_trie_t *t,
+                           ngram_trie_node_t *node,
+                           int16 *out_log_prob,
+                           int16 *out_log_bowt)
+{
+    assert(node != NULL);
+    if (out_log_prob) *out_log_prob = node->log_prob;
+    if (out_log_bowt) *out_log_bowt = node->log_bowt;
+}
+
+void
+ngram_trie_node_set_params_raw(ngram_trie_t *t,
+                               ngram_trie_node_t *node,
+                               int16 log_prob,
+                               int16 log_bowt)
+{
+    assert(node != NULL);
+    node->log_prob = log_prob;
+    node->log_bowt = log_bowt;
 }
 
 static size_t
