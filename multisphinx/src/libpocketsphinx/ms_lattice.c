@@ -656,17 +656,31 @@ ms_lattice_write_dot(ms_lattice_t *l, FILE *fh)
 
 ms_latnode_iter_t *
 ms_lattice_traverse_topo(ms_lattice_t *l,
-                         ms_latnode_t *start,
                          ms_latnode_t *end)
 {
     ms_latnode_iter_t *itor;
+    int i;
+
+    for (i = 0; i < garray_size(l->node_list); ++i) {
+        ms_latnode_t *node = garray_ptr(l->node_list, ms_latnode_t, i);
+        node->fan = 0;
+    }
+    for (i = 0; i < garray_size(l->node_list); ++i) {
+        ms_latnode_t *node = garray_ptr(l->node_list, ms_latnode_t, i);
+        int j;
+        if (node->exits == NULL)
+            continue;
+        for (j = 0; j < garray_size(node->exits); ++j) {
+            int32 linkid = garray_ent(node->exits, int32, j);
+            ms_latlink_t *link = garray_ptr(l->link_list, ms_latlink_t, linkid);
+            ms_latnode_t *node2 = ms_lattice_get_node_idx(l, link->dest);
+            ++node2->fan;
+        }
+    }
 
     itor = ckd_calloc(1, sizeof(*itor));
     itor->l = l;
-    if (start == NULL)
-        itor->n = ms_lattice_get_start(l);
-    else
-        itor->n = start;
+    itor->n = ms_lattice_get_start(l);
     if (end == NULL)
         itor->end = ms_lattice_get_end(l);
     else
@@ -678,10 +692,27 @@ ms_lattice_traverse_topo(ms_lattice_t *l,
 
 ms_latnode_iter_t *
 ms_lattice_reverse_topo(ms_lattice_t *l,
-                        ms_latnode_t *start,
-                        ms_latnode_t *end)
+                        ms_latnode_t *start)
 {
     ms_latnode_iter_t *itor;
+    int i;
+
+    for (i = 0; i < garray_size(l->node_list); ++i) {
+        ms_latnode_t *node = garray_ptr(l->node_list, ms_latnode_t, i);
+        node->fan = 0;
+    }
+    for (i = 0; i < garray_size(l->node_list); ++i) {
+        ms_latnode_t *node = garray_ptr(l->node_list, ms_latnode_t, i);
+        int j;
+        if (node->exits == NULL)
+            continue;
+        for (j = 0; j < garray_size(node->exits); ++j) {
+            int32 linkid = garray_ent(node->exits, int32, j);
+            ms_latlink_t *link = garray_ptr(l->link_list, ms_latlink_t, linkid);
+            ms_latnode_t *node2 = ms_lattice_get_node_idx(l, link->src);
+            ++node2->fan;
+        }
+    }
 
     itor = ckd_calloc(1, sizeof(*itor));
     itor->l = l;
@@ -689,10 +720,7 @@ ms_lattice_reverse_topo(ms_lattice_t *l,
         itor->start = ms_lattice_get_start(l);
     else
         itor->start = start;
-    if (end == NULL)
-        itor->n = ms_lattice_get_end(l);
-    else
-        itor->n = end;
+    itor->n = ms_lattice_get_end(l);
     itor->q = gq_init(sizeof(ms_latnode_t *));
 
     return itor;

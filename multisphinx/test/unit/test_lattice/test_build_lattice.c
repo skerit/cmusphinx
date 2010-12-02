@@ -11,6 +11,7 @@ main(int argc, char *argv[])
 {
 	ms_lattice_t *l;
 	ms_latnode_t *s, *a, *b, *c, *d, *e;
+	ms_latnode_iter_t *itor;
 	logmath_t *lmath;
 	FILE *fh;
 	int32 idx, idx2;
@@ -75,6 +76,57 @@ main(int argc, char *argv[])
 	idx2 = ms_lattice_lmstate_init(l, "D");
 	ms_lattice_link(l, d, e, idx2, -69);
 	ms_lattice_set_end(l, e);
+
+	/* Test traversal functions. */
+	itor = ms_lattice_traverse_topo(l, NULL);
+	TEST_ASSERT(ms_latnode_iter_get(itor) == s);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == a);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == b);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == c);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == d);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == e);
+	TEST_ASSERT(ms_latnode_iter_next(itor) == NULL);
+
+	itor = ms_lattice_traverse_topo(l, d);
+	TEST_ASSERT(ms_latnode_iter_get(itor) == s);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == a);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == b);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == c);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == d);
+	TEST_ASSERT(ms_latnode_iter_next(itor) == NULL);
+
+	itor = ms_lattice_reverse_topo(l, NULL);
+	TEST_ASSERT(ms_latnode_iter_get(itor) == e);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == c);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == d);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == b);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == a);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == s);
+	TEST_ASSERT(ms_latnode_iter_next(itor) == NULL);
+
+	itor = ms_lattice_reverse_topo(l, b);
+	TEST_ASSERT(ms_latnode_iter_get(itor) == e);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == c);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == d);
+	TEST_ASSERT(ms_latnode_iter_next(itor));
+	TEST_ASSERT(ms_latnode_iter_get(itor) == b);
+	TEST_ASSERT(ms_latnode_iter_next(itor) == NULL);
 
 	/* Write it out to a dot file so we can verify it. */
 	TEST_ASSERT(fh = fopen("test_build_lattice.dot", "w"));

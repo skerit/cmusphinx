@@ -171,15 +171,13 @@ int ms_lattice_write_dot(ms_lattice_t *l, FILE *fh);
  * Begin a topological traversal of lattice nodes.
  */
 ms_latnode_iter_t *ms_lattice_traverse_topo(ms_lattice_t *l,
-                                            ms_latnode_t *start,
                                             ms_latnode_t *end);
 
 /**
  * Begin a reverse topological traversal of lattice nodes.
  */
 ms_latnode_iter_t *ms_lattice_reverse_topo(ms_lattice_t *l,
-                                           ms_latnode_t *start,
-                                           ms_latnode_t *end);
+                                           ms_latnode_t *start);
 
 /**
  * Move to the next node in traversal.
