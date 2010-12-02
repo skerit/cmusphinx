@@ -28,26 +28,8 @@
 * Make maxwpf work again with bptbl - DONE
 
 * Remove ngram_search_* and replace with new fwdflat and fwdtree
-  - Hook these up to the pocketsphinx API
-  - Punt on lattice generation and bestpath for now (disable it)
-
-* Release old bps and rc scores in two-pass search
-  - Needs an API for this - bptbl_release()
-  - Hypothesis interface needs to be able to transition between
-    available results from one pass to the next
-  - This is the essence of "anytime recognition"
-  - Also should be able to show a visualization of this
-
-* Implement fixed size bptbls
-  - Figure out the mechanism for expiring old bps
-  - Test this out
+  - Hook these up to the pocketsphinx API (DONE)
+  - Punt on lattice generation and bestpath for now
 
 * Rewrite lattice generation to be incremental on retired bps
   - This is pretty similar to the arc buffer code
-
-* Implement synchronized and generic arc buffers
-
-* Replace bptbl arrays with ring queues
-
-* Rewrite FSG search to use bptbl and arc buffers
-  - Construct grammars from arc buffers / lattices
