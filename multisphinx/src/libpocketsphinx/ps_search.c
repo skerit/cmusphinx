@@ -42,6 +42,7 @@
 
 #include "pocketsphinx_internal.h"
 #include "ps_search.h"
+#include "arc_buffer.h"
 
 void
 ps_search_init(ps_search_t *search, ps_searchfuncs_t *vt,
@@ -51,7 +52,8 @@ ps_search_init(ps_search_t *search, ps_searchfuncs_t *vt,
     ptmr_init(&search->t);
     search->vt = vt;
     search->config = cmd_ln_retain(config);
-    search->acmod = acmod_retain(acmod);
+    if (acmod)
+        search->acmod = acmod_retain(acmod);
     if (d2p)
         search->d2p = dict2pid_retain(d2p);
     else
@@ -85,6 +87,7 @@ ps_search_free(ps_search_t *search)
     /* Call the search free function. */
     (*search->vt->free)(search);
     /* Clean up common stuff. */
+    arc_buffer_free(search->output_arcs);
     cmd_ln_free_r(search->config);
     acmod_free(search->acmod);
     dict_free(search->dict);

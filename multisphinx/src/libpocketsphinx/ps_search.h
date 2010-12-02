@@ -54,6 +54,9 @@
 #include "dict.h"
 #include "dict2pid.h"
 
+/* Can't actually do this because of header loops or some such evil */
+/* #include "arc_buffer.h" */
+
 /**
  * Search algorithm structure.
  */
@@ -72,6 +75,8 @@ typedef struct ps_searchfuncs_s {
     int32 (*prob)(ps_search_t *search);
     ps_seg_t *(*seg_iter)(ps_search_t *search, int32 *out_score);
 } ps_searchfuncs_t;
+
+struct arc_buffer_s;
 
 /**
  * Base structure for search module.
@@ -92,6 +97,9 @@ struct ps_search_s {
     int32 n_words;         /**< Number of words known to search (may
                               be less than in the dictionary) */
 
+    struct arc_buffer_s *output_arcs; /**< Arc buffer, used to forward search
+                                       * results to next pass of search. */
+
     /* Magical word IDs that must exist in the dictionary: */
     int32 start_wid;       /**< Start word ID. */
     int32 silence_wid;     /**< Silence word ID. */
@@ -106,6 +114,7 @@ struct ps_search_s {
 #define ps_search_dict(s) ps_search_base(s)->dict
 #define ps_search_dict2pid(s) ps_search_base(s)->d2p
 #define ps_search_post(s) ps_search_base(s)->post
+#define ps_search_output_arcs(s) ps_search_base(s)->output_arcs
 #define ps_search_n_words(s) ps_search_base(s)->n_words
 #define ps_search_silence_wid(s) ps_search_base(s)->silence_wid
 #define ps_search_start_wid(s) ps_search_base(s)->start_wid
@@ -139,6 +148,36 @@ int ps_search_free(ps_search_t *search);
  * FIXME: This will probably go away due to hypothesis splicing
  */
 char const *ps_search_hyp(ps_search_t *search, int32 *out_score);
+
+/**
+ * V-table for segmentation iterators.
+ */
+typedef struct ps_segfuncs_s {
+    ps_seg_t *(*seg_next)(ps_seg_t *seg);
+    void (*seg_free)(ps_seg_t *seg);
+} ps_segfuncs_t;
+
+/**
+ * Base structure for hypothesis segmentation iterator.
+ */
+struct ps_seg_s {
+    ps_segfuncs_t *vt;     /**< V-table of seg methods */
+    ps_search_t *search;   /**< Search object from whence this came */
+    char const *word;      /**< Word string (pointer into dictionary hash) */
+    int16 sf;                /**< Start frame. */
+    int16 ef;                /**< End frame. */
+    int32 ascr;            /**< Acoustic score. */
+    int32 lscr;            /**< Language model score. */
+    int32 prob;            /**< Log posterior probability. */
+    /* This doesn't need to be 32 bits, so once the scores above are
+     * reduced to 16 bits (or less!), this will be too. */
+    int32 lback;           /**< Language model backoff. */
+    /* Not sure if this should be here at all. */
+    float32 lwf;           /**< Language weight factor (for second-pass searches) */
+};
+
+#define ps_search_seg_next(seg) (*(seg->vt->seg_next))(seg)
+#define ps_search_seg_free(s) (*(seg->vt->seg_free))(seg)
 
 /**
  * Get the latest segmentation from a search

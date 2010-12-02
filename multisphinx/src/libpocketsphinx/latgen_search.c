@@ -1,6 +1,6 @@
 /* -*- c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /* ====================================================================
- * Copyright (c) 2008 Carnegie Mellon University.  All rights
+ * Copyright (c) 2010 Carnegie Mellon University.  All rights
  * reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -36,52 +36,42 @@
  */
 
 /**
- * @file pocketsphinx_internal.h Internal implementation of
- * PocketSphinx decoder.
- * @author David Huggins-Daines <dhuggins@cs.cmu.edu>
+ * @file latgen_search.c Lattice generation (as a search pass).
  */
 
-#ifndef __POCKETSPHINX_INTERNAL_H__
-#define __POCKETSPHINX_INTERNAL_H__
+#include "latgen_search.h"
 
-/* SphinxBase headers. */
-#include <sphinxbase/cmd_ln.h>
-#include <sphinxbase/logmath.h>
-#include <sphinxbase/fe.h>
-#include <sphinxbase/feat.h>
-#include <sphinxbase/profile.h>
+static int latgen_search_decode(ps_search_t *base);
+static int latgen_search_free(ps_search_t *base);
 
-/* Local headers. */
-#include "pocketsphinx.h"
-#include "ps_search.h"
-#include "featbuf.h"
-#include "acmod.h"
-#include "dict.h"
-#include "dict2pid.h"
-
-/**
- * Decoder object - implements the user-visible API.
- */
-struct ps_decoder_s {
-    int refcount;      /**< Reference count. */
-    cmd_ln_t *config;  /**< Configuration. */
-
-    /* Utterance-processing related stuff. */
-    uint32 uttno;       /**< Utterance counter. */
-    char *uttid;        /**< Utterance ID for current utterance. */
-    ptmr_t perf;        /**< Performance counter for all of decoding. */
-    uint32 n_frame;     /**< Total number of frames processed. */
-    featbuf_t *fb;      /**< Feature buffer. */
-    logmath_t *lmath;   /**< Global log-math computation. */
-    acmod_t *acmod;     /**< Initial, global acoustic model. */
-    
-    /* Search modules (each of which has its own thread and its own
-     * acmod_t, which may be cloned). */
-    /* FIXME: Currently the fwdtree->fwdflat topology is hardwired,
-     * this will change very soon. */
-    ps_search_t *fwdtree;
-    ps_search_t *fwdflat;
-    ps_search_t *latgen;
+static ps_searchfuncs_t latgen_funcs = {
+    /* name: */   "latgen",
+    /* free: */   latgen_search_free,
+    /* decode: */ latgen_search_decode,
 };
 
-#endif /* __POCKETSPHINX_INTERNAL_H__ */
+ps_search_t *
+latgen_init(cmd_ln_t *config,
+	    dict2pid_t *d2p,
+	    arc_buffer_t *input_arcs)
+{
+	latgen_t *latgen;
+
+	latgen = ckd_calloc(1, sizeof(*latgen));
+	ps_search_init(&latgen->base, &latgen_funcs,
+		       config, NULL, d2p->dict, d2p);
+	
+	return &latgen->base;
+}
+
+static int
+latgen_search_decode(ps_search_t *base)
+{
+	return 0;
+}
+
+static int
+latgen_search_free(ps_search_t *base)
+{
+	return 0;
+}

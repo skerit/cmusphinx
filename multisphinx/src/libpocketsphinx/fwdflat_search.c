@@ -172,6 +172,7 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
                                       sizeof(*ffs->expand_word_list));
     ffs->input_arcs = input_arcs;
     ffs->bptbl = bptbl_init(d2p, cmd_ln_int32_r(config, "-latsize"), 256);
+    ps_search_output_arcs(ffs) = arc_buffer_init(ffs->bptbl);
 
     /* Allocate active word list array */
     ffs->active_word_list = ckd_calloc_2d(2, ps_search_n_words(ffs),
@@ -435,6 +436,9 @@ fwdflat_search_start(ps_search_t *base)
     ffs->oldest_bp = -1;
     for (i = 0; i < ps_search_n_words(ffs); i++)
         ffs->word_idx[i] = NO_BP;
+
+    /* Reset output arc buffer. */
+    arc_buffer_reset(ps_search_output_arcs(ffs));
 
     /* Create word HMM for start, end, and silence words. */
     for (i = ps_search_start_wid(ffs);
@@ -918,6 +922,9 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
     fi = bptbl_push_frame(ffs->bptbl, ffs->oldest_bp);
     assert(fi == frame_idx);
 
+    /* Forward retired backpointers to the arc buffer. */
+    arc_buffer_sweep(ps_search_output_arcs(ffs), FALSE);
+
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
     if (ffs->best_score == WORST_SCORE || ffs->best_score WORSE_THAN WORST_SCORE)
@@ -1099,6 +1106,9 @@ fwdflat_search_finish(ps_search_t *base)
 
     /* Finalize the backpointer table. */
     bptbl_finalize(ffs->bptbl);
+
+    /* Finalize the output arc buffer. */
+    arc_buffer_finalize(ps_search_output_arcs(ffs), FALSE);
 
     /* Print out some statistics. */
     if (cf > 0) {

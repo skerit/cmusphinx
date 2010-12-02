@@ -50,6 +50,7 @@
 
 /* Local headers. */
 #include "fwdtree_search.h"
+#include "arc_buffer.h"
 
 /* Turn this on to dump channels for debugging */
 #define __CHAN_DUMP__		0
@@ -144,6 +145,7 @@ fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
 
     fts->bptbl = bptbl_init(d2p, cmd_ln_int32_r(config, "-latsize"), 256);
     fts->word_idx = ckd_calloc(dict_size(dict), sizeof(*fts->word_idx));
+    ps_search_output_arcs(fts) = arc_buffer_init(fts->bptbl);
 
     /* Allocate active word list array */
     fts->active_word_list = ckd_calloc_2d(2, dict_size(dict),
@@ -664,9 +666,8 @@ fwdtree_search_start(ps_search_t *base)
     bptbl_reset(fts->bptbl);
     fts->oldest_bp = NO_BP;
 
-    /* Reset output arc buffer (if any). */
-    if (fts->output_arcs)
-        arc_buffer_reset(fts->output_arcs);
+    /* Reset output arc buffer. */
+    arc_buffer_reset(ps_search_output_arcs(fts));
 
     /* Reset word lattice. */
     for (i = 0; i < n_words; ++i)
@@ -1731,8 +1732,7 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     assert(fi == frame_idx);
 
     /* Forward retired backpointers to the arc buffer. */
-    if (fts->output_arcs)
-        arc_buffer_sweep(fts->output_arcs, TRUE);
+    arc_buffer_sweep(ps_search_output_arcs(fts), TRUE);
 
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
@@ -1777,13 +1777,15 @@ fwdtree_search_finish(ps_search_t *base)
     nonroot_node_t *hmm, **acl;
 
     ptmr_start(&fts->base.t);
+
     /* This is the number of frames processed. */
     cf = acmod_frame(ps_search_acmod(fts));
+
     /* Finalize the backpointer table. */
     bptbl_finalize(fts->bptbl);
+
     /* Finalize the output arc buffer. */
-    if (fts->output_arcs)
-        arc_buffer_finalize(fts->output_arcs, TRUE);
+    arc_buffer_finalize(ps_search_output_arcs(fts), TRUE);
 
     /* Deactivate channels lined up for the next frame */
     /* First, root channels of HMM tree */
@@ -2001,15 +2003,6 @@ fwdtree_search_seg_iter(ps_search_t *base, int32 *out_score)
 {
     fwdtree_search_t *fts = (fwdtree_search_t *)base;
     return bptbl_seg_iter(fts->bptbl, out_score, ps_search_finish_wid(fts));
-}
-
-arc_buffer_t *
-fwdtree_search_arc_buffer(ps_search_t *base)
-{
-    fwdtree_search_t *fts = (fwdtree_search_t *)base;
-    if (fts->output_arcs == NULL)
-        fts->output_arcs = arc_buffer_init(fts->bptbl);
-    return fts->output_arcs;
 }
 
 ngram_model_t *

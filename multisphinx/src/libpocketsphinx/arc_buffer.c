@@ -38,6 +38,8 @@
 /**
  * @file arc_buffer.c Queue passing hypotheses (arcs) between search passes
  */
+
+#include "bptbl.h"
 #include "arc_buffer.h"
 
 arc_buffer_t *

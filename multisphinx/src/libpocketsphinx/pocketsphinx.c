@@ -50,6 +50,7 @@
 #include "pocketsphinx_internal.h"
 #include "fwdtree_search.h"
 #include "fwdflat_search.h"
+#include "latgen_search.h"
 
 static const arg_t ps_args_def[] = {
     POCKETSPHINX_OPTIONS,
@@ -218,16 +219,22 @@ ps_init(cmd_ln_t *config)
         acmod2 = acmod_copy(ps->acmod);
         if (cmd_ln_str_r(config, "-fwdtreelm") != NULL) {
             ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-                                              fwdtree_search_arc_buffer(ps->fwdtree),
+                                              ps_search_output_arcs(ps->fwdtree),
                                               NULL);
         }
         else {
             ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-                                              fwdtree_search_arc_buffer(ps->fwdtree),
+                                              ps_search_output_arcs(ps->fwdtree),
                                               fwdtree_search_lmset(ps->fwdtree));
         }
         acmod_free(acmod2);
-    }        
+        ps->latgen = latgen_init(config, d2p, ps_search_output_arcs(ps->fwdflat));
+    }
+    else {
+        /* FIXME: Eventually this will take a language model too so it
+         * can do N-Gram expansion. */
+        ps->latgen = latgen_init(config, d2p, ps_search_output_arcs(ps->fwdtree));
+    }
 
     /* Release pointers to things now owned by the searches. */
     dict_free(dict);
@@ -241,6 +248,8 @@ ps_init(cmd_ln_t *config)
     ps_search_run(ps->fwdtree);
     if (ps->fwdflat)
         ps_search_run(ps->fwdflat);
+    /* Don't do this quite yet since it does not work... */
+    /* ps_search_run(ps->latgen); */
 
     return ps;
 error_out:
@@ -276,6 +285,7 @@ ps_free(ps_decoder_t *ps)
     featbuf_shutdown(ps->fb);
     ps_search_free(ps->fwdtree);
     ps_search_free(ps->fwdflat);
+    ps_search_free(ps->latgen);
     featbuf_free(ps->fb);
     logmath_free(ps->lmath);
     cmd_ln_free_r(ps->config);

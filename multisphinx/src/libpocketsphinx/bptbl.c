@@ -183,10 +183,16 @@ bptbl_dump(bptbl_t *bptbl)
     }
 }
 
+#ifdef __GNUC__
+#define ATTRIBUTE_UNUSED __attribute__((unused))
+#else
+#define ATTRIBUTE_UNUSED
+#endif
+
 /**
  * Mark all active entries in the backpointer table.
  */
-static int
+static int ATTRIBUTE_UNUSED
 bptbl_mark_all(bptbl_t *bptbl, int ef, int cf)
 {
     int i, j;

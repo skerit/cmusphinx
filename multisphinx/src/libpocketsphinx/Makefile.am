@@ -20,6 +20,7 @@ libpocketsphinx_la_SOURCES =			\
 	fwdtree_search.c			\
 	fwdflat_search.c			\
 	hmm.c					\
+	latgen_search.c				\
 	mdef.c					\
 	ms_gauden.c				\
 	ms_mgau.c				\
@@ -48,6 +49,7 @@ noinst_HEADERS =				\
 	fwdtree_search.h			\
 	fwdflat_search.h			\
 	hmm.h					\
+	latgen_search.h				\
 	mdef.h					\
 	ms_gauden.h				\
 	ms_mgau.h				\

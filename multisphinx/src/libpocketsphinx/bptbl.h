@@ -53,7 +53,7 @@
 #include <sphinxbase/profile.h>
 
 /* Local headers. */
-#include "pocketsphinx_internal.h"
+#include "ps_search.h"
 
 #define NO_BP		-1
 
