@@ -79,6 +79,14 @@ typedef struct ms_lattice_s {
      */
     garray_t *node_list;
     /**
+     * List of lattice links
+     *
+     * Since the same link is shared between source and destination
+     * node, we maintain a shared pool of links which is referenced
+     * indirectly from the node structures.
+     */
+    garray_t *link_list;
+    /**
      * Mapping of lattice node IDs to node list indices.
      */
     nodeid_map_t *node_map;
@@ -88,10 +96,10 @@ typedef struct ms_lattice_s {
  * Lattice node structure.
  */
 typedef struct ms_latnode_s {
-    nodeid_t id;
-    int16 fan;     /**< Fan-in count for traversal. */
-    garray_t *exits;
-    garray_t *entries;
+    nodeid_t id;       /**< Node ID (language model state/word ID, sf) */
+    int16 fan;         /**< Fan-in count for traversal. */
+    garray_t *exits;   /**< Link indices (FIXME: not memory efficient) */
+    garray_t *entries; /**< Link indices (FIXME: not memory efficient) */
 } ms_latnode_t;
 
 /**
@@ -99,8 +107,6 @@ typedef struct ms_latnode_s {
  */
 typedef struct ms_latlink_t {
     int32 wid;    /**< Word ID. */
-    int32 src;    /**< Source node ID. */
-    int32 dest;   /**< Destination node ID. */
     int32 ascr;   /**< Acoustic score. */
     int32 lscr;   /**< Language score. */
     int32 alpha;  /**< Forward log-probability. */

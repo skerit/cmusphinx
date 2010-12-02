@@ -63,6 +63,7 @@ ms_lattice_init(logmath_t *lmath, dict_t *dict)
         l->autodict = TRUE;
     }
     l->node_list = garray_init(0, sizeof(ms_latnode_t));
+    l->link_list = garray_init(0, sizeof(ms_latlink_t));
     l->node_map = nodeid_map_init();
     return l;
 }
@@ -126,6 +127,24 @@ ms_lattice_link(ms_lattice_t *l,
                 ms_latnode_t *src, ms_latnode_t *dest,
                 int32 wid, int32 ascr)
 {
+    ms_latlink_t *arc;
+    int32 lid;
+
+    if (src->exits == NULL)
+        src->exits = garray_init(0, sizeof(int32));
+    if (dest->entries == NULL)
+        dest->entries = garray_init(0, sizeof(int32));
+
+    lid = garray_next_idx(l->link_list);
+    garray_expand(l->link_list, lid + 1);
+    arc = garray_ptr(l->link_list, ms_latlink_t, lid);
+    garray_append(src->exits, &lid);
+    garray_append(dest->entries, &lid);
+
+    arc->wid = wid;
+    arc->ascr = ascr;
+
+    return arc;
 }
 
 static int
@@ -218,6 +237,8 @@ process_htk_node_line(ms_lattice_t *l, lineiter_t *li,
     }
     node->id.sf = sf;
     node->id.lmstate = wid; /* This may get updated later. */
+    node->fan = 0;
+    node->exits = node->entries = NULL;
     nodeid_map_add(l->node_map, sf, wid, nodeidx);
 
     ckd_free(word);
@@ -276,6 +297,18 @@ process_htk_arc_line(ms_lattice_t *l, lineiter_t *li, garray_t *wptr, int n_wptr
                    f, (int)li->lineno);
         }
     }
+    if (src == NULL || dest == NULL) {
+        E_ERROR("Found no valid src and dest IDs in line %d\n",
+                (int)li->lineno);
+        ckd_free(word);
+        return -1;
+    }
+    if (word)
+        wid = get_or_create_wid(l, word, alt);
+    else
+        /* NOTE: push forward word IDs immediately (might as well). */
+        wid = src->id.lmstate;
+    arc = ms_lattice_link(l, src, dest, wid, ascr);
 
     ckd_free(word);
     return 0;
