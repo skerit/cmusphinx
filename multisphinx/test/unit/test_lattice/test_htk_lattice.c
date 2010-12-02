@@ -20,6 +20,10 @@ main(int argc, char *argv[])
 	TEST_ASSERT(0 == fclose(fh))
 	TEST_ASSERT(fh = fopen("test_htk_lattice.slf", "w"));
 	TEST_ASSERT(0 == ms_lattice_write_htk(l, fh, 100));
+	TEST_ASSERT(0 == fclose(fh))
+	TEST_ASSERT(fh = fopen("test_htk_lattice.dot", "w"));
+	TEST_ASSERT(0 == ms_lattice_write_dot(l, fh));
+	TEST_ASSERT(0 == fclose(fh))
 
 	ms_lattice_free(l);
 	return 0;

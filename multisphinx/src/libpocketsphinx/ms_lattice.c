@@ -476,8 +476,71 @@ ms_lattice_write_htk(ms_lattice_t *l, FILE *fh, int frate)
     return 0;
 }
 
+static int
+print_dot_nodeid(ms_lattice_t *l, ms_latnode_t *node, FILE *fh)
+{
+    if (node->id.lmstate != -1)
+        return fprintf(fh, " \"%s/%d\"",
+                       dict_wordstr(l->dict, node->id.lmstate),
+                       node->id.sf);
+    else
+        return fprintf(fh, " \"&epsilon;/%d\"", node->id.sf);
+}
+
 int
 ms_lattice_write_dot(ms_lattice_t *l, FILE *fh)
 {
-    return -1;
+    int32 zero = logmath_get_zero(l->lmath);
+    ms_latnode_t *node;
+    int i;
+
+    fprintf(fh, "digraph lattice {\n\trankdir=LR;\n\t");
+    fprintf(fh, "\tnode [shape=circle];");
+    for (i = 0; i < garray_size(l->node_list); ++i) {
+        node = garray_ptr(l->node_list, ms_latnode_t, i);
+        if (i != l->end_idx) 
+            print_dot_nodeid(l, node, fh);
+    }
+    fprintf(fh, "\n");
+    node = ms_lattice_get_end(l);
+    fprintf(fh, "\tnode [shape=doublecircle];");
+    print_dot_nodeid(l, node, fh);
+    fprintf(fh, "\n\n");
+    for (i = 0; i < garray_size(l->node_list); ++i) {
+        int j;
+        node = garray_ptr(l->node_list, ms_latnode_t, i);
+        if (node->exits == NULL)
+            continue;
+        for (j = 0; j < garray_size(node->exits); ++j) {
+            int32 linkid = garray_ent(node->exits, int32, j);
+            ms_latlink_t *link = garray_ptr(l->link_list, ms_latlink_t, linkid);
+            ms_latnode_t *node2;
+            double weight;
+
+            /* FIXME: Ad hoc behaviour for weights, should be configurable. */
+            if (link->alpha != zero
+                && link->beta != zero
+                && l->norm != zero)
+                weight = logmath_exp(l->lmath, link->alpha + link->beta - l->norm);
+            else if (link->lscr != zero)
+                weight = logmath_log_to_ln(l->lmath, link->lscr);
+            else
+                weight = logmath_log_to_ln(l->lmath, link->ascr);
+
+            fprintf(fh, "\t");
+            node2 = ms_lattice_get_node_idx(l, link->src);
+            print_dot_nodeid(l, node2, fh);
+            fprintf(fh, " ->");
+            node2 = ms_lattice_get_node_idx(l, link->dest);
+            print_dot_nodeid(l, node2, fh);
+
+            if (link->wid != -1)
+                fprintf(fh, " [label=\"%s/%.2g\"];\n",
+                        dict_wordstr(l->dict, link->wid), weight);
+            else
+                fprintf(fh, " [label=\"%.2g\"];\n", weight);
+        }
+    }
+    fprintf(fh, "}\n");
+    return 0;
 }
