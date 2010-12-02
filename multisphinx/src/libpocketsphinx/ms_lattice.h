@@ -195,6 +195,38 @@ ms_latnode_t *ms_latnode_iter_get(ms_latnode_iter_t *itor);
 void ms_latnode_iter_free(ms_latnode_iter_t *itor);
 
 /**
+ * Get number of entries.
+ */
+int ms_latnode_n_entries(ms_latnode_t *node);
+
+/**
+ * Get an entry link from a node.
+ */
+ms_latlink_t *ms_latnode_get_entry(ms_lattice_t *l,
+                                   ms_latnode_t *node, int idx);
+
+/**
+ * Get number of exits.
+ */
+int ms_latnode_n_exits(ms_latnode_t *node);
+
+/**
+ * Get an exit link from a node.
+ */
+ms_latlink_t *ms_latnode_get_exit(ms_lattice_t *l,
+                                  ms_latnode_t *node, int idx);
+
+/**
+ * Delete a node.
+ */
+void ms_latnode_unlink(ms_lattice_t *l, ms_latnode_t *node);
+
+/**
+ * Delete a link.
+ */
+void ms_latlink_unlink(ms_lattice_t *l, ms_latlink_t *link);
+
+/**
  * Perform bigram expansion on a lattice and assign language model
  * probabilities.
  *

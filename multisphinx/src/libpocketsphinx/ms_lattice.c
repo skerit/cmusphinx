@@ -801,6 +801,46 @@ ms_latnode_iter_free(ms_latnode_iter_t *itor)
 }
 
 int
+ms_latnode_n_entries(ms_latnode_t *node)
+{
+    return node->entries ? garray_size(node->entries) : 0;
+}
+
+int
+ms_latnode_n_exits(ms_latnode_t *node)
+{
+    return node->exits ? garray_size(node->exits) : 0;
+}
+
+ms_latlink_t *
+ms_latnode_get_entry(ms_lattice_t *l, ms_latnode_t *node, int idx)
+{
+    int32 linkid = garray_ent(node->entries, int32, idx);
+    return garray_ptr(l->link_list, ms_latlink_t, linkid);
+}
+
+ms_latlink_t *
+ms_latnode_get_exit(ms_lattice_t *l, ms_latnode_t *node, int idx)
+{
+    int32 linkid = garray_ent(node->exits, int32, idx);
+    return garray_ptr(l->link_list, ms_latlink_t, linkid);
+}
+
+void
+ms_latnode_unlink(ms_lattice_t *l, ms_latnode_t *node)
+{
+}
+
+void
+ms_latlink_unlink(ms_lattice_t *l, ms_latlink_t *link)
+{
+    ms_latnode_t *src, *dest;
+
+    src = ms_lattice_get_node_idx(l, link->src);
+    dest = ms_lattice_get_node_idx(l, link->dest);
+}
+
+int
 ms_lattice_bigram_expand(ms_lattice_t *l, ngram_model_t *lm)
 {
     ms_latnode_t *end;
@@ -819,10 +859,7 @@ ms_lattice_bigram_expand(ms_lattice_t *l, ngram_model_t *lm)
         /* Word IDs have already been pushed to arcs. */
         /* Expand this node with unique incoming N-gram histories. */
         for (j = 0; n->entries && j < garray_size(n->entries); ++j) {
-            int32 linkid = garray_ent(n->entries, int32, j);
-            /* FIXME: Need a public function for this operation. */
-            ms_latlink_t *link = garray_ptr(itor->l->link_list,
-                                            ms_latlink_t, linkid);
+            ms_latlink_t *link = ms_latnode_get_entry(l, n, j);
             ngram_iter_t *ni;
             int32 lmstate;
 
@@ -870,13 +907,9 @@ ms_lattice_forward(ms_lattice_t *l, int32 inv_aw)
         ms_latnode_t *n = ms_latnode_iter_get(itor);
         int i, j;
         for (i = 0; n->exits && i < garray_size(n->exits); ++i) {
-            int32 linkid = garray_ent(n->exits, int32, i);
-            ms_latlink_t *wx = garray_ptr(itor->l->link_list,
-                                          ms_latlink_t, linkid);
+            ms_latlink_t *wx = ms_latnode_get_exit(l, n, i);
             for (j = 0; n->entries && j < garray_size(n->entries); ++j) {
-                int32 linkid = garray_ent(n->entries, int32, j);
-                ms_latlink_t *vx = garray_ptr(itor->l->link_list,
-                                              ms_latlink_t, linkid);
+                ms_latlink_t *vx = ms_latnode_get_entry(l, n, j);
             }
         }
     }
@@ -893,13 +926,9 @@ ms_lattice_backward(ms_lattice_t *l, int32 inv_aw)
         ms_latnode_t *n = ms_latnode_iter_get(itor);
         int i, j;
         for (i = 0; n->entries && i < garray_size(n->entries); ++i) {
-            int32 linkid = garray_ent(n->entries, int32, i);
-            ms_latlink_t *wx = garray_ptr(itor->l->link_list,
-                                          ms_latlink_t, linkid);
+            ms_latlink_t *vx = ms_latnode_get_entry(l, n, i);
             for (j = 0; n->exits && j < garray_size(n->exits); ++j) {
-                int32 linkid = garray_ent(n->exits, int32, j);
-                ms_latlink_t *vx = garray_ptr(itor->l->link_list,
-                                              ms_latlink_t, linkid);
+                ms_latlink_t *wx = ms_latnode_get_exit(l, n, j);
             }
         }
     }
