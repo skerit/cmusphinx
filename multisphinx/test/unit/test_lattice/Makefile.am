@@ -1,5 +1,6 @@
 check_PROGRAMS = \
-	test_nodeid_map
+	test_nodeid_map \
+	test_htk_lattice
 
 TESTS = $(check_PROGRAMS)
 

@@ -137,3 +137,4 @@ test/unit/test_search/test_latgen
 test/unit/test_search/test_batch.hyp
 test/unit/test_search/test_batch.sh
 test/unit/test_lattice/test_nodeid_map
+test/unit/test_lattice/test_htk_lattice
