@@ -86,6 +86,7 @@ struct ms_lattice_s {
     nodeid_map_t *node_map;
     int32 start_idx;
     int32 end_idx;
+    int32 next_frame;
     /**
      * Total probability of this lattice (normalizer for posteriors)
      */
@@ -183,7 +184,16 @@ ms_lattice_node_init(ms_lattice_t *l, int sf, int32 lmstate)
     node->id.sf = sf;
     node->id.lmstate = lmstate;
 
+    if (sf > l->next_frame)
+        l->next_frame = sf;
+
     return node;
+}
+
+int
+ms_lattice_get_n_frames(ms_lattice_t *l)
+{
+    return l->next_frame;
 }
 
 int32
@@ -364,6 +374,8 @@ process_htk_node_line(ms_lattice_t *l, lineiter_t *li,
     node->fan = 0;
     node->exits = node->entries = NULL;
     nodeid_map_add(l->node_map, sf, wid, nodeidx);
+    if (sf > l->next_frame)
+        l->next_frame = sf;
 
     ckd_free(word);
     return 0;
@@ -791,18 +803,106 @@ ms_latnode_iter_free(ms_latnode_iter_t *itor)
 int
 ms_lattice_bigram_expand(ms_lattice_t *l, ngram_model_t *lm)
 {
+    ms_latnode_t *end;
+    ms_latnode_iter_t *itor;
+
+    /* New final node (in theory, there are a bunch of different final
+     * language model histories, but since nothing follows this there
+     * is no need to distinguish them) */
+    end = ms_lattice_node_init(l, ms_lattice_get_n_frames(l),
+                               ms_lattice_get_lmstate_idx(l, "</s>"));
+    /* Traverse nodes. */
+    for (itor = ms_lattice_traverse_topo(l, NULL);
+         itor; itor = ms_latnode_iter_next(itor)) {
+        ms_latnode_t *n = ms_latnode_iter_get(itor);
+        int j;
+        /* Word IDs have already been pushed to arcs. */
+        /* Expand this node with unique incoming N-gram histories. */
+        for (j = 0; n->entries && j < garray_size(n->entries); ++j) {
+            int32 linkid = garray_ent(n->entries, int32, j);
+            /* FIXME: Need a public function for this operation. */
+            ms_latlink_t *link = garray_ptr(itor->l->link_list,
+                                            ms_latlink_t, linkid);
+            ngram_iter_t *ni;
+            int32 lmstate;
+
+            /* Create new language model state for this incoming arc.
+             * This is composed of the lmstate for its source node
+             * plus the arc's base word, truncated to N-1 words. */
+            /* Check if it exists in the language model. */
+            /* If not, back off the language model state and add the
+             * backoff weight to the incoming arc.  Repeat this until
+             * we find an N-Gram or we run out of history. */
+            /* If we run out of history do nothing, the original node
+             * becomes a null backoff node. */
+            /* If we found an appropriate non-null language model
+             * state, look for a node with the desired language model
+             * state in this frame, and create one if it does not yet
+             * exist. */
+            /* This link might be a duplicate of one already entering
+             * the given node, if so, drop it on the floor. */
+            /* Repoint link at the newly created/found node. */
+            /* If this is a final node then link it to the new final
+             * node created above. */
+        }
+        /* If the original node has no more entries (and is not the
+         * start node), then make it unreachable. */
+        /* Change the original node to a null backoff node and assign
+         * unigram LM probabilities to its outgoing arcs (we did all
+         * the other backoff probs above when we generated the other
+         * backoff nodes). */
+        /* If this is a final node then link it to the new final node
+         * created above. */
+    }
+    /* Update final node. */
+    ms_lattice_set_end(l, end);
+
     return 0;
 }
 
 int32
 ms_lattice_forward(ms_lattice_t *l, int32 inv_aw)
 {
+    ms_latnode_iter_t *itor;
+
+    for (itor = ms_lattice_traverse_topo(l, NULL);
+         itor; itor = ms_latnode_iter_next(itor)) {
+        ms_latnode_t *n = ms_latnode_iter_get(itor);
+        int i, j;
+        for (i = 0; n->exits && i < garray_size(n->exits); ++i) {
+            int32 linkid = garray_ent(n->exits, int32, i);
+            ms_latlink_t *wx = garray_ptr(itor->l->link_list,
+                                          ms_latlink_t, linkid);
+            for (j = 0; n->entries && j < garray_size(n->entries); ++j) {
+                int32 linkid = garray_ent(n->entries, int32, j);
+                ms_latlink_t *vx = garray_ptr(itor->l->link_list,
+                                              ms_latlink_t, linkid);
+            }
+        }
+    }
     return l->norm;
 }
 
 int32
 ms_lattice_backward(ms_lattice_t *l, int32 inv_aw)
 {
+    ms_latnode_iter_t *itor;
+
+    for (itor = ms_lattice_reverse_topo(l, NULL);
+         itor; itor = ms_latnode_iter_next(itor)) {
+        ms_latnode_t *n = ms_latnode_iter_get(itor);
+        int i, j;
+        for (i = 0; n->entries && i < garray_size(n->entries); ++i) {
+            int32 linkid = garray_ent(n->entries, int32, i);
+            ms_latlink_t *wx = garray_ptr(itor->l->link_list,
+                                          ms_latlink_t, linkid);
+            for (j = 0; n->exits && j < garray_size(n->exits); ++j) {
+                int32 linkid = garray_ent(n->exits, int32, j);
+                ms_latlink_t *vx = garray_ptr(itor->l->link_list,
+                                              ms_latlink_t, linkid);
+            }
+        }
+    }
     return l->norm;
 }
 
