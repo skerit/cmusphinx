@@ -85,6 +85,21 @@ ms_lattice_t *ms_lattice_retain(ms_lattice_t *l);
 int ms_lattice_free(ms_lattice_t *l);
 
 /**
+ * Create a language model state.
+ */
+int32 ms_lattice_lmstate_init(ms_lattice_t *l, char const *name);
+
+/**
+ * Look up a language model state by name.
+ */
+int32 ms_lattice_get_lmstate_idx(ms_lattice_t *l, char const *name);
+
+/**
+ * Look up a language model state by index.
+ */
+char const *ms_lattice_get_lmstate_name(ms_lattice_t *l, int32 idx);
+
+/**
  * Create a node.
  */
 ms_latnode_t *ms_lattice_node_init(ms_lattice_t *l, int sf, int32 lmstate);
@@ -103,6 +118,16 @@ ms_latnode_t *ms_lattice_get_node_id(ms_lattice_t *l, int sf, int32 lmstate);
  * Get the index of a node.
  */
 int32 ms_lattice_get_idx_node(ms_lattice_t *l, ms_latnode_t *node);
+
+/**
+ * Set the start node.
+ */
+int32 ms_lattice_set_start(ms_lattice_t *l, ms_latnode_t *node);
+
+/**
+ * Set the end node.
+ */
+int32 ms_lattice_set_end(ms_lattice_t *l, ms_latnode_t *node);
 
 /**
  * Get the start node.

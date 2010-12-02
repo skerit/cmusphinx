@@ -136,6 +136,28 @@ ms_lattice_free(ms_lattice_t *l)
     return 0;
 }
 
+int32
+ms_lattice_lmstate_init(ms_lattice_t *l, char const *name)
+{
+    int32 idx;
+
+    if ((idx = dict_wordid(l->dict, name)) != -1)
+        return idx;
+    return dict_add_word(l->dict, name, NULL, 0);
+}
+
+int32
+ms_lattice_get_lmstate_idx(ms_lattice_t *l, char const *name)
+{
+    return dict_wordid(l->dict, name);
+}
+
+char const *
+ms_lattice_get_lmstate_name(ms_lattice_t *l, int32 idx)
+{
+    return dict_wordstr(l->dict, idx);
+}
+
 ms_latnode_t *
 ms_lattice_node_init(ms_lattice_t *l, int sf, int32 lmstate)
 {
@@ -174,6 +196,22 @@ ms_lattice_get_node_id(ms_lattice_t *l, int sf, int32 lmstate)
     if (idx == -1)
         return NULL;
     return ms_lattice_get_node_idx(l, idx);
+}
+
+int32
+ms_lattice_set_start(ms_lattice_t *l, ms_latnode_t *node)
+{
+    int32 idx = ms_lattice_get_idx_node(l, node);
+    l->start_idx = idx;
+    return idx;
+}
+
+int32
+ms_lattice_set_end(ms_lattice_t *l, ms_latnode_t *node)
+{
+    int32 idx = ms_lattice_get_idx_node(l, node);
+    l->end_idx = idx;
+    return idx;
 }
 
 ms_latnode_t *
