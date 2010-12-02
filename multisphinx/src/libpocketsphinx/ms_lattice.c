@@ -1406,6 +1406,8 @@ int32
 ms_lattice_forward(ms_lattice_t *l, int32 inv_aw)
 {
     ms_latnode_iter_t *itor;
+    ms_latnode_t *end;
+    int i;
 
     for (itor = ms_lattice_traverse_topo(l, NULL);
          itor; itor = ms_latnode_iter_next(itor)) {
@@ -1413,11 +1415,28 @@ ms_lattice_forward(ms_lattice_t *l, int32 inv_aw)
         int i, j;
         for (i = 0; i < ms_latnode_n_exits(n); ++i) {
             ms_latlink_t *wx = ms_latnode_get_exit(l, n, i);
+            int32 forward = logmath_get_zero(l->lmath);
             for (j = 0; j < ms_latnode_n_entries(n); ++j) {
                 ms_latlink_t *vx = ms_latnode_get_entry(l, n, j);
+                forward = logmath_add(l->lmath, forward, vx->alpha);
             }
+            if (ms_latnode_n_entries(n) == 0)
+                forward = 0;
+            wx->alpha = forward + wx->lscr + wx->ascr / inv_aw;
+            E_DEBUG(2,("<Link: %s %d -> %d> alpha = %f\n",
+                       dict_basestr(l->dict, wx->wid),
+                       ms_lattice_get_node_idx(l, wx->src)->id.sf,
+                       ms_lattice_get_node_idx(l, wx->dest)->id.sf,
+                       logmath_log_to_ln(l->lmath, wx->alpha)));
         }
     }
+    end = ms_lattice_get_end(l);
+    l->norm = logmath_get_zero(l->lmath);
+    for (i = 0; i < ms_latnode_n_entries(end); ++i) {
+        ms_latlink_t *vx = ms_latnode_get_entry(l, end, i);
+        l->norm = logmath_add(l->lmath, l->norm, vx->alpha);
+    }
+    E_DEBUG(2,("norm = %d = %f\n", l->norm, logmath_log_to_ln(l->lmath, l->norm)));
     return l->norm;
 }
 
@@ -1432,9 +1451,19 @@ ms_lattice_backward(ms_lattice_t *l, int32 inv_aw)
         int i, j;
         for (i = 0; i < ms_latnode_n_entries(n); ++i) {
             ms_latlink_t *vx = ms_latnode_get_entry(l, n, i);
+            vx->beta = logmath_get_zero(l->lmath);
             for (j = 0; j < ms_latnode_n_exits(n); ++j) {
                 ms_latlink_t *wx = ms_latnode_get_exit(l, n, j);
+                vx->beta = logmath_add(l->lmath, vx->beta,
+                                       wx->beta + wx->lscr + wx->ascr / inv_aw);
             }
+            if (ms_latnode_n_exits(n) == 0)
+                vx->beta = 0;
+            E_DEBUG(2,("<Link: %s %d -> %d> beta = %f\n",
+                       dict_basestr(l->dict, vx->wid),
+                       ms_lattice_get_node_idx(l, vx->src)->id.sf,
+                       ms_lattice_get_node_idx(l, vx->dest)->id.sf,
+                       logmath_log_to_ln(l->lmath, vx->beta)));
         }
     }
     return l->norm;
