@@ -633,8 +633,7 @@ ms_lattice_write_dot(ms_lattice_t *l, FILE *fh)
         if (node->exits == NULL)
             continue;
         for (j = 0; j < garray_size(node->exits); ++j) {
-            int32 linkid = garray_ent(node->exits, int32, j);
-            ms_latlink_t *link = garray_ptr(l->link_list, ms_latlink_t, linkid);
+            ms_latlink_t *link = ms_latnode_get_exit(l, node, j);
             ms_latnode_t *node2;
             double weight;
 
@@ -683,8 +682,7 @@ ms_lattice_traverse_topo(ms_lattice_t *l,
         if (node->exits == NULL)
             continue;
         for (j = 0; j < garray_size(node->exits); ++j) {
-            int32 linkid = garray_ent(node->exits, int32, j);
-            ms_latlink_t *link = garray_ptr(l->link_list, ms_latlink_t, linkid);
+            ms_latlink_t *link = ms_latnode_get_exit(l, node, j);
             ms_latnode_t *node2 = ms_lattice_get_node_idx(l, link->dest);
             ++node2->fan;
         }
@@ -719,8 +717,7 @@ ms_lattice_reverse_topo(ms_lattice_t *l,
         if (node->exits == NULL)
             continue;
         for (j = 0; j < garray_size(node->exits); ++j) {
-            int32 linkid = garray_ent(node->exits, int32, j);
-            ms_latlink_t *link = garray_ptr(l->link_list, ms_latlink_t, linkid);
+            ms_latlink_t *link = ms_latnode_get_exit(l, node, j);
             ms_latnode_t *node2 = ms_lattice_get_node_idx(l, link->src);
             ++node2->fan;
         }
