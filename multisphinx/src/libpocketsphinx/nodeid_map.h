@@ -76,7 +76,7 @@ int32 nodeid_map_map(nodeid_map_t *nmap, nodeid_t nid);
  */
 nodeid_iter_t *nodeid_map_iter(nodeid_map_t *nmap, int sf);
 nodeid_iter_t *nodeid_iter_next(nodeid_iter_t *itor);
-int32 nodeid_iter_get(nodeid_iter_t *itor);
+int32 nodeid_iter_get(nodeid_iter_t *itor, int32 *out_lmstate);
 void nodeid_iter_free(nodeid_iter_t *itor);
 
 #endif /* __NODEID_MAP_H__ */
