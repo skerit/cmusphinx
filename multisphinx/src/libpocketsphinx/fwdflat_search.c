@@ -1017,9 +1017,6 @@ fwdflat_search_decode(ps_search_t *base)
         arc_buffer_producer_shutdown(base->output_arcs);
         return -1;
     }
-    E_INFO("fwdflat: waiting for arc buffer start\n");
-    if (arc_buffer_consumer_wait(ffs->input_arcs, -1) < 0)
-        goto canceled;
     fwdflat_search_start(ps_search_base(ffs));
     while (!acmod_eou(base->acmod)) {
         int end_win;

@@ -78,7 +78,7 @@ latgen_search_decode(ps_search_t *base)
     int frame_idx;
 
     frame_idx = 0;
-    E_INFO("latgen: waiting for utt start\n");
+    E_INFO("latgen: waiting for arc buffer start\n");
     if (arc_buffer_consumer_start_utt(latgen->input_arcs, -1) < 0)
         return -1;
     while (arc_buffer_consumer_wait(latgen->input_arcs, -1) >= 0) {
