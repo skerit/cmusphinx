@@ -18,6 +18,7 @@ main(int argc, char *argv[])
 
 	/* Add some nodes and arcs and stuff. */
 
+	/* Write it out to a dot file so we can verify it. */
 	ms_lattice_free(l);
 	return 0;
 }

@@ -48,6 +48,49 @@
 
 #include "ms_lattice.h"
 
+struct ms_lattice_s {
+    int refcount;
+    /**
+     * Log base calculation.
+     */
+    logmath_t *lmath;
+    /**
+     * Dictionary for mapping language model states.
+     */
+    dict_t *dict;
+    /**
+     * Do we create new dictionary entries as needed?
+     */
+    int autodict;
+    /**
+     * List of lattice nodes
+     *
+     * Lattice nodes are identified by the combination of language model
+     * state and start frame - because the sort order may change in the
+     * lattice structure we maintain an auxiliary table to preserve this
+     * mapping.
+     */
+    garray_t *node_list;
+    /**
+     * List of lattice links
+     *
+     * Since the same link is shared between source and destination
+     * node, we maintain a shared pool of links which is referenced
+     * indirectly from the node structures.
+     */
+    garray_t *link_list;
+    /**
+     * Mapping of lattice node IDs to node list indices.
+     */
+    nodeid_map_t *node_map;
+    int32 start_idx;
+    int32 end_idx;
+    /**
+     * Total probability of this lattice (normalizer for posteriors)
+     */
+    int32 norm;
+};
+
 ms_lattice_t *
 ms_lattice_init(logmath_t *lmath, dict_t *dict)
 {
@@ -96,7 +139,26 @@ ms_lattice_free(ms_lattice_t *l)
 ms_latnode_t *
 ms_lattice_node_init(ms_lattice_t *l, int sf, int32 lmstate)
 {
-    return NULL;
+    ms_latnode_t *node;
+    int32 nodeidx;
+
+    nodeidx = garray_next_idx(l->node_list);
+    garray_expand(l->node_list, nodeidx + 1);
+    node = garray_ptr(l->node_list, ms_latnode_t, nodeidx);
+    nodeid_map_add(l->node_map, sf, lmstate, nodeidx);
+
+    node->exits = node->entries = NULL;
+    node->fan = 0;
+    node->id.sf = sf;
+    node->id.lmstate = lmstate;
+
+    return node;
+}
+
+int32
+ms_lattice_get_idx_node(ms_lattice_t *l, ms_latnode_t *node)
+{
+    return garray_idx(l->node_list, node);
 }
 
 ms_latnode_t *
