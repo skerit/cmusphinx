@@ -22,11 +22,11 @@ main(int argc, char *argv[])
 	acmod_t *acmod, *acmod2;
 	featbuf_t *fb;
 	ps_search_t *fwdtree, *fwdflat, *latgen;
-	FILE *rawfh;
-	int16 buf[2048];
+	FILE *mfcfh;
 	size_t nsamp;
 	char const *hyp;
 	int32 score;
+	mfcc_t buf[13];
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
@@ -58,14 +58,17 @@ main(int argc, char *argv[])
 	ps_search_run(latgen);
 
 	/* Feed them a bunch of data. */
-	if ((rawfh = fopen(TESTDATADIR "/i960711p.raw", "rb")) == NULL) {
-		E_FATAL_SYSTEM("Failed to open "TESTDATADIR"/i960711p.raw");
+	if ((mfcfh = fopen(TESTDATADIR "/050c0103.mfc", "rb")) == NULL) {
+		E_FATAL_SYSTEM("Failed to open "TESTDATADIR"/050c0103.mfc");
 		return 1;
 	}
+	fread(buf, 4, 1, mfcfh);
 	featbuf_producer_start_utt(fb);
-	while ((nsamp = fread(buf, 2, 2048, rawfh)) > 0)
-		featbuf_producer_process_raw(fb, buf, nsamp, FALSE);
-	fclose(rawfh);
+	while ((nsamp = fread(buf, 4, 13, mfcfh)) > 0)  {
+		mfcc_t *bptr = buf;
+		featbuf_producer_process_cep(fb, &bptr, 1, FALSE);
+	}
+	fclose(mfcfh);
 
 	/* This will wait for search to complete. */
 	E_INFO("Waiting for end of utt\n");
