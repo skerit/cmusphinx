@@ -1,13 +1,7 @@
 check_PROGRAMS = \
-	test_bptbl \
-	test_fwdtree \
-	test_fwdtree_fwdflat \
-	test_fwdtree_fwdflat_homos \
-	test_fwdtree_multiple \
-	test_latgen
+	test_nodeid_map
 
-TESTS = $(check_PROGRAMS) \
-	test_batch.sh
+TESTS = $(check_PROGRAMS)
 
 INCLUDES = \
 	-I$(top_srcdir)/include/sphinxbase \

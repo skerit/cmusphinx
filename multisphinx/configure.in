@@ -119,6 +119,7 @@ test/unit/test_util/Makefile
 test/unit/test_logmath/Makefile
 test/unit/test_search/Makefile
 test/unit/test_search/test_batch.sh
+test/unit/test_lattice/Makefile
 test/unit/test_vocab_map/Makefile
 test/unit/test_acmod/Makefile
 ])

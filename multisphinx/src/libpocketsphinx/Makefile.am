@@ -23,6 +23,7 @@ libpocketsphinx_la_SOURCES =			\
 	ms_gauden.c				\
 	ms_mgau.c				\
 	ms_senone.c				\
+	nodeid_map.c				\
 	ngram_trie.c				\
 	ps_alignment.c				\
 	ps_search.c				\
@@ -41,6 +42,7 @@ noinst_HEADERS =				\
 	ms_gauden.h				\
 	ms_mgau.h				\
 	ms_senone.h				\
+	nodeid_map.h				\
 	ps_search.h				\
 	posixwin32.h				\
 	ptm_mgau.h				\
