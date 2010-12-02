@@ -25,8 +25,8 @@ main(int argc, char *argv[])
 	TEST_ASSERT(0 == ms_lattice_read_htk(l, fh, 100));
 	TEST_ASSERT(0 == fclose(fh));
 
-	/* Do bigram expansion on it. */
-	ms_lattice_bigram_expand(l, lm);
+	/* Do N-gram expansion on it. */
+	ms_lattice_expand(l, lm);
 
 	/* Run forward-backward on it. */
 	ms_lattice_forward(l, 10);

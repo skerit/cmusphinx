@@ -491,8 +491,8 @@ process_htk_arc_line(ms_lattice_t *l, lineiter_t *li, garray_t *wptr, int n_wptr
         /* Get the word ID corresponding to the "lmstate" of the
          * source node (not its actual LM state but we will fix that
          * in expansion) */
-        wid = ms_lattice_get_lmstate_idx(l, src->id.lmstate,
-                                         NULL, 0);
+        ms_lattice_get_lmstate_wids(l, src->id.lmstate,
+                                    &wid, NULL);
     }
     arc = ms_lattice_link(l, src, dest, wid, ascr);
 
@@ -611,8 +611,10 @@ ms_lattice_write_htk(ms_lattice_t *l, FILE *fh, int frate)
     for (i = 0; i < garray_size(l->node_list); ++i) {
         ms_latnode_t *node = garray_ptr(l->node_list, ms_latnode_t, i);
         if (node->id.lmstate != -1) {
-            int32 wid = ms_lattice_get_lmstate_idx(l, node->id.lmstate, NULL, 0);
-            char const *basestr = dict_basestr(l->dict, wid);
+            char const *basestr;
+            int32 wid;
+            ms_lattice_get_lmstate_wids(l, node->id.lmstate, &wid, NULL);
+            basestr = dict_basestr(l->dict, wid);
             if (node->id.lmstate == dict_startwid(l->dict))
                 basestr = "!SENT_START";
             if (node->id.lmstate == dict_finishwid(l->dict))
