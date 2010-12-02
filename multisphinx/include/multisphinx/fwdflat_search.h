@@ -59,4 +59,7 @@ ps_search_t *fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
                                  arc_buffer_t *input_arcs,
                                  ngram_model_t *lmset);
 
+vocab_map_t *fwdflat_search_set_vocab_map(ps_search_t *search,
+                                          vocab_map_t *vm);
+
 #endif /* __FWDFLAT_SEARCH_H__ */

@@ -174,6 +174,7 @@ arc_buffer_consumer_start_utt(arc_buffer_t *fab, int timeout)
     int s = (timeout == -1) ? -1 : 0;
     int rc;
 
+    E_INFO("arc_buffer_consumer_start_utt\n");
     if ((rc = sbsem_down(fab->start, s, timeout)) < 0)
         return rc;
     if (fab->state == ARC_BUFFER_CANCELED)
@@ -197,6 +198,7 @@ arc_buffer_producer_start_utt(arc_buffer_t *fab)
     garray_reset(fab->arcs);
     garray_reset(fab->sf_idx);
     /* If we ever have multiple consumers this will be sbsem_set() */
+    E_INFO("arc_buffer_producer_start_utt\n");
     sbsem_up(fab->start);
 }
 

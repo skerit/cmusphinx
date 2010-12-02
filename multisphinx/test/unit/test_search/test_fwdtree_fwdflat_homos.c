@@ -5,9 +5,10 @@
 
 #include <sphinxbase/feat.h>
 
+#include <multisphinx/fwdtree_search.h>
+#include <multisphinx/fwdflat_search.h>
+
 #include "pocketsphinx_internal.h"
-#include "fwdtree_search.h"
-#include "fwdflat_search.h"
 #include "test_macros.h"
 
 int
@@ -55,7 +56,7 @@ main(int argc, char *argv[])
 	rawfh = fopen(TESTDATADIR "/bn10000.homos", "r");
 	vocab_map_read(vm, rawfh);
 	fclose(rawfh);
-	((fwdflat_search_t *)fwdflat)->vmap = vm;
+	fwdflat_search_set_vocab_map(fwdflat, vm);
 
 	/* Launch search threads. */
 	ps_search_run(fwdtree);

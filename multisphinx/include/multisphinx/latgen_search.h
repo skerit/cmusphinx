@@ -54,6 +54,7 @@
  */
 ps_search_t *latgen_init(cmd_ln_t *config,
 			 dict2pid_t *d2p,
+                         logmath_t *lmath,
 			 arc_buffer_t *input_arcs);
 
 #endif /* __LATGEN_SEARCH_H__ */

@@ -1303,3 +1303,12 @@ fwdflat_search_seg_iter(ps_search_t *base, int32 *out_score)
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
     return bptbl_seg_iter(ffs->bptbl, out_score, ps_search_finish_wid(ffs));
 }
+
+vocab_map_t *
+fwdflat_search_set_vocab_map(ps_search_t *search,
+                             vocab_map_t *vm)
+{
+    fwdflat_search_t *ffs = (fwdflat_search_t *)search;
+    ffs->vmap = vm;
+    return vm;
+}

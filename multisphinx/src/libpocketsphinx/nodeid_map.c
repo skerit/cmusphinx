@@ -86,6 +86,9 @@ nodeid_map_free(nodeid_map_t *nmap)
 static garray_t *
 nodeid_map_get_frame(nodeid_map_t *nmap, int32 sf)
 {
+    int32 next_sf = garray_next_idx(nmap->frame_maps);
+    if (sf >= next_sf || sf < 0)
+        return NULL;
     return garray_ent(nmap->frame_maps, garray_t *, sf);
 }
 
