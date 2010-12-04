@@ -94,6 +94,12 @@ class HtkConverter(object):
 		# Create a mapping from HMM names to instances of Hmm.
 		self.namesToHmms = dict([(hmm.name, hmm) for hmm in self.hmms])
 		
+		# Issue warning about sp
+		if "sp" in [hmm.name for hmm in self.hmms]:
+		    pr('Short pause hmm \'sp\' detected in the model.')
+		    pr('Such HMM usually has less states than others and can\'t be converted to CMUSphinx format.')
+		    pr('CMUSphinx does not use \'sp\' so you need to edit the model and remove short pause.')
+		
 		# Split the HMMs in monophone and triphone models.
 		self.monophoneHmms = [hmm for hmm in self.hmms if self.monophone_reobj.match(hmm.name)]
 		self.triphoneHmms = [hmm for hmm in self.hmms if self.triphone_reobj.match(hmm.name)]
@@ -350,9 +356,9 @@ class HtkConverter(object):
 					vfile.write(pack('=f', float))
 					o += 1
 		if m != n:
-			raise HtkConverterError('The number of floats witten in means should be %s, but was %s.' % (m, n))
+			raise HtkConverterError('The number of floats written in means should be %s, but was %s.' % (m, n))
 		if m != o:
-			raise HtkConverterError('The number of floats witten in vars should be %s, but was %s.' % (m, o))
+			raise HtkConverterError('The number of floats written in vars should be %s, but was %s.' % (m, o))
 		
 		mfile.close()
 		vfile.close()
@@ -397,7 +403,7 @@ class HtkConverter(object):
 				file.write(pack('=f', mixtureWeight))
 				n += 1
 		if m != n:
-			raise HtkConverterError('The number of floats witten in mixw should be %s, but was %s.' % (m, n))
+			raise HtkConverterError('The number of floats written in mixw should be %s, but was %s.' % (m, n))
 		
 		file.close()
 		
@@ -439,12 +445,19 @@ class HtkConverter(object):
 		# This means that for each tmat, the first and last row and the
 		# first column are not written.
 		n = 0
+		ns = 0
 		for tmat in tmats:
+			if ns == 0:
+			    ns = tmat.numStates
+			elif tmat.numStates != ns:
+			    badHmms = filter(lambda x: x.tmat == tmat, hmms)
+			    names = " ".join([hmm.name for hmm in badHmms])
+			    raise HtkConverterError('Transition matrix %s have different number of states than others. Such model can not be converted.' % (names))
 			for o in range(1, tmat.numStates - 1):
 				for i in range(o * tmat.numStates + 1, (o + 1) * tmat.numStates):
 					file.write(pack('=f', tmat.vector[i]))
 					n += 1
 		if m != n:
-			raise HtkConverterError('The number of floats witten in tmat should be %s, but was %s.' % (m, n))
+			raise HtkConverterError('The number of floats written in tmat should be %s, but was %s.' % (m, n))
 		
 		file.close()
