@@ -99,8 +99,8 @@ void evallm_command_help_message()
   printf("\n");
   printf(" - generate\n");
   printf("       \n");
-  printf("Calculate the sum of the probabilities of all the words in the\n");
-  printf("vocabulary given the context specified by the user.\n");
+  printf("Generate output sample text file according to the probabilities in the \n");
+  printf("loaded n-gram language model. Uses random number generator. \n");
   printf("\n");
   printf("Syntax: \n");
   printf("\n");
