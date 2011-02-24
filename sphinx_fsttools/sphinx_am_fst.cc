@@ -42,7 +42,7 @@
 
 #include <fst/fstlib.h>
 
-namespace sphinxbase {
+namespace sb {
 #include <cmd_ln.h>
 #include <hash_table.h>
 #include <err.h>
@@ -53,7 +53,8 @@ namespace sphinxbase {
 #include "fstprinter.h"
 
 using namespace fst;
-using namespace sphinxbase;
+using namespace sb;
+using sb::int32; /* Override conflicting typedefs */
 typedef VectorFst<LogArc> LogVectorFst;
 typedef StdArc::StateId StateId;
 typedef StdArc::Label Label;
@@ -71,12 +72,99 @@ static const arg_t args[] = {
       ARG_STRING,
       NULL,
       "Text FST output file" },
+    { "-isym",
+      ARG_STRING,
+      NULL,
+      "Input symbol table output file" },
+    { "-osym",
+      ARG_STRING,
+      NULL,
+      "Output symbol table output file" },
     { NULL, 0, NULL, NULL }
 };
 
+static int
+mdef_fst_phone_str(mdef_t * m, int pid, char *buf)
+{
+    assert(m);
+    assert((pid >= m->n_ciphone) && (pid < m->n_phone));
+
+    buf[0] = '\0';
+    sprintf(buf, "%s-%s+%s",
+                mdef_ciphone_str(m, m->phone[pid].lc),
+                mdef_ciphone_str(m, m->phone[pid].ci),
+                mdef_ciphone_str(m, m->phone[pid].rc));
+    return 0;
+}
+
+
+static StdVectorFst *
+mdef_to_fst(mdef_t *mdef)
+{
+    StdVectorFst *model = new StdVectorFst;
+    SymbolTable *isym = new SymbolTable("triphones");
+    SymbolTable *osym = new SymbolTable("phones");
+    StateId start = model->AddState();
+    StateId end = model->AddState();
+    model->SetStart(start);
+    model->SetFinal(end, 0);
+
+    int32 offset = mdef_n_ciphone(mdef);
+    for (int32 i = offset; i < mdef_n_phone(mdef); ++i) {
+	char buf[40];
+	mdef_fst_phone_str(mdef, i, buf);
+	if (isym->Find(buf) < 0)
+            isym->AddSymbol(buf, i-offset+1);
+    }    
+    
+    for (int32 i = 0; i < mdef_n_ciphone(mdef); ++i) {
+        osym->AddSymbol(mdef_ciphone_str(mdef, i), i+1);
+    }
+
+    model->SetInputSymbols(isym);
+    model->SetOutputSymbols(osym);
+    return model;
+}
 
 int
 main(int argc, char *argv[])
 {
+    mdef_t *mdef = NULL;
+    cmd_ln_t *config;
+
+    if ((config = cmd_ln_parse_r(NULL, args, argc, argv, TRUE)) == NULL) {
+        return 1;
+    }
+    if (cmd_ln_str_r(config, "-mdef")) {
+        if ((mdef = mdef_init(cmd_ln_str_r(config, "-mdef"), TRUE)) == NULL) {
+            E_ERROR("Failed to load model definition file from %s\n",
+                    cmd_ln_str_r(config, "-mdef"));
+            return 1;
+        }
+    }
+
+    /* Create FST from dict. */
+    StdVectorFst *model = mdef_to_fst(mdef);
+
+    /* Write the model in the requested format. */
+    char const *outfile;
+    if ((outfile = cmd_ln_str_r(config, "-binfst")) != NULL) {
+        model->Write(outfile);
+    }
+    if ((outfile = cmd_ln_str_r(config, "-txtfst")) != NULL) {
+        FstPrinter<StdArc> printer(*model,
+                                   model->InputSymbols(),
+                                   model->OutputSymbols(),
+                                   NULL, false);
+        ostream *ostrm = new ofstream(outfile);
+        printer.Print(ostrm, outfile);
+    }
+    if ((outfile = cmd_ln_str_r(config, "-isym")) != NULL) {
+        model->InputSymbols()->WriteText(outfile);
+    }
+    if ((outfile = cmd_ln_str_r(config, "-osym")) != NULL) {
+        model->OutputSymbols()->WriteText(outfile);
+    }
+
     return 0;
 }
