@@ -44,6 +44,7 @@ my $ingra = "";
 my $pocket_flag = "";
 my $outgra = "";
 my $absgra = "";
+my $verbose = 0;
 
 if (not GetOptions(
         "tools:s" => \$tools,
@@ -52,10 +53,11 @@ if (not GetOptions(
         "instance:s" => \$instance,
         "inpath:s" => \$inpath,
         "outpath:s" => \$outpath,
-	"pocket" => \$pocket_flag,
+        "pocket" => \$pocket_flag,
+		"verbose" => \$verbose
         ) )
   { die "usage: compile_gra -tools <path> [-class <file>]* [-project <project> -instance <instance> -inpath <dir> -outpath <dir> [-pocket]\n"; }
-
+  
 # can't do this earlier since we don't know where to look
 require File::Spec->catfile($tools, 'lib', 'LogiosLog.pm');
 LogiosLog::open_logfile(File::Spec->catfile($outpath, 'compile_gra.log'));
@@ -102,10 +104,10 @@ close TTFORMS; close FORMS;
 # compile Phoenix grammar
 LogiosLog::say('compile_gra', "doing Phoenix compile");
 my $COMPILE = File::Spec->catfile($EXEDIR,$bindir,"compile_grammar").$exten;
-my $phoenix_cmd_line = "\"$COMPILE\" -SymBufSize 2000000 -MaxSymbol 300000 -TokBufSize 20000000 -g . -f $instance";
+my $phoenix_cmd_line = "\"$COMPILE\" -TokBufSize 20000000 -g . -f $instance";
 LogiosLog::fail("Phoenix compilation: $phoenix_cmd_line")
   if not defined open(COMPILE, "$phoenix_cmd_line|");
-open(LOG, ">".File::Spec->catfile($outpath,"compile_gra.log")); print LOG <COMPILE>; close LOG;
+for (<COMPILE>) {chomp; LogiosLog::say('compile_gra:phoenix_compile', $_);}
 close COMPILE;
 
 # the following code doesn't look right: frames will appear the first file then stay there...
@@ -119,7 +121,7 @@ my $CONCEPT_LEAF = File::Spec->catfile($EXEDIR,$bindir,"concept_leaf").$exten;
 LogiosLog::say('compile_gra', "doing Phoenix concept_leaf");
 my $concept_cmd_line = "\"$CONCEPT_LEAF\" -SymBufSize 200000000 -grammar $instance.net";
 #Bug! concept leaf fails!
-#LogiosLog::fail("Phoenix concept_leaf: $concept_cmd_line") if 
+LogiosLog::fail("Phoenix concept_leaf: $concept_cmd_line") if 
 system($concept_cmd_line);
 
 
