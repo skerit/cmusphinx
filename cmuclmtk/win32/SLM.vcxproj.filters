@@ -1,0 +1,267 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Source Files\RR">
+      <UniqueIdentifier>{12987cf1-c206-4155-af9d-54e3526410c0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\PC">
+      <UniqueIdentifier>{7f6d2d0c-4049-4695-bf17-5e56ae792747}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\AC">
+      <UniqueIdentifier>{72be5c36-3728-4167-b3d9-344cd81570bc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Header Files\RR">
+      <UniqueIdentifier>{7717e60d-ef5e-4edf-9b91-8d22638c4a07}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\PC">
+      <UniqueIdentifier>{77532979-aaad-4b7b-ba5a-77ac86815ad3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\AC">
+      <UniqueIdentifier>{97fbd7e6-7b9b-4060-9e4d-0e4a8feeac31}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\liblmest\arpa_bo_ng_prob.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\bo_ng_prob.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\calc_mem_req.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\calc_prob_of.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\compute_back_off.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\compute_discount.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\compute_unigram.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\counts.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\decode_bo_case.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\disc_meth.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\disc_meth_absolute.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\disc_meth_good_turing.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\disc_meth_linear.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\disc_meth_witten_bell.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\gen_fb_list.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\generate.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\get_ngram.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\guess_mem.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\idngram2lm.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\increment_context.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\load_lm.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\lookup_index_of.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\miscella.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\ngram.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\num_of_types.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\parse_comline.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\perplexity.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\short_indices.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\stats.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\two_byte_alphas.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\validate.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\liblmest\write_lms.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\parse_line.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\quit.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\rd_wlist_arry.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\read_voc.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\read_wlist_si.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\rr_calloc.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\rr_feof.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\rr_fexists.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\rr_filesize.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\rr_fopen.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\rr_fread.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\rr_fseek.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\rr_fwrite.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\rr_iopen.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\rr_malloc.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\rr_oopen.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\salloc.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\sih.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\pc_comline.c">
+      <Filter>Source Files\PC</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\pc_message.c">
+      <Filter>Source Files\PC</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\ac_hash.c">
+      <Filter>Source Files\AC</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\ac_lmfunc_impl.c">
+      <Filter>Source Files\AC</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\ac_parsetext.c">
+      <Filter>Source Files\AC</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\liblmest\bo_ng_prob.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\win32\compat.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\liblmest\config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\liblmest\disc_meth.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\liblmest\disc_meth_absolute.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\liblmest\disc_meth_good_turing.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\liblmest\disc_meth_linear.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\liblmest\disc_meth_witten_bell.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\liblmest\genrand.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\liblmest\idngram2lm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\liblmest\miscella.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\liblmest\ngram.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\liblmest\stats.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\liblmest\toolkit.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\libs\general.h">
+      <Filter>Header Files\RR</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\libs\mips_swap.h">
+      <Filter>Header Files\RR</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\libs\sih.h">
+      <Filter>Header Files\RR</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\libs\pc_general.h">
+      <Filter>Header Files\PC</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\libs\ac_hash.h">
+      <Filter>Header Files\AC</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\libs\ac_lmfunc_impl.h">
+      <Filter>Header Files\AC</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\libs\ac_parsetext.h">
+      <Filter>Header Files\AC</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

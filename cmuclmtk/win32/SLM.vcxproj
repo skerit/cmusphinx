@@ -1,0 +1,169 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{3AF8B015-A80F-4321-8CE2-407B3F4BAF49}</ProjectGuid>
+    <RootNamespace>SLM</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.30319.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(Configuration)\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(Configuration)\$(ProjectName)\</IntDir>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(Configuration)\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>..\src;..\src\liblmest;..\src\libs;..\src\win32;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;SLM_SWAP_BYTES;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>true</MinimalRebuild>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+    </ClCompile>
+    <Lib>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\src;..\src\liblmest;..\src\libs;..\src\win32;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;SLM_SWAP_BYTES;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Lib>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\liblmest\arpa_bo_ng_prob.c" />
+    <ClCompile Include="..\src\liblmest\bo_ng_prob.c" />
+    <ClCompile Include="..\src\liblmest\calc_mem_req.c" />
+    <ClCompile Include="..\src\liblmest\calc_prob_of.c" />
+    <ClCompile Include="..\src\liblmest\compute_back_off.c" />
+    <ClCompile Include="..\src\liblmest\compute_discount.c" />
+    <ClCompile Include="..\src\liblmest\compute_unigram.c" />
+    <ClCompile Include="..\src\liblmest\counts.c" />
+    <ClCompile Include="..\src\liblmest\decode_bo_case.c" />
+    <ClCompile Include="..\src\liblmest\disc_meth.c" />
+    <ClCompile Include="..\src\liblmest\disc_meth_absolute.c" />
+    <ClCompile Include="..\src\liblmest\disc_meth_good_turing.c" />
+    <ClCompile Include="..\src\liblmest\disc_meth_linear.c" />
+    <ClCompile Include="..\src\liblmest\disc_meth_witten_bell.c" />
+    <ClCompile Include="..\src\liblmest\gen_fb_list.c" />
+    <ClCompile Include="..\src\liblmest\generate.c" />
+    <ClCompile Include="..\src\liblmest\get_ngram.c" />
+    <ClCompile Include="..\src\liblmest\guess_mem.c" />
+    <ClCompile Include="..\src\liblmest\idngram2lm.c" />
+    <ClCompile Include="..\src\liblmest\increment_context.c" />
+    <ClCompile Include="..\src\liblmest\load_lm.c" />
+    <ClCompile Include="..\src\liblmest\lookup_index_of.c" />
+    <ClCompile Include="..\src\liblmest\miscella.c" />
+    <ClCompile Include="..\src\liblmest\ngram.c" />
+    <ClCompile Include="..\src\liblmest\num_of_types.c" />
+    <ClCompile Include="..\src\liblmest\parse_comline.c" />
+    <ClCompile Include="..\src\liblmest\perplexity.c" />
+    <ClCompile Include="..\src\liblmest\short_indices.c" />
+    <ClCompile Include="..\src\liblmest\stats.c" />
+    <ClCompile Include="..\src\liblmest\two_byte_alphas.c" />
+    <ClCompile Include="..\src\liblmest\validate.c" />
+    <ClCompile Include="..\src\liblmest\write_lms.c" />
+    <ClCompile Include="..\src\libs\parse_line.c" />
+    <ClCompile Include="..\src\libs\quit.c" />
+    <ClCompile Include="..\src\libs\rd_wlist_arry.c" />
+    <ClCompile Include="..\src\libs\read_voc.c" />
+    <ClCompile Include="..\src\libs\read_wlist_si.c" />
+    <ClCompile Include="..\src\libs\rr_calloc.c" />
+    <ClCompile Include="..\src\libs\rr_feof.c" />
+    <ClCompile Include="..\src\libs\rr_fexists.c" />
+    <ClCompile Include="..\src\libs\rr_filesize.c" />
+    <ClCompile Include="..\src\libs\rr_fopen.c" />
+    <ClCompile Include="..\src\libs\rr_fread.c" />
+    <ClCompile Include="..\src\libs\rr_fseek.c" />
+    <ClCompile Include="..\src\libs\rr_fwrite.c" />
+    <ClCompile Include="..\src\libs\rr_iopen.c" />
+    <ClCompile Include="..\src\libs\rr_malloc.c" />
+    <ClCompile Include="..\src\libs\rr_oopen.c" />
+    <ClCompile Include="..\src\libs\salloc.c" />
+    <ClCompile Include="..\src\libs\sih.c" />
+    <ClCompile Include="..\src\libs\pc_comline.c">
+      <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename)1.obj</ObjectFileName>
+      <XMLDocumentationFileName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename)1.xdc</XMLDocumentationFileName>
+      <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename)1.obj</ObjectFileName>
+      <XMLDocumentationFileName Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename)1.xdc</XMLDocumentationFileName>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\pc_message.c">
+      <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename)1.obj</ObjectFileName>
+      <XMLDocumentationFileName Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(IntDir)%(Filename)1.xdc</XMLDocumentationFileName>
+      <ObjectFileName Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename)1.obj</ObjectFileName>
+      <XMLDocumentationFileName Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(IntDir)%(Filename)1.xdc</XMLDocumentationFileName>
+    </ClCompile>
+    <ClCompile Include="..\src\libs\ac_hash.c" />
+    <ClCompile Include="..\src\libs\ac_lmfunc_impl.c" />
+    <ClCompile Include="..\src\libs\ac_parsetext.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\liblmest\bo_ng_prob.h" />
+    <ClInclude Include="..\src\win32\compat.h" />
+    <ClInclude Include="..\src\liblmest\config.h" />
+    <ClInclude Include="..\src\liblmest\disc_meth.h" />
+    <ClInclude Include="..\src\liblmest\disc_meth_absolute.h" />
+    <ClInclude Include="..\src\liblmest\disc_meth_good_turing.h" />
+    <ClInclude Include="..\src\liblmest\disc_meth_linear.h" />
+    <ClInclude Include="..\src\liblmest\disc_meth_witten_bell.h" />
+    <ClInclude Include="..\src\liblmest\genrand.h" />
+    <ClInclude Include="..\src\liblmest\idngram2lm.h" />
+    <ClInclude Include="..\src\liblmest\miscella.h" />
+    <ClInclude Include="..\src\liblmest\ngram.h" />
+    <ClInclude Include="..\src\liblmest\stats.h" />
+    <ClInclude Include="..\src\liblmest\toolkit.h" />
+    <ClInclude Include="..\src\libs\general.h" />
+    <ClInclude Include="..\src\libs\mips_swap.h" />
+    <ClInclude Include="..\src\libs\sih.h" />
+    <ClInclude Include="..\src\libs\pc_general.h" />
+    <ClInclude Include="..\src\libs\ac_hash.h" />
+    <ClInclude Include="..\src\libs\ac_lmfunc_impl.h" />
+    <ClInclude Include="..\src\libs\ac_parsetext.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
