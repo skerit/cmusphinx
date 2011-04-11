@@ -354,7 +354,6 @@ void mdef_dump (FILE *fp,  /**< In: a file pointer */
 void mdef_report(mdef_t *m /**<  In: model definition structure */
     );
 
-/** RAH, For freeing memory */
 void mdef_free_recursive_lc (ph_lc_t *lc /**< In: A list of left context */
     );
 void mdef_free_recursive_rc (ph_rc_t *rc /**< In: A list of right context */

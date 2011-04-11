@@ -33,171 +33,6 @@
  * ====================================================================
  *
  */
-/*
- * main_align.c -- Main driver routine for time alignment.
- * 
- * **********************************************
- * CMU ARPA Speech Project
- *
- * Copyright (c) 1996 Carnegie Mellon University.
- * ALL RIGHTS RESERVED.
- * **********************************************
- * 
- * HISTORY
- * 
- * $Log$
- * Revision 1.21  2006/03/28  04:50:14  dhdfu
- * Add an option to control the insertion of optional silences and filler
- * words (the TTS people may want to use this, and I need it)
- * 
- * Revision 1.20  2006/03/20 16:29:30  dhdfu
- * Add an option to output xlabel-style phone label files for TTS and visualization purposes.
- *
- * Revision 1.19  2006/02/27 15:58:16  arthchan2003
- * Fixed align, which I forgot to apply regression matrix there.  Luckily, it is detected by make check.
- *
- * Revision 1.18  2006/02/24 18:30:20  arthchan2003
- * Changed back s3senid to int32.  Don't know the reason why using s3senid_t will cause failure in test. Need to talk with Dave.
- *
- * Revision 1.17  2006/02/24 03:59:44  arthchan2003
- * Merged from branch SPHINX3_5_2_RCI_IRII_BRANCH: Changed commands to macro, Used ctl_process from now on.
- *
- *
- * Revision 1.16  2005/10/05 00:31:14  dhdfu
- * Make int8 be explicitly signed (signedness of 'char' is
- * architecture-dependent).  Then make a bunch of things use uint8 where
- * signedness is unimportant, because on the architecture where 'char' is
- * unsigned, it is that way for a reason (signed chars are slower).
- *
- * Revision 1.15.4.11  2006/01/16 20:26:03  arthchan2003
- * Changed -ltsoov to -lts_mismatch.
- *
- * Revision 1.15.4.10  2005/09/26 02:28:26  arthchan2003
- * Changed -s3hmmdir to -hmm
- *
- * Revision 1.15.4.9  2005/09/25 20:09:47  arthchan2003
- * Added support for LTS.
- *
- * Revision 1.15.4.8  2005/08/03 20:01:32  arthchan2003
- * Added the -topn argument into acoustic_model_command_line_macro
- *
- * Revision 1.15.4.7  2005/08/03 18:55:04  dhdfu
- * Remove bogus initialization of ms_mgau's internals from here
- *
- * Revision 1.15.4.6  2005/08/02 21:42:33  arthchan2003
- * 1, Moved static variables from function level to the application level. 2, united all initialization of HMM using s3_am_init, 3 united all GMM computation using ms_cont_mgau_frame_eval.
- *
- * Revision 1.15.4.5  2005/07/28 03:11:17  arthchan2003
- * Removed process_ctl in main_align.c, slightly ugly b ut the evil of duplicating ctl_process is larger.
- *
- * Revision 1.15.4.4  2005/07/27 23:23:39  arthchan2003
- * Removed process_ctl in allphone, dag, decode_anytopo and astar. They were duplicated with ctl_process and make Dave and my lives very miserable.  Now all application will provided their own utt_decode style function and will pass ctl_process.  In that way, the mechanism of reading would not be repeated. livepretend also follow the same mechanism now.  align is still not yet finished because it read yet another thing which has not been considered : transcription.
- *
- * Revision 1.15.4.3  2005/07/22 03:46:53  arthchan2003
- * 1, cleaned up the code, 2, fixed dox-doc. 3, use srch.c version of log_hypstr and log_hyp_detailed.
- *
- * Revision 1.15.4.2  2005/07/20 21:25:42  arthchan2003
- * Shared to code of Multi-stream GMM initialization in align/allphone and decode_anytopo.
- *
- * Revision 1.15.4.1  2005/07/18 23:21:23  arthchan2003
- * Tied command-line arguments with marcos
- *
- * Revision 1.15  2005/06/22 05:36:11  arthchan2003
- * Synchronize argument with decode. Removed silwid, startwid and finishwid
- *
- * Revision 1.11  2005/06/19 04:51:48  archan
- * Add multi-class MLLR support for align, decode_anytopo as well as allphone.
- *
- * Revision 1.10  2005/06/19 03:58:17  archan
- * 1, Move checking of Silence wid, start wid, finish wid to dict_init. This unify the checking and remove several segments of redundant code. 2, Remove all startwid, silwid and finishwid.  They are artefacts of 3.0/3.x merging. This is already implemented in dict.  (In align, startwid, endwid, finishwid occured in several places.  Checking is also done multiple times.) 3, Making corresponding changes to all files which has variable startwid, silwid and finishwid.  Should make use of the marco more.
- *
- * Revision 1.9  2005/06/17 23:46:06  archan
- * Sphinx3 to s3.generic 1, Remove bogus log messages in align and allphone, 2, Unified the logbase value from 1.0001 to 1.0003
- *
- * Revision 1.8  2005/06/03 06:45:30  archan
- * 1, Fixed compilation of dag_destroy, dag_dump and dag_build. 2, Changed RARG to REQARG.
- *
- * Revision 1.7  2005/06/03 06:12:57  archan
- * 1, Simplify and unify all call of logs3_init, move warning when logbase > 1.1 into logs3.h.  2, Change arguments to require arguments in align and astar.
- *
- * Revision 1.6  2005/06/03 05:46:42  archan
- * Log. Refactoring across dag/astar/decode_anytopo.  Code is not fully tested.
- * There are several changes I have done to refactor the code across
- * dag/astar/decode_anyptop.  A new library called dag.c is now created
- * to include all routines that are shared by the three applications that
- * required graph operations.
- * 1, dag_link is now shared between dag and decode_anytopo. Unfortunately, astar was using a slightly different version of dag_link.  At this point, I could only rename astar'dag_link to be astar_dag_link.
- * 2, dag_update_link is shared by both dag and decode_anytopo.
- * 3, hyp_free is now shared by misc.c, dag and decode_anytopo
- * 4, filler_word will not exist anymore, dict_filler_word was used instead.
- * 5, dag_param_read were shared by both dag and astar.
- * 6, dag_destroy are now shared by dag/astar/decode_anytopo.  Though for some reasons, even the function was not called properly, it is still compiled in linux.  There must be something wrong at this point.
- * 7, dag_bestpath and dag_backtrack are now shared by dag and decode_anytopo. One important thing to notice here is that decode_anytopo's version of the two functions actually multiply the LM score or filler penalty by the language weight.  At this point, s3_dag is always using lwf=1.
- * 8, dag_chk_linkscr is shared by dag and decode_anytopo.
- * 9, decode_anytopo nows supports another three options -maxedge, -maxlmop and -maxlpf.  Their usage is similar to what one could find dag.
- *
- * Notice that the code of the best path search in dag and that of 2-nd
- * stage of decode_anytopo could still have some differences.  It could
- * be the subtle difference of handling of the option -fudge.  I am yet
- * to know what the true cause is.
- *
- * Some other small changes include
- * -removal of startwid and finishwid asstatic variables in s3_dag.c.  dict.c now hide these two variables.
- *
- * There are functions I want to merge but I couldn't and it will be
- * important to say the reasons.
- * i, dag_remove_filler_nodes.  The version in dag and decode_anytopo
- * work slightly differently. The decode_anytopo's one attached a dummy
- * predecessor after removal of the filler nodes.
- * ii, dag_search.(s3dag_dag_search and s3flat_fwd_dag_search)  The handling of fudge is differetn. Also, decode_anytopo's one  now depend on variable lattice.
- * iii, dag_load, (s3dag_dag_load and s3astar_dag_load) astar and dag seems to work in a slightly different, one required removal of arcs, one required bypass the arcs.  Don't understand them yet.
- * iv, dag_dump, it depends on the variable lattice.
- *
- * Revision 1.5  2005/05/27 01:15:45  archan
- * 1, Changing the function prototypes of logs3_init to have another argument which specify whether an add table should be used. Corresponding changes have made in all executables and test programs. 2, Synchronzie how align, allphone, decode_anytopo, dag sets the default value of logbase.
- *
- * Revision 1.4  2005/04/21 23:50:27  archan
- * Some more refactoring on the how reporting of structures inside kbcore_t is done, it is now 50% nice. Also added class-based LM test case into test-decode.sh.in.  At this moment, everything in search mode 5 is already done.  It is time to test the idea whether the search can really be used.
- *
- * Revision 1.3  2005/04/20 03:50:36  archan
- * Add comments on all mains for preparation of factoring the command-line.
- *
- * Revision 1.2  2005/03/30 00:43:40  archan
- *
- * 19-Jun-1998	M K Ravishankar (rkm@cs.cmu.edu) at Carnegie Mellon University
- * 		Modified to handle the new libfeat interface.
- * 
- * 11-Oct-1997	M K Ravishankar (rkm@cs.cmu.edu) at Carnegie Mellon University.
- * 		Added MLLR transformation for each utterance.
- * 
- * 06-Mar-1997	M K Ravishankar (rkm@cs.cmu.edu) at Carnegie Mellon University.
- * 		Added .semi. and .cont. options to -senmgaufn flag.
- *  
- * 16-Oct-1996	M K Ravishankar (rkm@cs.cmu.edu) at Carnegie Mellon University
- * 		Added orig_stdout, orig_stderr hack to avoid hanging on exit under Linux.
- *  
- * 14-Oct-1996	M K Ravishankar (rkm@cs.cmu.edu) at Carnegie Mellon University
- * 		Removed explicit addition of SILENCE_WORD, START_WORD and
- * 		FINISH_WORD to the dictionary.
- * 
- * 18-Sep-1996	M K Ravishankar (rkm@cs.cmu.edu) at Carnegie Mellon University
- * 		Added optional start/end frame specification in control file, for
- * 		processing selected segments (utterances) from a large cepfile.
- * 		Control spec: cepfile [startframe endframe [uttid]].
- * 		(There are incompatibilities with ,CTL output directory specification.)
- * 
- * 13-Sep-1996	M K Ravishankar (rkm@cs.cmu.edu) at Carnegie Mellon University
- * 		Normalized senone scores (subtracting the best) rather than density scores.
- * 		Bugfix: Absolute scores written to state score output file by removing
- * 		normalization factor.
- * 
- * 22-Jul-1996	M K Ravishankar (rkm@cs.cmu.edu) at Carnegie Mellon University
- * 		Added absolute (unnormalized) acoustic scores in log file.
- * 		Added Sphinx-II compatible output segmentation files.
- * 
- * 15-Jul-1996	M K Ravishankar (rkm@cs.cmu.edu) at Carnegie Mellon University
- * 		Created.
- */
 
 
 #include <stdio.h>
@@ -244,6 +79,7 @@
 */
 
 static arg_t defn[] = {
+        waveform_to_cepstral_command_line_macro(),
         cepstral_to_feature_command_line_macro(),
 
         log_table_command_line_macro(),
@@ -301,10 +137,10 @@ static arg_t defn[] = {
      ARG_STRING,
      NULL,
      "Output directory for xlabel style phone labels; optionally end with ,CTL"},
-    {"-frate",
+   /*{"-frate",
      ARG_INT32,
      ARG_STRINGIFY(DEFAULT_FRAME_RATE),
-     "Frame rate (only requred for xlabel style phone labels)"},
+     "Frame rate (only requred for xlabel style phone labels)"},*/
     {"-insert_sil",
      ARG_INT32,
      "1",
@@ -317,6 +153,7 @@ static arg_t defn[] = {
 /** These are the definition of HMMs */
 
 static kbcore_t *kbc;           /* A kbcore structure */
+static fe_t *fe;                /* Waveform data handling ('-adcin') */
 static ascr_t *ascr;            /* An acoustic score structure.  */
 static fast_gmm_t *fastgmm;     /* A fast GMM parameter structure.  */
 static adapt_am_t *adapt_am;    /* An adaptation structure. */
@@ -371,6 +208,13 @@ models_init(cmd_ln_t *config)
 			 cmd_ln_int32_r(config, "-ceplen"));
 
     s3_am_init(kbc);
+
+    /* Initialize the front end if -adcin is specified */
+    if (cmd_ln_exists_r(config, "-adcin") && cmd_ln_boolean_r(config, "-adcin")) {
+        if ((fe = fe_init_auto_r(config)) == NULL) {
+            E_FATAL("fe_init_auto_r() failed\n");
+        }
+    }
 
     assert(kbc);
     assert(kbc->mdef);
@@ -976,6 +820,7 @@ utt_align(void *data, utt_res_t * ur, int32 sf, int32 ef, char *uttid)
     const char *cepdir;
     const char *cepext;
     char sent[16384];
+    cmd_ln_t *config = (cmd_ln_t*) data;
 
     cepdir = cmd_ln_str_r(kbc->config, "-cepdir");
     cepext = cmd_ln_str_r(kbc->config, "-cepext");
@@ -1009,10 +854,43 @@ utt_align(void *data, utt_res_t * ur, int32 sf, int32 ef, char *uttid)
         }
     }
 
+    /* Convert input file to cepstra if waveform input is selected */
+    if (cmd_ln_boolean_r(config, "-adcin")) {
+        int16 *adcdata;
+        int32 nsamps = 0;
+        mfcc_t **mfcc;
 
-    nfr =
-        feat_s2mfc2feat(kbcore_fcb(kbc), ur->uttfile, cepdir, cepext, sf, ef, feat,
-                        S3_MAX_FRAMES);
+        if ((adcdata = bio_read_wavfile(cmd_ln_str_r(config, "-cepdir"),
+    				        ur->uttfile,
+    				        cmd_ln_str_r(config, "-cepext"),
+    				        cmd_ln_int32_r(config, "-adchdr"),
+    				        strcmp(cmd_ln_str_r(config, "-input_endian"), "big"),
+    				        &nsamps)) == NULL) {
+            E_FATAL("Cannot read file %s\n", ur->uttfile);
+        }
+        fe_start_utt(fe);
+        if (fe_process_utt(fe, adcdata, nsamps, &mfcc, &nfr) < 0) {
+            E_FATAL("MFCC calculation failed\n", ur->uttfile);
+        }
+        ckd_free(adcdata);
+        if (nfr > S3_MAX_FRAMES) {
+            E_FATAL("Maximum number of frames (%d) exceeded\n", S3_MAX_FRAMES);
+        }
+        if ((nfr = feat_s2mfc2feat_live(kbcore_fcb(kbc),
+						mfcc,
+						&nfr,
+						TRUE, TRUE,
+						feat)) < 0) {
+            E_FATAL("Feature computation failed\n");
+        }
+        if (mfcc)
+            ckd_free_2d((void **)mfcc);
+    }
+    else {
+        nfr =
+            feat_s2mfc2feat(kbcore_fcb(kbc), ur->uttfile, cepdir, cepext, sf, ef, feat,
+                            S3_MAX_FRAMES);
+    }
 
     if (ur->regmatname) {
         if (kbc->mgau)
@@ -1146,7 +1024,8 @@ main(int32 argc, char *argv[])
                     NULL,
                     cmd_ln_str_r(config, "-ctl_mllr"),
                     cmd_ln_int32_r(config, "-ctloffset"),
-                    cmd_ln_int32_r(config, "-ctlcount"), utt_align, NULL);
+                    cmd_ln_int32_r(config, "-ctlcount"),
+                    utt_align, config);
     }
     else {
         E_FATAL(" -ctl are not specified.\n");

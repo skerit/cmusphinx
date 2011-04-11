@@ -33,72 +33,9 @@
  * ====================================================================
  *
  */
-/************************************************
- * CMU ARPA Speech Project
- *
- * Copyright (c) 2000 Carnegie Mellon University.
- * ALL RIGHTS RESERVED.
- ************************************************
- * 
- * HISTORY
- * $Log$
- * Revision 1.29  2006/02/22  23:35:29  arthchan2003
- * Changed the code following Evandro's suggestion.
- * 
- * Revision 1.28  2006/02/22 22:46:51  arthchan2003
- * Merged from branch: SPHINX3_5_2_RCI_IRII: Change prototypes of utt_decode, this allow utterance-base resource (lm, mllr, file id) allocation to be carried out.
- *
- * Revision 1.27.4.3  2005/09/26 02:19:06  arthchan2003
- * 1, Forced exit when the decoder cannot find a file, 2, fixed dox-doc.
- *
- * Revision 1.27.4.2  2005/09/25 18:57:15  arthchan2003
- * Changed srch_utt_decode_blk from a FATAL to an ERROR. This corresponds to the problem of putting history pointer to the vithistory routine.
- *
- * Revision 1.27.4.1  2005/07/27 23:16:26  arthchan2003
- * 1, Fixed dox-doc, 2, Move set_lm and setmllr to utt_decode.
- *
- * Revision 1.27  2005/06/22 02:54:55  arthchan2003
- * Log. hand the implementation of utt_begin, utt_decode and utt_end to
- * srch, utt.c now only maintain a wrapper for search operation. In
- * future, I expect it to become the prototype of batch mode API of search.
- *
- * Revision 1.9  2005/05/04 05:15:25  archan
- * reverted the last change, seems to be not working because of compilation issue. Try not to deal with it now.
- *
- * Revision 1.8  2005/05/04 04:46:04  archan
- * Move srch.c and srch.h to search. More and more this type of refactoring will be done in future
- *
- * Revision 1.7  2005/04/20 03:45:30  archan
- * utt.c pass all the control of the searching to srch.c, from now on the code will only expose APIs for batch mode decoding
- *
- * Revision 1.6  2005/03/30 01:22:47  archan
- * Fixed mistakes in last updates. Add
- *
- *
- * 15-Jun-2004  Yitao Sun (yitao@cs.cmu.edu) at Carnegie Mellon University
- *              Modified utt_end() to save hypothesis in the kb structure.
- *
- * 30-Dec-2000  Rita Singh (rsingh@cs.cmu.edu) at Carnegie Mellon University
- *		Added utt_decode_block() to allow block-based decoding 
- *		and decoding of piped input.
- * 
- * 30-Dec-2000  Rita Singh (rsingh@cs.cmu.edu) at Carnegie Mellon University
- *		Moved all utt_*() routines into utt.c to make them independent
- *		of main() during compilation
- * 
- * 29-Feb-2000	M K Ravishankar (rkm@cs.cmu.edu) at Carnegie Mellon University
- * 		Modified to allow runtime choice between 3-state and 5-state
- *              HMM topologies (instead of compile-time selection).
- * 
- * 13-Aug-1999	M K Ravishankar (rkm@cs.cmu.edu) at Carnegie Mellon University
- * 		Added -maxwpf.
- * 
- * 10-May-1999	M K Ravishankar (rkm@cs.cmu.edu) at Carnegie Mellon University
- * 		Started.
- */
 
 #ifdef WIN32
-#include <direct.h>             /* RAH, added */
+#include <direct.h>
 #endif
 #include <string.h>
 
@@ -120,65 +57,6 @@ void
 utt_end(kb_t * kb)
 {
     srch_utt_end((srch_t *) kb->srch);
-}
-
-/* FIXME FIXME FIXME: This needs to go in SphinxBase!!! */
-static int16 *
-wavfile_read(char const *filename, int32 *nsamps, cmd_ln_t *config)
-{
-    const char *adc_ext, *data_directory;
-    FILE *uttfp;
-    char *inputfile;
-    int32 n, l, adc_hdr, adc_endian;
-    int16 *data;
-
-    adc_ext = cmd_ln_str_r(config, "-cepext");
-    adc_hdr = cmd_ln_int32_r(config, "-adchdr");
-    adc_endian = strcmp(cmd_ln_str_r(config, "-input_endian"), "big");
-    data_directory = cmd_ln_str_r(config, "-cepdir");
-
-    /* Build input filename */
-    n = strlen(adc_ext);
-    l = strlen(filename);
-    if ((n <= l) && (0 == strcmp(filename + l - n, adc_ext)))
-        adc_ext = "";          /* Extension already exists */
-    inputfile = ckd_calloc(strlen(data_directory) + l + n + 2, 1);
-    if (data_directory) {
-        sprintf(inputfile, "%s/%s%s", data_directory, filename, adc_ext);
-    }
-    else {
-        sprintf(inputfile, "%s%s", filename, adc_ext);
-    }
-
-    if ((uttfp = fopen(inputfile, "rb")) == NULL) {
-        E_FATAL("fopen(%s,rb) failed\n", inputfile);
-    }
-    fseek(uttfp, 0, SEEK_END);
-    n = ftell(uttfp);
-    fseek(uttfp, 0, SEEK_SET);
-    if (adc_hdr > 0) {
-        if (fseek(uttfp, adc_hdr, SEEK_SET) < 0) {
-            E_ERROR("fseek(%s,%d) failed\n", inputfile, adc_hdr);
-            fclose(uttfp);
-            ckd_free(inputfile);
-            return NULL;
-        }
-        n -= adc_hdr;
-    }
-    n /= sizeof(int16);
-    data = ckd_calloc(n, sizeof(*data));
-    if ((l = fread(data, sizeof(int16), n, uttfp)) < n) {
-        E_ERROR_SYSTEM("Failed to read %d samples from %s: %d", n, inputfile, l);
-        ckd_free(data);
-        ckd_free(inputfile);
-        fclose(uttfp);
-        return NULL;
-    }
-    ckd_free(inputfile);
-    fclose(uttfp);
-    if (nsamps) *nsamps = n;
-
-    return data;
 }
 
 void
@@ -206,9 +84,13 @@ utt_decode(void *data, utt_res_t * ur, int32 sf, int32 ef, char *uttid)
         int16 *adcdata;
         int32 nsamps = 0;
 
-        /* FIXME: We should have a proper interface for reading waveform files */
-        if ((adcdata = wavfile_read(ur->uttfile, &nsamps, config)) == NULL) {
-            E_FATAL("Cannot read file %s. Forced exit\n", ur->uttfile);
+        if ((adcdata = bio_read_wavfile(cmd_ln_str_r(config, "-cepdir"),
+    				        ur->uttfile,
+    				        cmd_ln_str_r(config, "-cepext"),
+    				        cmd_ln_int32_r(config, "-adchdr"),
+    				        strcmp(cmd_ln_str_r(config, "-input_endian"), "big"),
+    				        &nsamps)) == NULL) {
+            E_FATAL("Cannot read file %s\n", ur->uttfile);
         }
         if (kb->mfcc) {
             ckd_free_2d((void **)kb->mfcc);
