@@ -121,6 +121,7 @@
     <ClCompile Include="..\src\libs\rr_fwrite.c" />
     <ClCompile Include="..\src\libs\rr_iopen.c" />
     <ClCompile Include="..\src\libs\rr_malloc.c" />
+    <ClCompile Include="..\src\libs\rr_mkdtemp.c" />
     <ClCompile Include="..\src\libs\rr_oopen.c" />
     <ClCompile Include="..\src\libs\salloc.c" />
     <ClCompile Include="..\src\libs\sih.c" />

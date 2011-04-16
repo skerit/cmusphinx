@@ -42,4 +42,59 @@ EXTRA_DIST = perl/Smoothing.pm			\
 	perl/cmu_normalize_text			\
 	perl/cmu_ngram_test			\
 	perl/lm_changecase.pl			\
-	perl/Makefile.PL
+	perl/Makefile.PL			\
+	cmuclmtk.sln				\
+	win32/binlm2arpa.vcxproj		\
+	win32/text2wfreq.vcxproj.user		\
+	win32/text2wngram.vcxproj.user		\
+	win32/SLM.vcxproj.filters		\
+	win32/binlm2arpa.vcxproj.user		\
+	win32/binlm2arpa.vcxproj.filters	\
+	win32/interpolate.vcxproj.filters	\
+	win32/idngram2lm.vcxproj		\
+	win32/text2idngram.vcxproj		\
+	win32/text2idngram.vcxproj.filters	\
+	win32/idngram2lm.vcxproj.filters	\
+	win32/text2wngram.vcxproj.filters	\
+	win32/evallm.vcxproj.filters		\
+	win32/wfreq2vocab.vcxproj.filters	\
+	win32/evallm.vcxproj.user		\
+	win32/wfreq2vocab.vcxproj.user		\
+	win32/wngram2idngram.vcxproj.user	\
+	win32/wngram2idngram.vcxproj.filters	\
+	win32/evallm.vcxproj			\
+	win32/text2wfreq.vcxproj.filters	\
+	win32/mergeidngram.vcxproj.user		\
+	win32/interpolate.vcxproj		\
+	win32/idngram2stats.vcxproj.user	\
+	win32/wfreq2vocab.vcxproj		\
+	win32/interpolate.vcxproj.user		\
+	win32/text2idngram.vcxproj.user		\
+	win32/mergeidngram.vcxproj		\
+	win32/text2wfreq.vcxproj		\
+	win32/SLM.vcxproj.user			\
+	win32/ngram2mgram.vcxproj.filters	\
+	win32/wngram2idngram.vcxproj		\
+	win32/idngram2stats.vcxproj		\
+	win32/text2wngram.vcxproj		\
+	win32/ngram2mgram.vcxproj		\
+	win32/mergeidngram.vcxproj.filters	\
+	win32/idngram2lm.vcxproj.user		\
+	win32/SLM.vcxproj			\
+	win32/idngram2stats.vcxproj.filters	\
+	win32/ngram2mgram.vcxproj.user		\
+	doc/toolkit_documentation_no_tables.html	\
+	doc/doxygen.cfg				\
+	doc/change_log.txt			\
+	doc/change_log.html			\
+	doc/toolkit_framework.gif		\
+	debian/libcmuclmtk0.install		\
+	debian/watch				\
+	debian/docs				\
+	debian/changelog			\
+	debian/compat				\
+	debian/control				\
+	debian/libcmuclmtk-dev.install		\
+	debian/cmuclmtk.install			\
+	debian/rules				\
+	debian/copyright

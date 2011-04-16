@@ -6,6 +6,13 @@
 #define pclose(x) _pclose((x))
 #define srandom(x) srand((x))
 #define random() rand()
+#define mkdtemp(x) rr_mkdtemp((x))
+
+
+/* For mktemp and mkdir */
+#include <io.h>
+#include <direct.h>
+
 #endif
 
 #endif

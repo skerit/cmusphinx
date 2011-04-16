@@ -54,6 +54,7 @@
 #include "../libs/ac_parsetext.h"
 #include "../libs/ac_lmfunc_impl.h"
 #include "../libs/ac_hash.h"
+#include "../win32/compat.h"
 
 typedef struct {
   wordid_t *word;

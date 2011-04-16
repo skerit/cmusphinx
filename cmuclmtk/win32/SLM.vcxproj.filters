@@ -198,6 +198,9 @@
     <ClCompile Include="..\src\libs\ac_parsetext.c">
       <Filter>Source Files\AC</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\libs\rr_mkdtemp.c">
+      <Filter>Source Files\RR</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\liblmest\bo_ng_prob.h">

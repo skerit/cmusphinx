@@ -59,6 +59,7 @@
 #include "../libs/pc_general.h"
 #include "../libs/ac_hash.h"
 #include "../libs/ac_lmfunc_impl.h"
+#include "../win32/compat.h"
 
 void help_message()
 {

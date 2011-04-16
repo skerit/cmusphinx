@@ -45,6 +45,7 @@
 #include "../liblmest/toolkit.h"
 #include "../libs/pc_general.h"
 #include "../libs/general.h"
+#include "../win32/compat.h"
 
 int cmp_strings(const void *string1,const void *string2) {
   

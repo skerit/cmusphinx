@@ -4,7 +4,7 @@ libs_la_SOURCES = \
 	pc_message.c quit.c rd_wlist_arry.c read_voc.c read_wlist_si.c \
 	rr_calloc.c rr_feof.c rr_fexists.c rr_filesize.c rr_fopen.c rr_fread.c \
 	rr_fseek.c rr_fwrite.c rr_iopen.c rr_malloc.c rr_oopen.c \
-	salloc.c sih.c
+	salloc.c sih.c rr_mkdtemp.c
 
 pkginclude_HEADERS =				\
 	ac_hash.h				\
