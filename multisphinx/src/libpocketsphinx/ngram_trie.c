@@ -399,8 +399,6 @@ ngram_trie_ngrams(ngram_trie_t *t, int n)
     for (i = 1; i < n; ++i) {
         size_t pos;
         if (h->successors == NULL) {
-            /* FIXME: backoff weight calculation in ngram_homos needs
-             * to recover from this... */
             E_ERROR("Found no %d-gram successors\n", i);
             return NULL;
         }
@@ -685,6 +683,7 @@ ngram_trie_node_t *
 ngram_trie_add_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
 {
     ngram_trie_node_t *ng;
+    int n;
 
     ng = ngram_trie_node_alloc(t);
     ng->word = w;
@@ -700,7 +699,14 @@ ngram_trie_add_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
         pos = garray_bisect_right(h->successors, &ng);
         garray_insert(h->successors, pos, &ng);
     }
-
+    /* Find order of this N-Gram and update N if needed (FIXME: this
+     * might be slow). */
+    for (n = 0; h; h = h->history)
+        ++n;
+    if (n > t->n) {
+        E_INFO("Updated N to %d\n", n);
+        t->n = n;
+    }
     return ng;
 }
 

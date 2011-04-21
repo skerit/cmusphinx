@@ -167,6 +167,7 @@ main(int argc, char *argv[])
 	test_add_nodes(t, lmath);
 
 	ngram_trie_free(t);
+
 	dict_free(dict);
 	logmath_free(lmath);
 	bin_mdef_free(mdef);

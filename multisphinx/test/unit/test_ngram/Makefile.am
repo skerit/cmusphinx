@@ -9,7 +9,8 @@ check_PROGRAMS = \
 	test_lm_set \
 	test_lm_iter \
 	test_lm_write \
-	test_ngram_trie
+	test_ngram_trie \
+	test_ngram_trie_iteration
 
 TESTS = $(check_PROGRAMS)
 
@@ -25,6 +26,10 @@ INCLUDES = \
 LDADD = ${top_builddir}/src/libsphinxbase/libsphinxbase.la
 
 test_ngram_trie_LDADD = \
+	${top_builddir}/src/libsphinxbase/libsphinxbase.la \
+	${top_builddir}/src/libpocketsphinx/libpocketsphinx.la
+
+test_ngram_trie_iteration_LDADD = \
 	${top_builddir}/src/libsphinxbase/libsphinxbase.la \
 	${top_builddir}/src/libpocketsphinx/libpocketsphinx.la
 

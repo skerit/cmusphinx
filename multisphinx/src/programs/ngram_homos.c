@@ -376,7 +376,6 @@ main(int argc, char *argv[])
     }
     if (merge_homos(lm, ngram_trie_root(lm), vmaps) < 0)
         return 1;
-
     if (recalc_bowts(lm) < 0)
         return 1;
 
