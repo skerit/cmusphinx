@@ -192,13 +192,12 @@ int featbuf_producer_start_utt(featbuf_t *fb, char *uttid);
  * End processing for an utterance.
  *
  * This function blocks until all consumers release the final frame of
- * the utterance, or until the timeout is reached.
+ * the utterance.
  *
  * @param fb Feature buffer.
- * @param timeout Maximum time to wait, in nanoseconds, or -1 to wait forever.
  * @return 0, or <0 on error (but that is unlikely)
  */
-int featbuf_producer_end_utt(featbuf_t *fb, int timeout);
+int featbuf_producer_end_utt(featbuf_t *fb);
 
 /**
  * Shut down utterance processing.
@@ -263,6 +262,16 @@ int featbuf_producer_process_cep(featbuf_t *fb,
  */
 int featbuf_producer_process_feat(featbuf_t *fb,
                                   mfcc_t **feat);
+
+/**
+ * Get the index of the first frame still being processed.
+ */
+int featbuf_get_window_start(featbuf_t *fb);
+
+/**
+ * Get the index of the first frame which has not yet been queued.
+ */
+int featbuf_get_window_end(featbuf_t *fb);
 
 char *featbuf_uttid(featbuf_t *fb);
 

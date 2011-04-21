@@ -29,6 +29,7 @@ main(int argc, char *argv[])
 	size_t nsamp;
 	char const *hyp;
 	int32 score;
+	int ws, we;
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
@@ -68,9 +69,19 @@ main(int argc, char *argv[])
 		featbuf_producer_process_raw(fb, buf, nsamp, FALSE);
 	fclose(rawfh);
 
+	
+	while ((ws = featbuf_get_window_start(fb))
+	       < (we = featbuf_get_window_end(fb))) {
+		int32 score;
+		char const *ft = ps_search_hyp(fwdtree, &score);
+		char const *ff = ps_search_hyp(fwdflat, &score);
+		E_INFO("Window %d:%d partial hyps: %s %s\n",
+		       ws, we, ft, ff);
+		sleep(1);
+	}
 	/* This will wait for search to complete. */
 	E_INFO("Waiting for end of utt\n");
-	featbuf_producer_end_utt(fb, -1);
+	featbuf_producer_end_utt(fb);
 	E_INFO("Done waiting\n");
 
 	/* Retrieve the hypothesis from the search thread. */

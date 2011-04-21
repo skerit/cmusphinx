@@ -408,7 +408,8 @@ ps_end_utt(ps_decoder_t *ps)
     int rv;
 
     /* Mark the end of the utterance and wait for it to complete. */
-    rv = featbuf_producer_end_utt(ps->fb, -1);
+    if ((rv = featbuf_producer_end_utt(ps->fb)) < 0)
+        return rv;
     ptmr_stop(&ps->perf);
     ps->n_frame += ps->acmod->output_frame;
 

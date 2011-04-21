@@ -326,6 +326,8 @@ cond_timed_wait(pthread_cond_t *cond, pthread_mutex_t *mtx, int sec, int nsec)
             sec += end.tv_nsec / (1000*1000*1000);
             end.tv_nsec = end.tv_nsec % (1000*1000*1000);
         }
+        gettimeofday(&now, NULL);
+        /* NOTE: returns "non-zero" not "less than zero" */
         rv = pthread_cond_timedwait(cond, mtx, &end);
     }
     return rv;
@@ -480,9 +482,10 @@ sbsem_down(sbsem_t *sem, int sec, int nsec)
     while (sem->value <= 0) {
         int rv;
         rv = cond_timed_wait(&sem->cond, &sem->mtx, sec, nsec);
-        if (rv < 0) {
+        if (rv != 0) {
             pthread_mutex_unlock(&sem->mtx);
-            return rv;
+            /* Remember this is a positive error code (why...) */
+            return -rv;
         }
     }
     --sem->value;

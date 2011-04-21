@@ -307,7 +307,7 @@ featbuf_producer_start_utt(featbuf_t *fb, char *uttid)
 }
 
 int
-featbuf_producer_end_utt(featbuf_t *fb, int timeout)
+featbuf_producer_end_utt(featbuf_t *fb)
 {
     int nfr, i, rc, nth;
     size_t last_idx;
@@ -350,7 +350,6 @@ featbuf_producer_end_utt(featbuf_t *fb, int timeout)
     last_idx = sync_array_finalize(fb->sa);
 
     /* Wait for everybody to be done. */
-    E_INFO("Waiting for %d consumers to finish\n", nth);
     for (i = 0; i < nth; ++i)
         if ((rc = sbsem_down(fb->release, -1, -1)) < 0)
             return rc;
@@ -395,7 +394,7 @@ featbuf_process_full_cep(featbuf_t *fb,
      * this is almost certainly trivial compared to the cost of
      * decoding (plus CMN works better). */
     feat_array_free(featbuf);
-    return 0;
+    return nfr;
 }
 
 static int
@@ -421,7 +420,7 @@ featbuf_process_full_raw(featbuf_t *fb,
     if (featbuf_process_full_cep(fb, cepbuf, nfr) < 0)
         goto error_out;
     ckd_free_2d(cepbuf);
-    return 0;
+    return nfr;
 error_out:
     ckd_free_2d(cepbuf);
     return -1;
@@ -434,6 +433,7 @@ featbuf_producer_process_raw(featbuf_t *fb,
                              int full_utt)
 {
     int16 const *rptr;
+    int total_nfr;
 
     /* Write audio to log file. */
     if (fb->rawfh)
@@ -446,6 +446,7 @@ featbuf_producer_process_raw(featbuf_t *fb,
     /* Do fe_process_frames into our internal MFCC buffer until no
      * data remains. */
     rptr = raw;
+    total_nfr = 0;
     while (n_samps > 0) {
         int nframes = 1;
         if (fe_process_frames(fb->fe, &rptr, &n_samps,
@@ -453,9 +454,10 @@ featbuf_producer_process_raw(featbuf_t *fb,
             return -1;
         if (nframes)
             featbuf_producer_process_cep(fb, &fb->cepbuf, 1, FALSE);
+        total_nfr += nframes;
     }
 
-    return 0;
+    return total_nfr;
 }
 
 static int
@@ -493,6 +495,7 @@ featbuf_producer_process_cep(featbuf_t *fb,
                              int full_utt)
 {
     mfcc_t **cptr;
+    int out_nframes = 0;
 
     /* Write frames to log file. */
     if (fb->mfcfh)
@@ -519,9 +522,10 @@ featbuf_producer_process_cep(featbuf_t *fb,
         }
         cptr += ncep;
         n_frames -= ncep;
+        out_nframes += nfeat;
     }
 
-    return 0;
+    return out_nframes;
 }
 
 int
@@ -529,7 +533,9 @@ featbuf_producer_process_feat(featbuf_t *fb,
                               mfcc_t **feat)
 {
     /* This one is easy, at least... */
-    return sync_array_append(fb->sa, feat[0]);
+    if (sync_array_append(fb->sa, feat[0]) < 0)
+        return -1;
+    return 1;
 }
 
 int
@@ -557,4 +563,16 @@ char *
 featbuf_uttid(featbuf_t *fb)
 {
     return fb->uttid;
+}
+
+int
+featbuf_get_window_start(featbuf_t *fb)
+{
+    return sync_array_available(fb->sa);
+}
+
+int
+featbuf_get_window_end(featbuf_t *fb)
+{
+    return sync_array_next_idx(fb->sa);
 }

@@ -232,6 +232,11 @@ ngram_trie_node_t *ngram_trie_add_successor(ngram_trie_t *t,
                                             ngram_trie_node_t *h, int32 w);
 
 /**
+ * Create a new node with no history or successors.
+ */
+ngram_trie_node_t *ngram_trie_node_alloc(ngram_trie_t *t);
+
+/**
  * Add a new successor to an N-Gram
  */
 int ngram_trie_add_successor_ngram(ngram_trie_t *t, 

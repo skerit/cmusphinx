@@ -320,7 +320,6 @@ process_ctl(ps_decoder_t *ps, cmd_ln_t *config, FILE *ctlfh)
     FILE *hypfh = NULL, *hypsegfh = NULL;
     double n_speech, n_cpu, n_wall;
     char const *outlatdir;
-    char const *nbestdir;
     char const *str;
     int frate;
 
@@ -328,7 +327,6 @@ process_ctl(ps_decoder_t *ps, cmd_ln_t *config, FILE *ctlfh)
     ctlcount = cmd_ln_int32_r(config, "-ctlcount");
     ctlincr = cmd_ln_int32_r(config, "-ctlincr");
     outlatdir = cmd_ln_str_r(config, "-outlatdir");
-    nbestdir = cmd_ln_str_r(config, "-nbestdir");
     frate = cmd_ln_int32_r(config, "-frate");
 
     if ((str = cmd_ln_str_r(config, "-hyp"))) {
@@ -394,8 +392,6 @@ process_ctl(ps_decoder_t *ps, cmd_ln_t *config, FILE *ctlfh)
                 write_hypseg(hypsegfh, ps, uttid);
             }
             if (outlatdir) {
-            }
-            if (nbestdir) {
             }
             ps_get_utt_time(ps, &n_speech, &n_cpu, &n_wall);
             E_INFO("%s: %.2f seconds speech, %.2f seconds CPU, %.2f seconds wall\n",

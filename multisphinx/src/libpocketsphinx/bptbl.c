@@ -772,8 +772,10 @@ bptbl_find_exit(bptbl_t *bptbl, int32 wid)
     }
     ++start;
     if (ef != bptbl->n_frame - 1) {
+#if 0 /* shut up */
         E_WARN("No exits in final frame %d, using frame %d instead\n",
                bptbl->n_frame - 1, ef);
+#endif
     }
     best_score = WORST_SCORE;
     best = NO_BP;
@@ -1194,10 +1196,12 @@ bptbl_hyp(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
             E_ERROR("No word exits in last frame: recognition failure?\n");
             return NULL;
         }
+#if 0 /* shut up */
         E_WARN("No %s found in last frame, using %s instead\n",
                dict_wordstr(bptbl->d2p->dict, finish_wid),
                dict_wordstr(bptbl->d2p->dict,
                             bptbl_ent_internal(bptbl, exit)->wid));
+#endif
     }
 
     bpe = bptbl_ent_internal(bptbl, exit);
