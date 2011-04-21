@@ -18,11 +18,11 @@ int main(int argc, char **argv)
     acmod_t *acmod;
     int nfr, i;
     mfcc_t ***feat;
+    char *hyp1, *hyp2;
+    int32 score;
 
-    dcf = search_factory_init(
-            "-lm", TESTDATADIR "/bn10000.3g.arpa",
-            "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
-            "-dict", TESTDATADIR "/bn10000.dic",
+    dcf = search_factory_init("-lm", TESTDATADIR "/bn10000.3g.arpa", "-hmm",
+            TESTDATADIR "/hub4wsj_sc_8k", "-dict", TESTDATADIR "/bn10000.dic",
             "-samprate", "11025", NULL);
     TEST_ASSERT(dcf != NULL);
 
@@ -36,36 +36,47 @@ int main(int argc, char **argv)
     acmod = search_factory_acmod(dcf);
 
     /* Feed it a bunch of data. */
-    nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
-                          ".mfc", 0, -1, NULL, -1);
+    nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR, ".mfc", 0, -1,
+            NULL, -1);
     feat = feat_array_alloc(acmod->fcb, nfr);
-    if ((nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
-                               ".mfc", 0, -1, feat, -1)) < 0) {
-            E_ERROR("Failed to read mfc file\n");
-            return 1;
+    if ((nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR, ".mfc", 0, -1,
+            feat, -1)) < 0)
+    {
+        E_ERROR("Failed to read mfc file\n");
+        return 1;
     }
 
     featbuf_producer_start_utt(fb, NULL);
-    for (i = 0; i < nfr; ++i)
-            featbuf_producer_process_feat(fb, feat[i]);
+    for (i = 0; i < 500; ++i)
+        featbuf_producer_process_feat(fb, feat[i]);
 
     /* This will wait for search to complete. */
-    printf("Waiting for end of utt\n");
     featbuf_producer_end_utt(fb);
-    printf("Done waiting\n");
-
     /* Retrieve the hypothesis from the search thread. */
-    //hyp = ps_search_hyp(fwdflat, &score);
-    //printf("hyp: %s (%d)\n", hyp, score);
+    hyp1 = ckd_salloc(search_hyp(fwdtree, &score));
+    E_INFO("hyp: %s (%d)\n", hyp1, score);
 
     /* Reap the search thread. */
-    E_INFO("Reaping the search thread\n");
     featbuf_producer_shutdown(fb);
-    printf("Done reaping\n");
     search_free(fwdtree);
-    acmod_free(acmod);
-    featbuf_free(fb);
 
+    /* Now verify that overriding (and also creating new searches) works */
+    fwdtree = search_factory_create(dcf, "fwdtree", "-lm", TESTDATADIR "/bn10000.3g.homos.arpa", NULL);
+    search_run(fwdtree);
+    featbuf_producer_start_utt(fb, NULL);
+    for (i = 0; i < 500; ++i)
+        featbuf_producer_process_feat(fb, feat[i]);
+    featbuf_producer_end_utt(fb);
+
+    /* Retrieve the hypothesis from the search thread. */
+    hyp2 = ckd_salloc(search_hyp(fwdtree, &score));
+    E_INFO("hyp 2: %s (%d)\n", hyp2, score);
+    TEST_ASSERT(0 != strcmp(hyp1, hyp2));
+    featbuf_producer_shutdown(fb);
+    search_free(fwdtree);
+    search_factory_free(dcf);
+    ckd_free(hyp1);
+    ckd_free(hyp2);
 
     return 0;
 }

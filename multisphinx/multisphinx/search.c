@@ -149,19 +149,6 @@ search_hyp(search_t *search, int32 *out_score)
     return (*search->vt->hyp)(search, out_score);
 }
 
-char const *
-search_splice(search_t **searches, int nsearches,
-                 int32 *out_score)
-{
-    /* How to do this...  Requires some cooperation from the searches.
-     * Basically instead of search_hyp() they should always return
-     * segmentations.  Then we pass these off to some other function
-     * in here which concatenates the segmentations, and we resolve
-     * overlaps according to some heuristic to be determined.
-     */
-    return NULL;
-}
-
 ps_seg_t *
 search_seg_iter(search_t *search, int32 *out_score)
 {

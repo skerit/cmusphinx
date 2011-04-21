@@ -206,9 +206,7 @@ cmd_ln_t *cmd_ln_retain(cmd_ln_t *cmdln);
 /**
  * Copy a command-line argument set.
  *
- * @note This is a shallow copy - the strings for the parameter names and values remain
- * shared.  However any changes made with cmd_ln_set_*_r() will only be reflected in the copy.
- *
+ * @note the argument name strings are shared, which may cause unexpected behaviour.
  * @return pointer to new command-line argument set.
  */
 SPHINXBASE_EXPORT

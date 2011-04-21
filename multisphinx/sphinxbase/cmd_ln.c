@@ -325,6 +325,19 @@ arg_dump_r(cmd_ln_t *cmdln, FILE * fp, const arg_t * defn, int32 doc)
 }
 
 static cmd_ln_val_t *
+cmd_ln_val_copy(cmd_ln_val_t const *val)
+{
+    cmd_ln_val_t *v;
+
+    v = ckd_calloc(1, sizeof(*v));
+    memcpy(v, val, sizeof(*v));
+    if (val->type == ARG_STRING || val->type == REQARG_STRING)
+        if (val->val.ptr != NULL)
+            v->val.ptr = ckd_salloc(val->val.ptr);
+    return v;
+}
+
+static cmd_ln_val_t *
 cmd_ln_val_init(int t, const char *str)
 {
     cmd_ln_val_t *v;
@@ -509,7 +522,7 @@ cmd_ln_copy(cmd_ln_t *cmdln)
     copy->refcount = 1;
     copy->ht = hash_table_new(cmdln->ht->size, cmdln->ht->nocase);
     for (itor = hash_table_iter(cmdln->ht); itor; itor = hash_table_iter_next(itor)) {
-        hash_table_enter(copy->ht, itor->ent->key, itor->ent->val);
+        hash_table_enter(copy->ht, itor->ent->key, cmd_ln_val_copy(itor->ent->val));
     }
     return copy;
 }

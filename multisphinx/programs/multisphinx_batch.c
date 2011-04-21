@@ -178,7 +178,6 @@ int batch_decoder_decode(batch_decoder_t *bd, char const *file,
 int batch_decoder_run(batch_decoder_t *bd)
 {
     int32 ctloffset, ctlcount, ctlincr;
-    int32 i;
     lineiter_t *li;
 
     ctloffset = cmd_ln_int32_r(bd->config, "-ctloffset");
@@ -194,7 +193,7 @@ int batch_decoder_run(batch_decoder_t *bd)
             continue;
         if ((li->lineno - ctloffset) % ctlincr != 0)
             continue;
-        if (ctlcount != -1 && i >= ctloffset + ctlcount)
+        if (ctlcount != -1 && li->lineno >= ctloffset + ctlcount)
             break;
         sf = 0;
         ef = -1;

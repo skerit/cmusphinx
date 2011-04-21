@@ -256,6 +256,14 @@ int search_factory_free(search_factory_t *dcf)
         return 0;
     if (--dcf->refcnt > 0)
         return dcf->refcnt;
+    acmod_free(dcf->acmod);
+    cmd_ln_free_r(dcf->config);
+    dict2pid_free(dcf->d2p);
+    dict_free(dcf->dict);
+    featbuf_free(dcf->fb);
+    ngram_model_free(dcf->lm);
+    logmath_free(dcf->lmath);
+    glist_free(dcf->searches);
     ckd_free(dcf);
     return 0;
 }
