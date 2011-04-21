@@ -41,13 +41,16 @@
 
 #include <sphinxbase/garray.h>
 #include <sphinxbase/err.h>
+#include <sphinxbase/filename.h>
+#include <sphinxbase/strfuncs.h>
+#include <sphinxbase/pio.h>
 
 #include "ps_search.h"
 #include "arc_buffer.h"
 #include "nodeid_map.h"
 #include "ms_lattice.h"
 
-static int latgen_search_decode(ps_search_t *base);
+static int latgen_search_decode(ps_search_t *base, char const *uttid);
 static int latgen_search_free(ps_search_t *base);
 static char const *latgen_search_hyp(ps_search_t *base, int32 *out_score);
 static int32 latgen_search_prob(ps_search_t *base);
@@ -69,6 +72,11 @@ typedef struct latgen_search_s {
     logmath_t *lmath;
     arc_buffer_t *input_arcs;
     ms_lattice_t *output_lattice;
+
+    /** Output directory for lattices. */
+    char const *outlatdir;
+    /** Output directory for arc buffer contents. */
+    char const *outarcdir;
     /** Storage for language model state components. */
     int32 *lmhist;
     /** Allocation size of @a lmhist. */
@@ -108,6 +116,8 @@ latgen_init(cmd_ln_t *config,
     latgen->input_arcs = arc_buffer_retain(input_arcs);
     latgen->lmath = logmath_retain(ngram_model_get_lmath(lm));
     latgen->lm = ngram_model_retain(lm);
+
+    latgen->outarcdir = cmd_ln_str_r(config, "-arcdumpdir");
 
     /* NOTE: this is one larger than the actual history size for a
      * language model state. */
@@ -210,6 +220,53 @@ create_new_link(latgen_search_t *latgen,
     return link;
 }
 
+/**
+ * Create a backoff link.
+ */
+static ms_latlink_t *
+create_backoff_link(latgen_search_t *latgen,
+                    int32 linkid, int32 destidx,
+                    int32 bowt)
+{
+    ms_latlink_t *link = ms_lattice_get_link_idx
+        (latgen->output_lattice, linkid);
+    ms_latlink_t *link2;
+    ms_latnode_t *src, *dest;
+    int32 link2id;
+
+    E_INFO("Duplicating incoming link ");
+    ms_latlink_print(err_get_logfp(),
+                     latgen->output_lattice,
+                     link);
+    E_INFOCONT("\n");
+
+    /* Create the new link. */
+    /* FIXME: A matching link may already exist (with a different
+     * alternate word ID) in which case we should just take the best
+     * ascr. */
+    src = ms_lattice_get_node_idx(latgen->output_lattice, link->src);
+    dest = ms_lattice_get_node_idx(latgen->output_lattice, destidx);
+    assert(src != NULL);
+    assert(dest != NULL);
+    link2 = ms_lattice_link(latgen->output_lattice,
+                           src, dest, link->wid, link->ascr);
+    link2->lscr = link->lscr + bowt;
+
+    /* Record useful facts about this link for its successors. */
+    link2id = ms_lattice_get_idx_link(latgen->output_lattice, link2);
+    garray_expand(latgen->link_rcid, link2id + 1);
+    garray_ent(latgen->link_rcid, uint8, link2id)
+        = garray_ent(latgen->link_rcid, uint8, linkid);
+    garray_expand(latgen->link_altwid, link2id + 1);
+    garray_ent(latgen->link_altwid, int32, link2id)
+        = garray_ent(latgen->link_altwid, int32, linkid);
+    garray_expand(latgen->link_score, link2id + 1);
+    garray_ent(latgen->link_score, int32, link2id)
+        = garray_ent(latgen->link_score, int32, link2id);
+
+    return link2;
+}
+
 static int32
 find_best_incoming(latgen_search_t *latgen, int32 nodeidx,
                    sarc_t *arc, int32 *out_incoming_score)
@@ -273,22 +330,33 @@ create_outgoing_links_one(latgen_search_t *latgen,
     ms_latnode_t *node;
     int32 srcidx, destidx;
     int32 incoming_score, incoming_linkid;
-    int32 headwid, lscr, bowt;
-    int32 src_lmstate, dest_lmstate;
+    int32 linkwid, lscr, bowt, headwid;
+    int32 src_lmstate, dest_lmstate, bo_lmstate;
     int frame_idx, n_hist, i;
     int n_links = 0;
 
     node = ms_lattice_get_node_idx(latgen->output_lattice, nodeidx);
     src_lmstate = node->id.lmstate;
     frame_idx = node->id.sf;
+    linkwid = dict_basewid(latgen->d2p->dict, arc->arc.wid);
     /* Might be modified if we have backoff. */
     srcidx = ms_lattice_get_idx_node(latgen->output_lattice, node);
+
+    E_INFO("Original source node ");
+    ms_latnode_print(err_get_logfp(), latgen->output_lattice, node);
+    E_INFOCONT(" arc %s/%d\n", dict_wordstr(latgen->d2p->dict, linkwid),
+               arc->arc.dest + 1);
 
     /* Find best incoming link (to get starting path score) */
     incoming_linkid = find_best_incoming
         (latgen, nodeidx, arc, &incoming_score);
     /* Start node has no incoming link (duh) */
-    assert(frame_idx == 0 || incoming_linkid != -1);
+    if (frame_idx > 0 && incoming_linkid == -1) {
+        /* No matching incoming link for this arc, so we don't know
+         * what its acoustic score should be.  Drop it on the floor.*/
+        E_INFO("No incoming link found, skipping this arc\n");
+        return 0;
+    }
 
     /* Find language model state and language model score for
      * destination node.  */
@@ -314,19 +382,16 @@ create_outgoing_links_one(latgen_search_t *latgen,
         print_lmstate(err_get_logfp(), latgen->lm, headwid,
                       latgen->lmhist, n_hist);
         E_INFOCONT("\n");
-        /* Update headwid, as we use it for the link. */
-        headwid = dict_basewid(latgen->d2p->dict, arc->arc.wid);
     }
-    else if (arc->arc.wid == dict_startwid(latgen->d2p->dict)) {
+    else if (linkwid == dict_startwid(latgen->d2p->dict)) {
         /* Or if the arc is the start word ID in which case the
          * destination LM state is just <s>.  (this is done in part
          * because <s> is not actually in the LM). */
-        headwid = dict_basewid(latgen->d2p->dict, arc->arc.wid);
         dest_lmstate = ms_lattice_get_lmstate_idx
-            (latgen->output_lattice, headwid, NULL, 0);
+            (latgen->output_lattice, linkwid, NULL, 0);
         if (dest_lmstate == -1)
             dest_lmstate = ms_lattice_lmstate_init
-                (latgen->output_lattice, headwid, NULL, 0);
+                (latgen->output_lattice, linkwid, NULL, 0);
         lscr = bowt = 0;
         E_INFO("Start word <s> destination lmstate id %d\n", dest_lmstate);
     }
@@ -369,18 +434,18 @@ create_outgoing_links_one(latgen_search_t *latgen,
             ms_lattice_get_lmstate_wids(latgen->output_lattice,
                                         src_lmstate,
                                         &headwid, latgen->lmhist);
-        E_INFO("Source language model state ");
+        E_INFO("Source language model state %d ", src_lmstate);
         print_lmstate(err_get_logfp(), latgen->lm, headwid, latgen->lmhist, n_hist);
         E_INFOCONT("\n");
-
-        while (1) {
+        /* Construct the target N-Gram (language model state + arc) */
+        n_hist = 
+            rotate_lmstate(headwid, latgen->lmhist, n_hist,
+                           /* NOTE: This is bigger than an actual lm state. */
+                           latgen->max_n_hist);
+        headwid = linkwid;
+        bo_lmstate = src_lmstate;
+        while (n_hist >= 0) {
             ngram_iter_t *ni;
-            /* Construct the target N-Gram (language model state + arc) */
-            n_hist = 
-                rotate_lmstate(headwid, latgen->lmhist, n_hist,
-                               /* NOTE: This is bigger than an actual lm state. */
-                               latgen->max_n_hist);
-            headwid = dict_basewid(latgen->d2p->dict, arc->arc.wid);
             E_INFO("Looking for N-Gram ");
             print_lmstate(err_get_logfp(), latgen->lm, headwid,
                           latgen->lmhist, n_hist);
@@ -390,29 +455,32 @@ create_outgoing_links_one(latgen_search_t *latgen,
                 ngram_iter_get(ni, &lscr, NULL);
                 ngram_iter_free(ni);
                 E_INFO("Found: lscr %d\n", lscr);
-                /* Destination language model state is the truncation
-                 * of this N-Gram. */
+                /* Destination language model state is this N-Gram,
+                 * truncated to max_n_hist - 1 if necessary. */
+                if (n_hist == latgen->max_n_hist)
+                    --n_hist;
                 dest_lmstate = ms_lattice_get_lmstate_idx
-                    (latgen->output_lattice, headwid, latgen->lmhist, n_hist - 1);
+                    (latgen->output_lattice, headwid, latgen->lmhist, n_hist);
                 if (dest_lmstate == -1)
                     dest_lmstate = ms_lattice_lmstate_init
                         (latgen->output_lattice, headwid,
-                         latgen->lmhist, n_hist - 1);
-                E_INFO("Destination language model state %d: ");
+                         latgen->lmhist, n_hist);
+                E_INFO("Destination language model state %d: ", dest_lmstate);
                 print_lmstate(err_get_logfp(), latgen->lm, headwid,
                               latgen->lmhist, n_hist);
                 E_INFOCONT("\n");
                 break;
             }
-            else {
+            else if (n_hist > 0) {
+                --n_hist;
                 E_INFO("Not found, looking for backoff N-Gram ");
                 print_lmstate(err_get_logfp(), latgen->lm,
                               latgen->lmhist[0],
-                              latgen->lmhist + 1, n_hist - 1);
+                              latgen->lmhist + 1, n_hist);
                 E_INFOCONT("\n");
                 /* Find backoff weight */
                 ni = ngram_ng_iter(latgen->lm, latgen->lmhist[0],
-                                   latgen->lmhist + 1, n_hist - 1);
+                                   latgen->lmhist + 1, n_hist);
                 if (ni != NULL) {
                     ngram_iter_get(ni, NULL, &bowt);
                     ngram_iter_free(ni);
@@ -420,49 +488,64 @@ create_outgoing_links_one(latgen_search_t *latgen,
                 else
                     bowt = 0;
                 E_INFO("Backoff weight: %d\n", bowt);
-                if (--n_hist == 0) {
-                    E_INFO("Destination language model state -1: &epsilon\n");
-                    /* Epsilon, which is okay. */
-                    dest_lmstate = -1;
-                    break;
+                /* Now update source language model state. */
+                if (n_hist == 0)
+                    bo_lmstate = -1;
+                else {
+                    bo_lmstate = ms_lattice_get_lmstate_idx
+                        (latgen->output_lattice, latgen->lmhist[0],
+                         latgen->lmhist + 1, n_hist - 1);
+                    if (bo_lmstate == -1)
+                        bo_lmstate = ms_lattice_lmstate_init
+                            (latgen->output_lattice, latgen->lmhist[0],
+                             latgen->lmhist + 1, n_hist - 1);
                 }
+            }
+            else {
+                /* This implies that a unigram for headwid was not
+                 * found, which should not happen. */
+                E_ERROR("Unigram %s not found\n",
+                        dict_wordstr(latgen->d2p->dict, headwid));
+                assert(n_hist > 0);
             }
         }
 
         /* Find or create a source node for the backoff language model
-         * state.  If we create a source node copy incoming arcs, adding
-         * the backoff weight to their lscr.  (FIXME: Verify that this is
-         * the correct thing to do) */
-        if (src_lmstate == -1) {
-            E_INFO("Backoff language model state &epsilon bowt %d\n", bowt);
+         * state. */
+        if (bo_lmstate == -1) {
+            E_INFO("Backoff language model state &epsilon;\n");
             if ((node = ms_lattice_get_node_id
                  (latgen->output_lattice, frame_idx, -1)) == NULL) {
                 node = ms_lattice_node_init
                     (latgen->output_lattice, frame_idx, -1);
             }
+            srcidx = ms_lattice_get_idx_node(latgen->output_lattice, node);
         }
-        else {
+        else if (bo_lmstate != src_lmstate) {
             n_hist =
                 ms_lattice_get_lmstate_wids(latgen->output_lattice,
-                                            src_lmstate,
+                                            bo_lmstate,
                                             &headwid, latgen->lmhist);
-            E_INFO("Backoff language model state ");
+            E_INFO("Backoff language model state %d ", bo_lmstate);
             print_lmstate(err_get_logfp(), latgen->lm, headwid,
                           latgen->lmhist, n_hist);
-            E_INFOCONT(" bowt %d\n", bowt);
-            if ((node = ms_lattice_get_node_id
-                 (latgen->output_lattice, frame_idx, src_lmstate)) == NULL) {
-                node = ms_lattice_node_init
-                    (latgen->output_lattice, frame_idx, src_lmstate);
-            }
-        }
-        srcidx = ms_lattice_get_idx_node(latgen->output_lattice, node);
-        assert(srcidx >= 0);
-        if (srcidx != nodeidx) {
-            E_INFO("New source node:");
-            ms_latnode_print(err_get_logfp(), latgen->output_lattice, node);
             E_INFOCONT("\n");
+            if ((node = ms_lattice_get_node_id
+                 (latgen->output_lattice, frame_idx, bo_lmstate)) == NULL) {
+                node = ms_lattice_node_init
+                    (latgen->output_lattice, frame_idx, bo_lmstate);
+            }
+            srcidx = ms_lattice_get_idx_node(latgen->output_lattice, node);
         }
+        else {
+            /* Source node is unchanged. */
+            srcidx = nodeidx;
+        }
+
+        /* If we switched the source node then copy over the incoming link. */
+        if (srcidx != nodeidx && incoming_linkid != -1)
+            create_backoff_link(latgen, incoming_linkid,
+                                srcidx, bowt >> SENSCR_SHIFT);
     }
 
     /* Find or create a destination node. */
@@ -482,8 +565,8 @@ create_outgoing_links_one(latgen_search_t *latgen,
     if (dict_pronlen(latgen->d2p->dict, arc->arc.wid) == 1) {
         ms_latlink_t *link;
         link = create_new_link(latgen, srcidx, destidx, incoming_linkid,
-                               arc, headwid, arc->score, NO_RC);
-        link->lscr = lscr; /* FIXME: See above re. bowt */
+                               arc, linkwid, arc->score, NO_RC);
+        link->lscr = lscr >> SENSCR_SHIFT;
         E_INFO("Created non-rc link ");
         ms_latlink_print(err_get_logfp(),
                          latgen->output_lattice, link);
@@ -492,19 +575,28 @@ create_outgoing_links_one(latgen_search_t *latgen,
     }
     else {
         for (i = 0; i < arc_buffer_max_n_rc(latgen->input_arcs); ++i) {
-            if (bitvec_is_set(arc->rc_bits, i)) {
-                ms_latlink_t *link;
-                link = create_new_link
-                    (latgen, srcidx, destidx, incoming_linkid,
-                     arc, headwid,
-                     arc_buffer_get_rcscore(latgen->input_arcs, arc, i), i);
-                link->lscr = lscr; /* FIXME: See above re. bowt */
-                E_INFO("Created rc %d link ", i);
-                ms_latlink_print(err_get_logfp(),
-                                 latgen->output_lattice, link);
-                E_INFOCONT("\n");
-                ++n_links;
-            }
+            ms_latlink_t *link;
+            /* FIXME: Important observation, it seems that these are
+             * always sequential, i.e. if we exit one of them we end
+             * up exiting all of them.  Not sure this is generally
+             * true but maybe it's useful for compression. */
+            /* FIXME: ALSO, many of the rc deltas are exactly the
+             * same.  So if we could compress them further (maybe
+             * here) we could save a lot of spurious arcs. */
+            if (!bitvec_is_set(arc->rc_bits, i))
+                continue;
+            /* FIXME: ALSO some of these scores are positive which
+             * means that we are screwing up somehow. */
+            link = create_new_link
+                (latgen, srcidx, destidx, incoming_linkid,
+                 arc, linkwid,
+                 arc_buffer_get_rcscore(latgen->input_arcs, arc, i), i);
+            link->lscr = lscr >> SENSCR_SHIFT;
+            E_INFO("Created rc %d link ", i);
+            ms_latlink_print(err_get_logfp(),
+                             latgen->output_lattice, link);
+            E_INFOCONT(" %d %d\n", link->ascr, link->lscr);
+            ++n_links;
         }
     }
 
@@ -555,7 +647,50 @@ latgen_search_process_arcs(latgen_search_t *latgen,
 }
 
 static int
-latgen_search_decode(ps_search_t *base)
+latgen_search_cleanup_frame(latgen_search_t *latgen, int32 frame_idx)
+{
+    int i, dead;
+
+    /* Refresh the list of nodes in this frame. */
+    if (get_frame_active_nodes(latgen->output_lattice,
+                               latgen->active_nodes, frame_idx) == 0)
+        return 0;
+
+    /* Reap dangling nodes. */
+    dead = 0;
+    for (i = 0; i < garray_size(latgen->active_nodes); ++i) {
+        int32 nodeidx = garray_ent(latgen->active_nodes, int32, i);
+        ms_latnode_t *node = ms_lattice_get_node_idx
+            (latgen->output_lattice, nodeidx);
+        int32 wid;
+
+        ms_lattice_get_lmstate_wids(latgen->output_lattice,
+                                    node->id.lmstate, &wid,
+                                    latgen->lmhist);
+        if (node->id.sf != 0 && ms_latnode_n_entries(node) == 0) {
+            ms_latnode_unlink(latgen->output_lattice, node);
+            ++dead;
+        }
+        else if (wid != dict_finishwid(latgen->d2p->dict)
+                 && ms_latnode_n_exits(node) == 0) {
+            ms_latnode_unlink(latgen->output_lattice, node);
+            ++dead;
+        }
+        else {
+            /* For nodes that remain, reap dangling links. */
+            /* A dangling link is an incoming link which does not
+             * match any outgoing right contexts. */
+            /* So basically we create a bitmap of initial phones for
+             * each outgoing link.  Then for each incoming link we check that . */
+        }
+    }
+    E_INFO("Cleaned up %d nodes in frame %d\n", dead, frame_idx);
+
+    return 0;
+}
+
+static int
+latgen_search_decode(ps_search_t *base, char const *uttid)
 {
     latgen_search_t *latgen = (latgen_search_t *)base;
     int frame_idx;
@@ -575,6 +710,17 @@ latgen_search_decode(ps_search_t *base)
     garray_reset(latgen->link_altwid);
     garray_reset(latgen->link_score);
 
+    /* Start logging arcs. */
+    if (latgen->outarcdir) {
+        char *uttpath = ckd_salloc(uttid);
+        char *dirname;
+        path2dirname(uttid, uttpath);
+        dirname = string_join(latgen->outarcdir, "/", uttpath, NULL);
+        build_directory(dirname);
+        ckd_free(dirname);
+        ckd_free(uttpath);
+    }
+
     /* Process frames full of arcs. */
     while (arc_buffer_consumer_wait(latgen->input_arcs, -1) >= 0) {
         ptmr_start(&base->t);
@@ -582,6 +728,7 @@ latgen_search_decode(ps_search_t *base)
             arc_t *itor;
             int n_arc;
 
+            /* Grab arcs from the input buffer. */
             arc_buffer_lock(latgen->input_arcs);
             itor = arc_buffer_iter(latgen->input_arcs, frame_idx);
             if (itor == NULL) {
@@ -591,12 +738,16 @@ latgen_search_decode(ps_search_t *base)
             n_arc = latgen_search_process_arcs(latgen, (sarc_t *)itor, frame_idx);
             E_INFO("Added %d links leaving frame %d\n", n_arc, frame_idx);
             arc_buffer_unlock(latgen->input_arcs);
+
+            /* Release arcs, we don't need them anymore. */
+            arc_buffer_consumer_release(latgen->input_arcs, frame_idx);
+            /* Remove any inaccessible nodes in this frame. */
+            latgen_search_cleanup_frame(latgen, frame_idx);
             ++frame_idx;
         }
         ptmr_stop(&base->t);
         if (arc_buffer_eou(latgen->input_arcs)) {
             E_INFO("latgen: got EOU\n");
-            /* Clean up the output lattice. */
             arc_buffer_consumer_end_utt(latgen->input_arcs);
             return frame_idx;
         }
