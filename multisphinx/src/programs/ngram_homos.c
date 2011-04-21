@@ -148,6 +148,42 @@ add_weighted_successors(ngram_trie_t *lm, ngram_trie_node_t *dest,
     return 0;
 }
 
+static int32
+find_word_succ(ngram_trie_t *lm, ngram_trie_node_t *node,
+               garray_t *word_succ,
+               bitvec_t *seen, int32 const *wids, int32 n_wids)
+{
+    int32 succ_prob, i;
+    dict_t *dict;
+    logmath_t *lmath;
+
+    dict = ngram_trie_dict(lm);
+    lmath = ngram_trie_logmath(lm);
+    succ_prob = logmath_get_zero(lmath);
+    bitvec_clear_all(seen, dict_size(dict));
+    for (i = 0; i < n_wids; ++i) {
+        int32 basewid = dict_basewid(dict, wids[i]);
+        ngram_trie_node_t *succ;
+        /* Don't look at the same base word twice. */
+        if (bitvec_is_set(seen, basewid))
+            continue;
+        bitvec_set(seen, basewid);
+        /* FIXME: We should turn this inside out and iterate over
+         * successors rather than searching for them, as it is
+         * slow. */
+        if ((succ = ngram_trie_successor(lm, node, basewid)) != NULL) {
+            int32 log_prob, log_bowt;
+            i32p_t sent;
+            ngram_trie_node_params(lm, succ, &log_prob, &log_bowt);
+            sent.a = basewid;
+            sent.b = log_prob;
+            garray_append(word_succ, &sent);
+            succ_prob = logmath_add(lmath, succ_prob, log_prob);
+        }
+    }
+    return succ_prob;
+}
+
 static int
 merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
             vocab_map_t *vm, bitvec_t *seen)
@@ -182,25 +218,7 @@ merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
         if (n_wids == 0)
             continue;
         /* Calculate normalizer for weights along the way. */
-        succ_prob = logmath_get_zero(lmath);
-        bitvec_clear_all(seen, dict_size(dict));
-        for (i = 0; i < n_wids; ++i) {
-            int32 basewid = dict_basewid(dict, wids[i]);
-            ngram_trie_node_t *succ;
-            /* Don't look at the same base word twice. */
-            if (bitvec_is_set(seen, basewid))
-                continue;
-            bitvec_set(seen, basewid);
-            if ((succ = ngram_trie_successor(lm, node, basewid)) != NULL) {
-                int32 log_prob, log_bowt;
-                i32p_t sent;
-                ngram_trie_node_params(lm, succ, &log_prob, &log_bowt);
-                sent.a = basewid;
-                sent.b = log_prob;
-                garray_append(word_succ, &sent);
-                succ_prob = logmath_add(lmath, succ_prob, log_prob);
-            }
-        }
+        succ_prob = find_word_succ(lm, node, word_succ, seen, wids, n_wids);
         if (garray_size(word_succ) == 0)
             continue;
         else if (garray_size(word_succ) == 1) {

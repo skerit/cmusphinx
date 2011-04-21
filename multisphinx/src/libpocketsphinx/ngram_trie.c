@@ -399,6 +399,8 @@ ngram_trie_ngrams(ngram_trie_t *t, int n)
     for (i = 1; i < n; ++i) {
         size_t pos;
         if (h->successors == NULL) {
+            /* FIXME: backoff weight calculation in ngram_homos needs
+             * to recover from this... */
             E_ERROR("Found no %d-gram successors\n", i);
             return NULL;
         }
