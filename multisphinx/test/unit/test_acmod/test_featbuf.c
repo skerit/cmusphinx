@@ -81,8 +81,8 @@ main(int argc, char *argv[])
 	while ((nsamp = fread(buf, 2, 2048, raw)) > 0) {
 		int rv;
 		rv = featbuf_producer_process_raw(fb, buf, nsamp, FALSE);
-		printf("Producer processed %d samples\n", nsamp);
-		TEST_ASSERT(rv == 0);
+		printf("Producer processed %d samples: %d\n", nsamp, rv);
+		TEST_ASSERT(rv > 0);
 	}
 	fclose(raw);
 	printf("Waiting for consumers\n");

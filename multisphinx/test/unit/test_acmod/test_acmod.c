@@ -72,7 +72,7 @@ main(int argc, char *argv[])
 		int rv;
 		rv = featbuf_producer_process_raw(fb, buf, nsamp, FALSE);
 		printf("Producer processed %d samples\n", nsamp);
-		TEST_ASSERT(rv == 0);
+		TEST_ASSERT(rv > 0);
 	}
 	fclose(raw);
 	printf("Waiting for consumers\n");
