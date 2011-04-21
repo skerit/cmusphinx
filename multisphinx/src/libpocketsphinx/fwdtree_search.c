@@ -2268,12 +2268,10 @@ fwdtree_search_save_bp(fwdtree_search_t *fts, int frame_idx,
         if (bpe.score WORSE_THAN score) {
             bptbl_update_bp(fts->bptbl, bp, rc, path, score);
         }
-        else {
-            /* But do keep track of scores for all right contexts, since
-             * we need them to determine the starting path scores for any
-             * successors of this word exit. */
-            bptbl_set_rcscore(fts->bptbl, bp, rc, score);
-        }
+        /* But do keep track of scores for all right contexts, since
+         * we need them to determine the starting path scores for any
+         * successors of this word exit. */
+        bptbl_set_rcscore(fts->bptbl, bp, rc, score);
     }
     else {
         bpidx_t bpidx = bptbl_enter(fts->bptbl, w, path, score, rc);

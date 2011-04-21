@@ -1171,7 +1171,6 @@ bptbl_update_bp(bptbl_t *bptbl, int32 bp, int rc,
                     garray_ent(bptbl->rc, rcdelta_t, ent->s_idx + i) += delta;
             }
         }
-        garray_ent(bptbl->rc, rcdelta_t, ent->s_idx + rc) = 0;
     }
     ent->bp = new_prev;
     ent->score = new_score;
