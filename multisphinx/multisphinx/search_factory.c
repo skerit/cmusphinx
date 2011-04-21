@@ -52,18 +52,6 @@ static int file_exists(const char *path)
     return (tmp != NULL);
 }
 
-static int hmmdir_exists(const char *path)
-{
-    FILE *tmp;
-    char *mdef = string_join(path, "/mdef", NULL);
-
-    tmp = fopen(mdef, "rb");
-    if (tmp)
-        fclose(tmp);
-    ckd_free(mdef);
-    return (tmp != NULL);
-}
-
 static void add_file(cmd_ln_t *config, const char *arg, const char *hmmdir,
         const char *file)
 {
@@ -175,9 +163,25 @@ static int search_factory_initialize(search_factory_t *dcf)
     return 0;
 }
 
-/**
- * Construct a search factory from an array of strings.
- */
+search_factory_t *
+search_factory_init_cmdln(cmd_ln_t *config)
+{
+    search_factory_t *dcf;
+
+    dcf = ckd_calloc(1, sizeof(*dcf));
+    dcf->refcnt = 1;
+
+    dcf->config = cmd_ln_retain(config);
+    init_defaults(dcf->config);
+    if (search_factory_initialize(dcf) < 0)
+        goto error_out;
+
+    return dcf;
+
+    error_out: search_factory_free(dcf);
+    return NULL;
+}
+
 search_factory_t *
 search_factory_init_argv(int argc, char const *argv[])
 {

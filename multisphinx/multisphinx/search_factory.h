@@ -11,6 +11,7 @@
 #include <stdarg.h>
 
 #include <sphinxbase/ngram_model.h>
+#include <sphinxbase/cmd_ln.h>
 
 #include <multisphinx/win32_export.h>
 #include <multisphinx/search.h>
@@ -32,6 +33,11 @@ search_factory_t *search_factory_init(char const *key, char const *val, ...);
 search_factory_t *search_factory_init_argv(int argc, char const *argv[]);
 
 /**
+ * Construct a search factory from a previously parsed command line.
+ */
+search_factory_t *search_factory_init_cmdln(cmd_ln_t *config);
+
+/**
  * Retain a reference to a search factory.
  */
 search_factory_t *search_factory_retain(search_factory_t *dcf);
@@ -49,7 +55,7 @@ search_t *search_factory_create(search_factory_t *dcf, char const *name, ...);
 /**
  * Get the feature buffer from the search factory.
  */
-featbuf_t *search_factory_fb(search_factory_t *dcf);
+featbuf_t *search_factory_featbuf(search_factory_t *dcf);
 
 /**
  * Get the acoustic model from the search factory.

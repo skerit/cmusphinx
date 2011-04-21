@@ -52,156 +52,121 @@
 #include <multisphinx/cmdln_macro.h>
 #include <multisphinx/dict.h>
 #include <multisphinx/search.h>
+#include <multisphinx/search_factory.h>
+
+typedef struct batch_decoder_s
+{
+    search_factory_t *sf;
+    cmd_ln_t *config;
+    search_t *fwdtree;
+    search_t *fwdflat;
+    search_t *latgen;
+
+    FILE *ctlfh;
+} batch_decoder_t;
 
 /**
  * Command-line argument definitions for batch processing.
  */
-static const arg_t ms_args_def[] = {
-    POCKETSPHINX_OPTIONS,
-    /* Various options specific to batch-mode processing. */
-    /* Argument file. */
-    { "-argfile",
-      ARG_STRING,
-      NULL,
-      "Argument file giving extra arguments." },
-    /* Control file. */
-    { "-ctl",
-      ARG_STRING,
-      NULL,
-      "Control file listing utterances to be processed" },
-    { "-ctloffset",
-      ARG_INT32,
-      "0",
-      "No. of utterances at the beginning of -ctl file to be skipped" },
-    { "-ctlcount",
-      ARG_INT32,
-      "-1",
-      "No. of utterances to be processed (after skipping -ctloffset entries)" },
-    { "-ctlincr",
-      ARG_INT32,
-      "1",
-      "Do every Nth line in the control file" },
+static const arg_t ms_args_def[] =
+{ POCKETSPHINX_OPTIONS,
+/* Various options specific to batch-mode processing. */
+/* Control file. */
+{ "-ctl",
+ARG_STRING,
+NULL,
+"Control file listing utterances to be processed"},
+{"-ctloffset",
+ARG_INT32,
+"0",
+"No. of utterances at the beginning of -ctl file to be skipped"},
+{"-ctlcount",
+ARG_INT32,
+"-1",
+"No. of utterances to be processed (after skipping -ctloffset entries)"},
+{"-ctlincr",
+ARG_INT32,
+"1",
+"Do every Nth line in the control file"},
 
-    /* Input file types and locations. */
-    { "-adcin",
-      ARG_BOOLEAN,
-      "no",
-      "Input is raw audio data" },
-    { "-adchdr",
-      ARG_INT32,
-      "0",
-      "Size of audio file header in bytes (headers are ignored)" },
-    { "-cepdir",
-      ARG_STRING,
-      NULL,
-      "Input files directory (prefixed to filespecs in control file)" },
-    { "-cepext",
-      ARG_STRING,
-      ".mfc",
-      "Input files extension (suffixed to filespecs in control file)" },
+/* Input file types and locations. */
+{"-adcin",
+ARG_BOOLEAN,
+"no",
+"Input is raw audio data"},
+{"-adchdr",
+ARG_INT32,
+"0",
+"Size of audio file header in bytes (headers are ignored)"},
+{"-cepdir",
+ARG_STRING,
+NULL,
+"Input files directory (prefixed to filespecs in control file)"},
+{"-cepext",
+ARG_STRING,
+".mfc",
+"Input files extension (suffixed to filespecs in control file)"},
 
-    /* Terminator */
-    CMDLN_EMPTY_OPTION
+/* Terminator */
+CMDLN_EMPTY_OPTION
 };
 
-/**
- * Master configuration object for decoders.
- */
-static cmd_ln_t *config;
-
-/**
- * Decoders.
- */
-static search_t *fwdtree;
-static search_t *fwdflat;
-
-
-static int
-build_outdir_one(cmd_ln_t *config, char const *arg, char const *uttpath)
-{
-    char const *dir;
-
-    if ((dir = cmd_ln_str_r(config, arg)) != NULL) {
-        char *dirname = string_join(dir, "/", uttpath, NULL);
-        build_directory(dirname);
-        ckd_free(dirname);
-    }
-    return 0;
-}
-
-static int
-build_outdirs(cmd_ln_t *config, char const *uttid)
-{
-    char *uttpath = ckd_salloc(uttid);
-
-    path2dirname(uttid, uttpath);
-    build_outdir_one(config, "-outlatdir", uttpath);
-    build_outdir_one(config, "-mfclogdir", uttpath);
-    build_outdir_one(config, "-rawlogdir", uttpath);
-    build_outdir_one(config, "-senlogdir", uttpath);
-    ckd_free(uttpath);
-
-    return 0;
-}
-
-static int
-process_ctl_line(char const *file, char const *uttid, int32 sf, int32 ef)
+int batch_decoder_decode(batch_decoder_t *bd, char const *file,
+        char const *uttid, int32 sf, int32 ef)
 {
     FILE *infh;
     char const *cepdir, *cepext;
     char *infile;
 
-    if (ef != -1 && ef < sf) {
+    if (ef != -1 && ef < sf)
+    {
         E_ERROR("End frame %d is < start frame %d\n", ef, sf);
         return -1;
     }
-    
-    cepdir = cmd_ln_str_r(config, "-cepdir");
-    cepext = cmd_ln_str_r(config, "-cepext");
+
+    cepdir = cmd_ln_str_r(bd->config, "-cepdir");
+    cepext = cmd_ln_str_r(bd->config, "-cepext");
 
     /* Build input filename. */
     infile = string_join(cepdir ? cepdir : "",
-                         "/", file,
-                         cepext ? cepext : "", NULL);
+            "/", file,
+            cepext ? cepext : "", NULL);
     if (uttid == NULL) uttid = file;
 
-    if ((infh = fopen(infile, "rb")) == NULL) {
+    if ((infh = fopen(infile, "rb")) == NULL)
+    {
         E_ERROR_SYSTEM("Failed to open %s", infile);
         ckd_free(infile);
         return -1;
     }
-    /* Build output directories. */
-    if (cmd_ln_boolean_r(config, "-build_outdirs"))
-        build_outdirs(config, uttid);
 
-    if (cmd_ln_boolean_r(config, "-adcin")) {
-        
-        if (ef != -1) {
+    if (cmd_ln_boolean_r(bd->config, "-adcin"))
+    {
+        if (ef != -1)
+        {
             ef = (int32)((ef - sf)
-                         * (cmd_ln_float32_r(config, "-samprate")
-                            / cmd_ln_int32_r(config, "-frate"))
-                         + (cmd_ln_float32_r(config, "-samprate")
-                            * cmd_ln_float32_r(config, "-wlen")));
+                    * (cmd_ln_float32_r(bd->config, "-samprate")
+                            / cmd_ln_int32_r(bd->config, "-frate"))
+                    + (cmd_ln_float32_r(bd->config, "-samprate")
+                            * cmd_ln_float32_r(bd->config, "-wlen")));
         }
         sf = (int32)(sf
-                     * (cmd_ln_float32_r(config, "-samprate")
-                        / cmd_ln_int32_r(config, "-frate")));
-        fseek(infh, cmd_ln_int32_r(config, "-adchdr") + sf * sizeof(int16), SEEK_SET);
-        //ps_decode_raw(ps, infh, uttid, ef);
+                * (cmd_ln_float32_r(bd->config, "-samprate")
+                        / cmd_ln_int32_r(bd->config, "-frate")));
+        fseek(infh, cmd_ln_int32_r(bd->config, "-adchdr") + sf * sizeof(int16), SEEK_SET);
     }
-    else {
+    else
+    {
         mfcc_t **mfcs;
         int nfr;
 
         if (NULL == (mfcs = read_mfc_file(infh, sf, ef, &nfr,
-                                          cmd_ln_int32_r(config, "-ceplen")))) {
+                                cmd_ln_int32_r(bd->config, "-ceplen"))))
+        {
             fclose(infh);
             ckd_free(infile);
             return -1;
         }
-        //ps_start_utt(ps, uttid);
-        //ps_process_cep(ps, mfcs, nfr, FALSE, TRUE);
-        //ps_end_utt(ps);
         ckd_free_2d(mfcs);
     }
     fclose(infh);
@@ -210,152 +175,118 @@ process_ctl_line(char const *file, char const *uttid, int32 sf, int32 ef)
     return 0;
 }
 
-static void
-process_ctl(FILE *ctlfh)
+int batch_decoder_run(batch_decoder_t *bd)
 {
     int32 ctloffset, ctlcount, ctlincr;
     int32 i;
-    char *line;
-    size_t len;
-    FILE *hypfh = NULL, *hypsegfh = NULL;
-    double n_speech, n_cpu, n_wall;
-    char const *outlatdir;
-    char const *str;
-    int frate;
+    lineiter_t *li;
 
-    ctloffset = cmd_ln_int32_r(config, "-ctloffset");
-    ctlcount = cmd_ln_int32_r(config, "-ctlcount");
-    ctlincr = cmd_ln_int32_r(config, "-ctlincr");
-    outlatdir = cmd_ln_str_r(config, "-outlatdir");
-    frate = cmd_ln_int32_r(config, "-frate");
+    ctloffset = cmd_ln_int32_r(bd->config, "-ctloffset");
+    ctlcount = cmd_ln_int32_r(bd->config, "-ctlcount");
+    ctlincr = cmd_ln_int32_r(bd->config, "-ctlincr");
 
-    if ((str = cmd_ln_str_r(config, "-hyp"))) {
-        hypfh = fopen(str, "w");
-        if (hypfh == NULL) {
-            E_ERROR_SYSTEM("Failed to open hypothesis file %s for writing", str);
-            goto done;
-        }
-        setbuf(hypfh, NULL);
-    }
-    if ((str = cmd_ln_str_r(config, "-hypseg"))) {
-        hypsegfh = fopen(str, "w");
-        if (hypsegfh == NULL) {
-            E_ERROR_SYSTEM("Failed to open hypothesis file %s for writing", str);
-            goto done;
-        }
-        setbuf(hypsegfh, NULL);
-    }
-
-    i = 0;
-    while ((line = fread_line(ctlfh, &len))) {
+    for (li = lineiter_start(bd->ctlfh); li; li = lineiter_next(li))
+    {
         char *wptr[4];
         int32 nf, sf, ef;
 
-        if (i < ctloffset) {
-            i += ctlincr;
-            goto nextline;
-        }
-        if (ctlcount != -1 && i >= ctloffset + ctlcount) {
-            goto nextline;
-        }
-
+        if (li->lineno < ctloffset)
+            continue;
+        if ((li->lineno - ctloffset) % ctlincr != 0)
+            continue;
+        if (ctlcount != -1 && i >= ctloffset + ctlcount)
+            break;
         sf = 0;
         ef = -1;
-        nf = str2words(line, wptr, 4);
-        if (nf == 0) {
+        nf = str2words(li->buf, wptr, 4);
+        if (nf == 0)
+        {
             /* Do nothing. */
         }
-        else if (nf < 0) {
-            E_ERROR("Unexpected extra data in control file at line %d\n", i);
+        else if (nf < 0)
+        {
+            E_ERROR("Unexpected extra data in control file at line %d\n", li->lineno);
         }
-        else {
-            char const *hyp, *file, *uttid;
-            int32 score;
-
+        else
+        {
+            char const *file, *uttid;
             file = wptr[0];
             uttid = NULL;
             if (nf > 1)
-                sf = atoi(wptr[1]);
+            sf = atoi(wptr[1]);
             if (nf > 2)
-                ef = atoi(wptr[2]);
+            ef = atoi(wptr[2]);
             if (nf > 3)
-                uttid = wptr[3];
+            uttid = wptr[3];
             /* Do actual decoding. */
-            process_ctl_line(file, uttid, sf, ef);
-            //hyp = ps_get_hyp(ps, &score, &uttid);
-            
-            /* Write out results and such. */
-            if (hypfh) {
-                fprintf(hypfh, "%s (%s %d)\n", hyp ? hyp : "", uttid, score);
-            }
-            //ps_get_utt_time(ps, &n_speech, &n_cpu, &n_wall);
-            E_INFO("%s: %.2f seconds speech, %.2f seconds CPU, %.2f seconds wall\n",
-                   uttid, n_speech, n_cpu, n_wall);
-            E_INFO("%s: %.2f xRT (CPU), %.2f xRT (elapsed)\n",
-                   uttid, n_cpu / n_speech, n_wall / n_speech);
+            batch_decoder_decode(bd, file, uttid, sf, ef);
         }
-        i += ctlincr;
-    nextline:
-        ckd_free(line);
     }
-
-    //ps_get_all_time(ps, &n_speech, &n_cpu, &n_wall);
-    E_INFO("TOTAL %.2f seconds speech, %.2f seconds CPU, %.2f seconds wall\n",
-           n_speech, n_cpu, n_wall);
-    E_INFO("AVERAGE %.2f xRT (CPU), %.2f xRT (elapsed)\n",
-           n_cpu / n_speech, n_wall / n_speech);
-
-done:
-    if (hypfh)
-        fclose(hypfh);
-    if (hypsegfh)
-        fclose(hypsegfh);
+    return 0;
 }
 
-static void
-init_searches(cmd_ln_t *config)
+batch_decoder_t *
+batch_decoder_init_argv(int argc, char *argv[])
 {
-}
-
-static void
-fini_searches(void)
-{
-}
-
-int
-main(int32 argc, char *argv[])
-{
+    batch_decoder_t *bd;
     char const *ctl;
-    FILE *ctlfh;
 
-    /* Handle argument file as only argument. */
-    if (argc == 2) {
-        config = cmd_ln_parse_file_r(NULL, ms_args_def, argv[1], TRUE);
+    bd = ckd_calloc(1, sizeof(*bd));
+    bd->config = cmd_ln_parse_r(NULL, ms_args_def, argc, argv, FALSE);
+    if ((ctl = cmd_ln_str_r(bd->config, "-ctl")) == NULL)
+    {
+        E_ERROR("-ctl argument not present, nothing to do in batch mode!\n");
+        goto error_out;
     }
-    else {
-        config = cmd_ln_parse_r(NULL, ms_args_def, argc, argv, TRUE);
-    }
-    /* Handle argument file as -argfile. */
-    if (config && (ctl = cmd_ln_str_r(config, "-argfile")) != NULL) {
-        config = cmd_ln_parse_file_r(config, ms_args_def, ctl, FALSE);
-    }
-    if (config == NULL) {
-        /* This probably just means that we got no arguments. */
-        return 2;
+    if ((bd->ctlfh = fopen(ctl, "r")) == NULL)
+    {
+        E_ERROR_SYSTEM("Failed to open control file '%s'", ctl);
+        goto error_out;
     }
 
-    init_searches(config);
+    if ((bd->sf = search_factory_init_cmdln(bd->config)) == NULL)
+    goto error_out;
+    if ((bd->fwdtree = search_factory_create(bd->sf, "fwdtree", NULL)) == NULL)
+    goto error_out;
+    if ((bd->fwdflat = search_factory_create(bd->sf, "fwdflat", NULL)) == NULL)
+    goto error_out;
+    if ((bd->latgen = search_factory_create(bd->sf, "latgen", NULL)) == NULL)
+    goto error_out;
 
-    if ((ctl = cmd_ln_str_r(config, "-ctl")) == NULL) {
-        E_FATAL("-ctl argument not present, nothing to do in batch mode!\n");
-    }
-    if ((ctlfh = fopen(ctl, "r")) == NULL) {
-        E_FATAL_SYSTEM("Failed to open control file '%s'", ctl);
-    }
-    process_ctl(ctlfh);
-    fclose(ctlfh);
+    return bd;
 
-    fini_searches();
+    error_out:
+    return NULL;
+}
+
+int batch_decoder_free(batch_decoder_t *bd)
+{
+    if (bd == NULL)
+        return 0;
+    if (bd->ctlfh != NULL)
+        fclose(bd->ctlfh);
+    cmd_ln_free_r(bd->config);
+    search_free(bd->fwdtree);
+    search_free(bd->fwdflat);
+    search_free(bd->latgen);
+    search_factory_free(bd->sf);
+    ckd_free(bd);
+    return 0;
+}
+
+int main(int argc, char *argv[])
+{
+    batch_decoder_t *bd;
+
+    if ((bd = batch_decoder_init_argv(argc, argv)) == NULL)
+    {
+        E_ERROR("Failed to initialize decoder");
+        return 1;
+    }
+
+    batch_decoder_run(bd);
+
+    batch_decoder_free(bd);
 
     return 0;
 }
