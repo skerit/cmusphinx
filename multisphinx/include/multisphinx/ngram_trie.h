@@ -141,6 +141,12 @@ ngram_trie_iter_t *ngram_trie_ngrams(ngram_trie_t *t, int n);
 ngram_trie_iter_t *ngram_trie_successors(ngram_trie_t *t, ngram_trie_node_t *h);
 
 /**
+ * Get the raw array of successors.
+ */
+ngram_trie_node_t **ngram_trie_successors_unchecked(ngram_trie_t *t,
+                                                    ngram_trie_node_t *h, size_t *out_nsucc);
+
+/**
  * Move iterator forward.
  */
 ngram_trie_iter_t *ngram_trie_iter_next(ngram_trie_iter_t *itor);

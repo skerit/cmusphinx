@@ -86,11 +86,12 @@ static int
 add_weighted_successors(ngram_trie_t *lm, ngram_trie_node_t *dest,
                         ngram_trie_node_t *src, int32 weight)
 {
-    ngram_trie_iter_t *itor;
+    ngram_trie_node_t **itor;
     logmath_t *lmath;
     int32 dmarg;
+    size_t nsucc, pos;
 
-    if ((itor = ngram_trie_successors(lm, src)) == NULL)
+    if ((itor = ngram_trie_successors_unchecked(lm, src, &nsucc)) == NULL)
         return 0;
 
     lmath = ngram_trie_logmath(lm);
@@ -100,8 +101,8 @@ add_weighted_successors(ngram_trie_t *lm, ngram_trie_node_t *dest,
     ngram_trie_node_print(lm, src, err_get_logfp());
 
     dmarg = logmath_get_zero(lmath);
-    for (;itor; itor = ngram_trie_iter_next(itor)) {
-        ngram_trie_node_t *ds = ngram_trie_iter_get(itor);
+    for (pos = 0; pos < nsucc; ++pos) {
+        ngram_trie_node_t *ds = itor[pos];
         int32 ds_log_prob;
         ngram_trie_node_params(lm, ds, &ds_log_prob, NULL);
         dmarg = logmath_add(lmath, dmarg, ds_log_prob);
@@ -109,9 +110,8 @@ add_weighted_successors(ngram_trie_t *lm, ngram_trie_node_t *dest,
     E_INFOCONT(" ] marginal prob %g", logmath_exp(lmath, dmarg));
 
 
-    for (itor = ngram_trie_successors(lm, src);
-         itor; itor = ngram_trie_iter_next(itor)) {
-        ngram_trie_node_t *ss = ngram_trie_iter_get(itor);
+    for (pos = 0; pos < nsucc; ++pos) {
+        ngram_trie_node_t *ss = itor[pos];
         ngram_trie_node_t *ds;
         int32 ss_log_prob;
 
@@ -134,9 +134,8 @@ add_weighted_successors(ngram_trie_t *lm, ngram_trie_node_t *dest,
 
     /* Verify marginal probability of destination. */
     dmarg = logmath_get_zero(lmath);
-    for (itor = ngram_trie_successors(lm, dest);
-         itor; itor = ngram_trie_iter_next(itor)) {
-        ngram_trie_node_t *ds = ngram_trie_iter_get(itor);
+    for (pos = 0; pos < nsucc; ++pos) {
+        ngram_trie_node_t *ds = itor[pos];
         int32 ds_log_prob;
 
         ngram_trie_node_params(lm, ds, &ds_log_prob, NULL);
@@ -156,7 +155,8 @@ find_word_succ(ngram_trie_t *lm, ngram_trie_node_t *node,
     int32 succ_prob, i;
     dict_t *dict;
     logmath_t *lmath;
-    ngram_trie_iter_t *ni;
+    ngram_trie_node_t **ni;
+    size_t nsucc, pos;
 
     dict = ngram_trie_dict(lm);
     lmath = ngram_trie_logmath(lm);
@@ -166,9 +166,10 @@ find_word_succ(ngram_trie_t *lm, ngram_trie_node_t *node,
         int32 basewid = dict_basewid(dict, wids[i]);
         bitvec_set(cset, basewid);
     }
-    for (ni = ngram_trie_successors(lm, node);
-         ni; ni = ngram_trie_iter_next(ni)) {
-        ngram_trie_node_t *succ = ngram_trie_iter_get(ni);
+    if ((ni = ngram_trie_successors_unchecked(lm, node, &nsucc)) == NULL)
+        return succ_prob;
+    for (pos = 0; pos < nsucc; ++pos) {
+        ngram_trie_node_t *succ = ni[pos];
         int32 basewid = ngram_trie_node_word(lm, succ);
         if (bitvec_is_set(cset, basewid)) {
             int32 log_prob, log_bowt;
@@ -182,6 +183,34 @@ find_word_succ(ngram_trie_t *lm, ngram_trie_node_t *node,
     }
     return succ_prob;
 }
+
+static int
+merge_successors(ngram_trie_t *lm, ngram_trie_node_t *node,
+                 garray_t *word_succ, int32 succ_prob, int32 pseudo_wid)
+{
+    ngram_trie_node_t *pseudo_succ;
+    int i;
+    pseudo_succ = ngram_trie_add_successor(lm, node, pseudo_wid);
+    ngram_trie_node_set_params(lm, pseudo_succ, succ_prob, 0);
+    for (i = 0; i < garray_size(word_succ); ++i) {
+        i32p_t sent = garray_ent(word_succ, i32p_t, i);
+        ngram_trie_node_t *succ;
+        int32 weight;
+        succ = ngram_trie_successor(lm, node, sent.a);
+        weight = sent.b - succ_prob;
+        if (add_weighted_successors(lm, pseudo_succ,
+                                    succ, weight) < 0) {
+            garray_free(word_succ);
+            return -1;
+        }
+        if (ngram_trie_delete_successor(lm, node, sent.a) < 0) {
+            E_ERROR("Failed to delete successor\n");
+            return -1;
+        }
+    }
+    return 0;
+}
+
 
 static int
 merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
@@ -209,7 +238,7 @@ merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
     garray_set_cmp(word_succ, garray_cmp_i32p_first, NULL);
     for (vi = vocab_map_mappings(vm); vi;
          vi = vocab_map_iter_next(vi)) {
-        int32 pseudo_wid, n_wids, i, succ_prob;
+        int32 pseudo_wid, n_wids, succ_prob;
         int32 const *wids;
         /* Collect base words to be merged (if any). */
         garray_reset(word_succ);
@@ -227,25 +256,8 @@ merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
             ngram_trie_rename_successor(lm, node, pseudo_succ, pseudo_wid);
         }
         else {
-            ngram_trie_node_t *pseudo_succ;
-            pseudo_succ = ngram_trie_add_successor(lm, node, pseudo_wid);
-            ngram_trie_node_set_params(lm, pseudo_succ, succ_prob, 0);
-            for (i = 0; i < garray_size(word_succ); ++i) {
-                i32p_t sent = garray_ent(word_succ, i32p_t, i);
-                ngram_trie_node_t *succ;
-                int32 weight;
-                succ = ngram_trie_successor(lm, node, sent.a);
-                weight = sent.b - succ_prob;
-                if (add_weighted_successors(lm, pseudo_succ,
-                                            succ, weight) < 0) {
-                    garray_free(word_succ);
-                    return -1;
-                }
-                if (ngram_trie_delete_successor(lm, node, sent.a) < 0) {
-                    E_ERROR("Failed to delete successor\n");
-                    return -1;
-                }
-            }
+            if (merge_successors(lm, node, word_succ, succ_prob, pseudo_wid) < 0)
+                return -1;
         }
     }
     garray_free(word_succ);
