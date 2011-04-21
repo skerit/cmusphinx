@@ -92,7 +92,13 @@ def build_arcbuf_lattice(arcbuf):
     for outgoing in arcbuf:
         if dag.find_node(outgoing.word, outgoing.sf): continue
         build_arc_node(outgoing.word, outgoing.sf)
-    dag.end = build_arc_node("</s>", arcbuf.n_frames)
+    end_pscr = -999999999
+    for incoming in arcbuf.ending_at(arcbuf.n_frames):
+        if incoming.word != "</s>": continue
+        if incoming.pscr > end_pscr:
+            src = dag.find_node(incoming.word, incoming.sf)
+            dag.end = src
+            dag.final_ascr = incoming.pscr - incoming.lscr - src.score
     dag.start = dag.find_node("<s>", 0)
     dag.remove_unreachable()
     return dag
