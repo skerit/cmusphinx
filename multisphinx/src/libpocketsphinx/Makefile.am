@@ -1,11 +1,7 @@
 lib_LTLIBRARIES = libpocketsphinx.la
 
-# Confusing libtool version info means:
-#
-# This is API version 3, software release 0, which only supports API 3
+# Confusing libtool version info
 libpocketsphinx_la_LDFLAGS = -version-info 3:0:0
-
-libpocketsphinx_la_LIBADD = $(top_builddir)/src/libsphinxbase/libsphinxbase.la
 
 libpocketsphinx_la_SOURCES =			\
 	acmod.c					\
