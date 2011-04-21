@@ -122,8 +122,10 @@ struct ms_lattice_s {
 struct ms_latnode_iter_s {
     ms_lattice_t *l;
     int32 cur;
-    int32 start; /**< Only for reverse iteration. */
-    int32 end;   /**< Only for forward iteration. */
+    /* FIXME: need a type field (shut up, C++ fans) */
+    int32 start;     /**< Only for reverse iteration. */
+    int32 end;       /**< Only for forward iteration. */
+    int32 frame_idx; /**< Only for frame iteration. */
     gq_t *q;
 };
 
@@ -827,6 +829,7 @@ ms_lattice_traverse_topo(ms_lattice_t *l,
     itor->l = l;
     itor->cur = ms_lattice_get_idx_node(l, ms_lattice_get_start(l));
     itor->start = -1;
+    itor->frame_idx = -1;
     if (end == NULL)
         itor->end = ms_lattice_get_idx_node(l, ms_lattice_get_end(l));
     else
@@ -866,8 +869,40 @@ ms_lattice_reverse_topo(ms_lattice_t *l,
     else
         itor->start = ms_lattice_get_idx_node(l, start);
     itor->end = -1;
+    itor->frame_idx = -1;
     itor->cur = ms_lattice_get_idx_node(l, ms_lattice_get_end(l));
     itor->q = gq_init(sizeof(int32));
+
+    return itor;
+}
+
+ms_latnode_iter_t *
+ms_lattice_traverse_frame(ms_lattice_t *l, int frame_idx)
+{
+    ms_latnode_iter_t *itor;
+    int start;
+
+    /* Find the first frame starting in a given node (FIXME: might
+     * want to keep track of this in an auxiliary array if this gets
+     * slow) */
+    for (start = 0; start < garray_size(l->node_list); ++start) {
+        ms_latnode_t *node = garray_ptr(l->node_list,
+                                        ms_latnode_t, start);
+        if (node->id.sf == frame_idx)
+            break;
+    }
+    if (start == -1)
+        return NULL;
+
+    itor = ckd_calloc(1, sizeof(*itor));
+    itor->l = l;
+    itor->start = -1;
+    /* FIXME: Might want to tighten this up in an aux array if this
+     * gets slow. */
+    itor->end = ms_lattice_get_idx_node(l, ms_lattice_get_end(l));
+    itor->frame_idx = frame_idx;
+    itor->cur = start;
+    itor->q = NULL;
 
     return itor;
 }
@@ -888,6 +923,17 @@ ms_latnode_iter_next(ms_latnode_iter_t *itor)
         return NULL;
     }
 
+    /* Push a frame-based iterator forward/. */
+    if (itor->frame_idx != -1) {
+        while (++itor->cur != itor->end) {
+            node = garray_ptr(itor->l->node_list, ms_latnode_t, itor->cur);
+            if (node->id.sf == itor->frame_idx)
+                return itor;
+        }
+        ms_latnode_iter_free(itor);
+        return NULL;
+    }
+    
     /* Figure out which direction we're going. */
     node = ms_lattice_get_node_idx(itor->l, itor->cur);
     if (itor->start != -1)
@@ -898,7 +944,7 @@ ms_latnode_iter_next(ms_latnode_iter_t *itor)
         ms_latnode_iter_free(itor);
         return NULL;
     }
-    
+
     for (i = 0; i < garray_size(links); ++i) {
         int32 linkid = garray_ent(links, int32, i);
         ms_latlink_t *link = garray_ptr(itor->l->link_list,

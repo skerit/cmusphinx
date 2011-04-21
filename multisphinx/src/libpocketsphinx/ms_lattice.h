@@ -209,6 +209,12 @@ ms_latnode_iter_t *ms_lattice_reverse_topo(ms_lattice_t *l,
                                            ms_latnode_t *start);
 
 /**
+ * Traverse all lattice nodes with a given start frame.
+ */
+ms_latnode_iter_t *ms_lattice_traverse_frame(ms_lattice_t *l,
+                                             int frame_idx);
+
+/**
  * Move to the next node in traversal.
  */
 ms_latnode_iter_t *ms_latnode_iter_next(ms_latnode_iter_t *itor);

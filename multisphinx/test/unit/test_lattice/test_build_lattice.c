@@ -146,6 +146,18 @@ main(int argc, char *argv[])
 	TEST_ASSERT(ms_latnode_iter_get(itor) == b);
 	TEST_ASSERT(ms_latnode_iter_next(itor) == NULL);
 
+	itor = ms_lattice_traverse_frame(l, 0);
+	TEST_ASSERT(ms_latnode_iter_get(itor) == s);
+	TEST_ASSERT(ms_latnode_iter_next(itor) == NULL);
+
+	itor = ms_lattice_traverse_frame(l, 8);
+	TEST_ASSERT(ms_latnode_iter_get(itor) == c);
+	TEST_ASSERT(ms_latnode_iter_next(itor) == NULL);
+
+	itor = ms_lattice_traverse_frame(l, 13);
+	TEST_ASSERT(ms_latnode_iter_get(itor) == e);
+	TEST_ASSERT(ms_latnode_iter_next(itor) == NULL);
+
 	ms_lattice_free(l);
 	return 0;
 }
