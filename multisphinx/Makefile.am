@@ -1,7 +1,5 @@
-SUBDIRS = src \
-	  swig \
-	  include \
-	  test
+SUBDIRS = util lm feat fe multisphinx
+	  swig include test
 
 EXTRA_DIST = autogen.sh							\
 	m4/pkg.m4
