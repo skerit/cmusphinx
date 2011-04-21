@@ -121,7 +121,7 @@ typedef struct fwdflat_stats_s {
  * Word loop-based forward search.
  */
 typedef struct fwdflat_search_s {
-    ps_search_t base;
+    search_t base;
     ngram_model_t *lmset;
     hmm_context_t *hmmctx;
 
@@ -185,15 +185,15 @@ typedef struct fwdflat_search_s {
     int32 lw;
 } fwdflat_search_t;
 
-static int fwdflat_search_start(ps_search_t *base);
-static int fwdflat_search_decode(ps_search_t *base);
-static int fwdflat_search_finish(ps_search_t *base);
-static int fwdflat_search_free(ps_search_t *base);
-static char const *fwdflat_search_hyp(ps_search_t *base, int32 *out_score);
-static int32 fwdflat_search_prob(ps_search_t *base);
-static ps_seg_t *fwdflat_search_seg_iter(ps_search_t *base, int32 *out_score);
-static bptbl_t *fwdflat_search_bptbl(ps_search_t *base);
-static ngram_model_t *fwdflat_search_lmset(ps_search_t *base);
+static int fwdflat_search_start(search_t *base);
+static int fwdflat_search_decode(search_t *base);
+static int fwdflat_search_finish(search_t *base);
+static int fwdflat_search_free(search_t *base);
+static char const *fwdflat_search_hyp(search_t *base, int32 *out_score);
+static int32 fwdflat_search_prob(search_t *base);
+static ps_seg_t *fwdflat_search_seg_iter(search_t *base, int32 *out_score);
+static bptbl_t *fwdflat_search_bptbl(search_t *base);
+static ngram_model_t *fwdflat_search_lmset(search_t *base);
 
 static ps_searchfuncs_t fwdflat_funcs = {
     /* name: */   "fwdflat",
@@ -214,8 +214,8 @@ fwdflat_search_calc_beams(fwdflat_search_t *ffs)
     cmd_ln_t *config;
     acmod_t *acmod;
 
-    config = ps_search_config(ffs);
-    acmod = ps_search_acmod(ffs);
+    config = search_config(ffs);
+    acmod = search_acmod(ffs);
 
     /* Log beam widths. */
     ffs->fwdflatbeam = logmath_log(acmod->lmath,
@@ -230,7 +230,7 @@ fwdflat_search_calc_beams(fwdflat_search_t *ffs)
                               cmd_ln_float32_r(config, "-silprob")) >> SENSCR_SHIFT;
     ffs->fillpen = logmath_log(acmod->lmath,
                                cmd_ln_float32_r(config, "-fillprob")) >> SENSCR_SHIFT;
-    ffs->max_sf_win = cmd_ln_int32_r(ps_search_config(ffs), "-fwdflatsfwin");
+    ffs->max_sf_win = cmd_ln_int32_r(search_config(ffs), "-fwdflatsfwin");
 }
 
 static void
@@ -240,16 +240,16 @@ fwdflat_search_update_widmap(fwdflat_search_t *ffs)
     int32 i, n_words;
 
     /* It's okay to include fillers since they won't be in the LM */
-    n_words = ps_search_n_words(ffs);
+    n_words = search_n_words(ffs);
     words = ckd_calloc(n_words, sizeof(*words));
     /* This will include alternates, again, that's okay since they aren't in the LM */
     for (i = 0; i < n_words; ++i)
-        words[i] = (const char *)dict_wordstr(ps_search_dict(ffs), i);
+        words[i] = (const char *)dict_wordstr(search_dict(ffs), i);
     ngram_model_set_map_words(ffs->lmset, words, n_words);
     ckd_free(words);
 }
 
-ps_search_t *
+search_t *
 fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
                     dict_t *dict, dict2pid_t *d2p,
                     ngram_model_t *lmset)
@@ -258,11 +258,11 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     const char *path;
 
     ffs = ckd_calloc(1, sizeof(*ffs));
-    ps_search_init(&ffs->base, &fwdflat_funcs, config, acmod, dict, d2p);
+    search_init(&ffs->base, &fwdflat_funcs, config, acmod, dict, d2p);
     ffs->hmmctx = hmm_context_init(bin_mdef_n_emit_state(acmod->mdef),
                                    acmod->tmat->tp, NULL, acmod->mdef->sseq);
     if (ffs->hmmctx == NULL) {
-        ps_search_free(ps_search_base(ffs));
+        search_free(search_base(ffs));
         return NULL;
     }
     ffs->chan_alloc = listelem_alloc_init(sizeof(internal_node_t));
@@ -274,27 +274,27 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     fwdflat_search_calc_beams(ffs);
 
     /* Allocate a billion different tables for stuff. */
-    ffs->word_chan = ckd_calloc(ps_search_n_words(ffs),
+    ffs->word_chan = ckd_calloc(search_n_words(ffs),
                                 sizeof(*ffs->word_chan));
     E_INFO("Allocated %d KiB for word HMMs\n",
-           (int)ps_search_n_words(ffs) * sizeof(*ffs->word_chan) / 1024);
-    ffs->word_active = bitvec_alloc(ps_search_n_words(ffs));
-    ffs->word_idx = ckd_calloc(ps_search_n_words(ffs),
+           (int)search_n_words(ffs) * sizeof(*ffs->word_chan) / 1024);
+    ffs->word_active = bitvec_alloc(search_n_words(ffs));
+    ffs->word_idx = ckd_calloc(search_n_words(ffs),
                                sizeof(*ffs->word_idx));
     ffs->word_list = garray_init(0, sizeof(int32));
-    ffs->utt_vocab = bitvec_alloc(ps_search_n_words(ffs));
-    ffs->expand_words = bitvec_alloc(ps_search_n_words(ffs));
+    ffs->utt_vocab = bitvec_alloc(search_n_words(ffs));
+    ffs->expand_words = bitvec_alloc(search_n_words(ffs));
     /* FIXME: Make this a garray_t */
-    ffs->expand_word_list = ckd_calloc(ps_search_n_words(ffs),
+    ffs->expand_word_list = ckd_calloc(search_n_words(ffs),
                                       sizeof(*ffs->expand_word_list));
     ffs->bptbl = bptbl_init("fwdflat", d2p, cmd_ln_int32_r(config, "-latsize"), 256);
 
     /* Allocate active word list array */
-    ffs->active_word_list = ckd_calloc_2d(2, ps_search_n_words(ffs),
+    ffs->active_word_list = ckd_calloc_2d(2, search_n_words(ffs),
                                           sizeof(**ffs->active_word_list));
     E_INFO("Allocated %d KiB for active word list\n",
-           (ps_search_n_words(ffs) * sizeof(**ffs->active_word_list)
-            + ps_search_n_words(ffs) * sizeof(*ffs->active_word_list)) / 1024);
+           (search_n_words(ffs) * sizeof(**ffs->active_word_list)
+            + search_n_words(ffs) * sizeof(*ffs->active_word_list)) / 1024);
 
     /* Load language model(s) */
     if (lmset) {
@@ -345,7 +345,7 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
         FILE *fh;
         int32 ispipe;
 
-        ffs->vmap = vocab_map_init(ps_search_dict(ffs));
+        ffs->vmap = vocab_map_init(search_dict(ffs));
         if ((fh = fopen_comp(path, "r", &ispipe)) == NULL) {
             E_ERROR_SYSTEM("Failed to open vocabulary map file\n");
             goto error_out;
@@ -360,10 +360,10 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
     /* Create word mappings. */
     fwdflat_search_update_widmap(ffs);
 
-    return (ps_search_t *)ffs;
+    return (search_t *)ffs;
 
 error_out:
-    ps_search_free((ps_search_t *)ffs);
+    search_free((search_t *)ffs);
     return NULL;
 }
 
@@ -396,11 +396,11 @@ destroy_fwdflat_chan(fwdflat_search_t *ffs)
         ffs->word_chan[wid] = NULL;
     }
     garray_reset(ffs->word_list);
-    bitvec_clear_all(ffs->utt_vocab, ps_search_n_words(ffs));
+    bitvec_clear_all(ffs->utt_vocab, search_n_words(ffs));
 }
 
 static int
-fwdflat_search_free(ps_search_t *base)
+fwdflat_search_free(search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
 
@@ -435,21 +435,21 @@ fwdflat_search_alloc_all_rc(fwdflat_search_t *ffs, int32 w)
 
     /* DICT2PID */
     /* Get pointer to array of triphones for final diphone. */
-    assert(!dict_is_single_phone(ps_search_dict(ffs), w));
-    ciphone = dict_last_phone(ps_search_dict(ffs),w);
-    rssid = dict2pid_rssid(ps_search_dict2pid(ffs),
+    assert(!dict_is_single_phone(search_dict(ffs), w));
+    ciphone = dict_last_phone(search_dict(ffs),w);
+    rssid = dict2pid_rssid(search_dict2pid(ffs),
                            ciphone,
-                           dict_second_last_phone(ps_search_dict(ffs),w));
-    tmatid = bin_mdef_pid2tmatid(ps_search_acmod(ffs)->mdef, ciphone);
+                           dict_second_last_phone(search_dict(ffs),w));
+    tmatid = bin_mdef_pid2tmatid(search_acmod(ffs)->mdef, ciphone);
     fhmm = hmm = listelem_malloc(ffs->chan_alloc);
     hmm->rc_id = 0;
     hmm->next = NULL;
-    hmm->ciphone = dict_last_phone(ps_search_dict(ffs),w);
+    hmm->ciphone = dict_last_phone(search_dict(ffs),w);
     hmm_init(ffs->hmmctx, &hmm->hmm, FALSE, rssid->ssid[0], tmatid);
     E_DEBUG(3,("allocated rc_id 0 ssid %d ciphone %d lc %d word %s\n",
                rssid->ssid[0], hmm->ciphone,
-               dict_second_last_phone(ps_search_dict(ffs),w),
-               dict_wordstr(ps_search_dict(ffs),w)));
+               dict_second_last_phone(search_dict(ffs),w),
+               dict_wordstr(search_dict(ffs),w)));
     for (i = 1; i < rssid->n_ssid; ++i) {
         if ((hmm->next == NULL) || (hmm_nonmpx_ssid(&hmm->next->hmm) != rssid->ssid[i])) {
             internal_node_t *thmm;
@@ -463,8 +463,8 @@ fwdflat_search_alloc_all_rc(fwdflat_search_t *ffs, int32 w)
             hmm_init(ffs->hmmctx, &hmm->hmm, FALSE, rssid->ssid[i], tmatid);
             E_DEBUG(3,("allocated rc_id %d ssid %d ciphone %d lc %d word %s\n",
                        i, rssid->ssid[i], hmm->ciphone,
-                       dict_second_last_phone(ps_search_dict(ffs),w),
-                       dict_wordstr(ps_search_dict(ffs),w)));
+                       dict_second_last_phone(search_dict(ffs),w),
+                       dict_wordstr(search_dict(ffs),w)));
         }
         else
             hmm = hmm->next;
@@ -485,15 +485,15 @@ build_fwdflat_word_chan(fwdflat_search_t *ffs, int32 wid)
     if (ffs->word_chan[wid] != NULL)
         return;
 
-    dict = ps_search_dict(ffs);
-    d2p = ps_search_dict2pid(ffs);
+    dict = search_dict(ffs);
+    d2p = search_dict2pid(ffs);
 
     /* Multiplex root HMM for first phone (one root per word, flat
      * lexicon). */
     rhmm = listelem_malloc(ffs->root_chan_alloc);
     if (dict_is_single_phone(dict, wid)) {
         rhmm->ciphone = dict_first_phone(dict, wid);
-        rhmm->ci2phone = bin_mdef_silphone(ps_search_acmod(ffs)->mdef);
+        rhmm->ci2phone = bin_mdef_silphone(search_acmod(ffs)->mdef);
     }
     else {
         rhmm->ciphone = dict_first_phone(dict, wid);
@@ -501,8 +501,8 @@ build_fwdflat_word_chan(fwdflat_search_t *ffs, int32 wid)
     }
     rhmm->next = NULL;
     hmm_init(ffs->hmmctx, &rhmm->hmm, TRUE,
-             bin_mdef_pid2ssid(ps_search_acmod(ffs)->mdef, rhmm->ciphone),
-             bin_mdef_pid2tmatid(ps_search_acmod(ffs)->mdef, rhmm->ciphone));
+             bin_mdef_pid2ssid(search_acmod(ffs)->mdef, rhmm->ciphone),
+             bin_mdef_pid2tmatid(search_acmod(ffs)->mdef, rhmm->ciphone));
 
     /* HMMs for word-internal phones */
     prevhmm = NULL;
@@ -513,7 +513,7 @@ build_fwdflat_word_chan(fwdflat_search_t *ffs, int32 wid)
         hmm->next = NULL;
         hmm_init(ffs->hmmctx, &hmm->hmm, FALSE,
                  dict2pid_internal(d2p,wid,p),
-                 bin_mdef_pid2tmatid(ps_search_acmod(ffs)->mdef,
+                 bin_mdef_pid2tmatid(search_acmod(ffs)->mdef,
                                      hmm->ciphone));
 
         if (prevhmm)
@@ -539,7 +539,7 @@ build_fwdflat_word_chan(fwdflat_search_t *ffs, int32 wid)
 }
 
 static int
-fwdflat_search_start(ps_search_t *base)
+fwdflat_search_start(search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
     first_node_t *rhmm;
@@ -547,26 +547,26 @@ fwdflat_search_start(ps_search_t *base)
 
     bptbl_reset(ffs->bptbl);
     ffs->oldest_bp = -1;
-    for (i = 0; i < ps_search_n_words(ffs); i++)
+    for (i = 0; i < search_n_words(ffs); i++)
         ffs->word_idx[i] = NO_BP;
 
     /* Reset output arc buffer. */
-    if (ps_search_output_arcs(ffs))
-        arc_buffer_producer_start_utt(ps_search_output_arcs(ffs),
+    if (search_output_arcs(ffs))
+        arc_buffer_producer_start_utt(search_output_arcs(ffs),
                                       base->uttid);
 
     /* Create word HMM for start, end, and silence words. */
-    for (i = ps_search_start_wid(ffs);
-         i < ps_search_n_words(ffs); ++i)
+    for (i = search_start_wid(ffs);
+         i < search_n_words(ffs); ++i)
         build_fwdflat_word_chan(ffs, i);
 
     /* Start search with <s> */
-    rhmm = (first_node_t *) ffs->word_chan[ps_search_start_wid(ffs)];
+    rhmm = (first_node_t *) ffs->word_chan[search_start_wid(ffs)];
     hmm_enter(&rhmm->hmm, 0, NO_BP, 0);
-    ffs->active_word_list[0][0] = ps_search_start_wid(ffs);
+    ffs->active_word_list[0][0] = search_start_wid(ffs);
     ffs->n_active_word[0] = 1;
 
-    bitvec_clear_all(ffs->expand_words, ps_search_n_words(ffs));
+    bitvec_clear_all(ffs->expand_words, search_n_words(ffs));
     ffs->best_score = 0;
     ffs->renormalized = FALSE;
 
@@ -603,7 +603,7 @@ compute_fwdflat_sen_active(fwdflat_search_t *ffs, int frame_idx)
     first_node_t *rhmm;
     internal_node_t *hmm;
 
-    acmod_clear_active(ps_search_acmod(ffs));
+    acmod_clear_active(search_acmod(ffs));
     ffs->oldest_bp = bptbl_end_idx(ffs->bptbl);
 
     i = ffs->n_active_word[frame_idx & 0x1];
@@ -612,13 +612,13 @@ compute_fwdflat_sen_active(fwdflat_search_t *ffs, int frame_idx)
     for (w = *(awl++); i > 0; --i, w = *(awl++)) {
         rhmm = (first_node_t *)ffs->word_chan[w];
         if (hmm_frame(&rhmm->hmm) == frame_idx) {
-            acmod_activate_hmm(ps_search_acmod(ffs), &rhmm->hmm);
+            acmod_activate_hmm(search_acmod(ffs), &rhmm->hmm);
             update_oldest_bp(ffs, &rhmm->hmm);
         }
 
         for (hmm = rhmm->next; hmm; hmm = hmm->next) {
             if (hmm_frame(&hmm->hmm) == frame_idx) {
-                acmod_activate_hmm(ps_search_acmod(ffs), &hmm->hmm);
+                acmod_activate_hmm(search_acmod(ffs), &hmm->hmm);
                 update_oldest_bp(ffs, &hmm->hmm);
             }
         }
@@ -645,7 +645,7 @@ fwdflat_eval_chan(fwdflat_search_t *ffs, int frame_idx)
         rhmm = (first_node_t *) ffs->word_chan[w];
         if (hmm_frame(&rhmm->hmm) == frame_idx) {
             int32 score = chan_v_eval(rhmm);
-            if ((score BETTER_THAN bestscore) && (w != ps_search_finish_wid(ffs)))
+            if ((score BETTER_THAN bestscore) && (w != search_finish_wid(ffs)))
                 bestscore = score;
             ffs->st.n_fwdflat_chan++;
         }
@@ -703,7 +703,7 @@ fwdflat_prune_chan(fwdflat_search_t *ffs, int frame_idx)
     nf = cf + 1;
     i = ffs->n_active_word[cf & 0x1];
     awl = ffs->active_word_list[cf & 0x1];
-    bitvec_clear_all(ffs->word_active, ps_search_n_words(ffs));
+    bitvec_clear_all(ffs->word_active, search_n_words(ffs));
 
     thresh = ffs->best_score + ffs->fwdflatbeam;
     wordthresh = ffs->best_score + ffs->fwdflatwbeam;
@@ -721,7 +721,7 @@ fwdflat_prune_chan(fwdflat_search_t *ffs, int frame_idx)
             /* Transitions out of root channel */
             newscore = hmm_out_score(&rhmm->hmm);
             if (rhmm->next) {
-                assert(!dict_is_single_phone(ps_search_dict(ffs), w));
+                assert(!dict_is_single_phone(search_dict(ffs), w));
                 newscore += pip;
                 if (newscore BETTER_THAN thresh) {
                     hmm = rhmm->next;
@@ -746,7 +746,7 @@ fwdflat_prune_chan(fwdflat_search_t *ffs, int frame_idx)
                 }
             }
             else {
-                assert(dict_is_single_phone(ps_search_dict(ffs), w));
+                assert(dict_is_single_phone(search_dict(ffs), w));
                 /* Word exit for single-phone words */
                 if (newscore BETTER_THAN wordthresh) {
                     fwdflat_search_save_bp(ffs, cf, w, newscore,
@@ -818,8 +818,8 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
     int32 best_silrc_score = 0, best_silrc_bp = 0;      /* FIXME: good defaults? */
     first_node_t *rhmm;
     int32 *awl;
-    dict_t *dict = ps_search_dict(ffs);
-    dict2pid_t *d2p = ps_search_dict2pid(ffs);
+    dict_t *dict = search_dict(ffs);
+    dict2pid_t *d2p = search_dict2pid(ffs);
 
     cf = frame_idx;
     nf = cf + 1;
@@ -837,7 +837,7 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
         bptbl_get_bp(ffs->bptbl, b, &ent);
         ffs->word_idx[ent.wid] = NO_BP;
 
-        if (ent.wid == ps_search_finish_wid(ffs))
+        if (ent.wid == search_finish_wid(ffs))
             continue;
 
         /* Get the mapping from right context phone ID to index in the
@@ -888,7 +888,7 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
 
         /* Get the best exit into silence. */
         if (rssid)
-            silscore = ffs->rcss[rssid->cimap[ps_search_acmod(ffs)->mdef->sil]];
+            silscore = ffs->rcss[rssid->cimap[search_acmod(ffs)->mdef->sil]];
         else
             silscore = ffs->rcss[0];
         if (silscore BETTER_THAN best_silrc_score) {
@@ -900,7 +900,7 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
     /* Transition to <sil> */
     newscore = best_silrc_score + ffs->silpen + pip;
     if ((newscore BETTER_THAN thresh) && (newscore BETTER_THAN WORST_SCORE)) {
-        w = ps_search_silence_wid(ffs);
+        w = search_silence_wid(ffs);
         rhmm = (first_node_t *) ffs->word_chan[w];
         if ((hmm_frame(&rhmm->hmm) < cf)
             || (newscore BETTER_THAN hmm_in_score(&rhmm->hmm))) {
@@ -912,7 +912,7 @@ fwdflat_word_transition(fwdflat_search_t *ffs, int frame_idx)
     /* Transition to noise words (FIXME: Depends on dictionary organization) */
     newscore = best_silrc_score + ffs->fillpen + pip;
     if ((newscore BETTER_THAN thresh) && (newscore BETTER_THAN WORST_SCORE)) {
-        for (w = ps_search_silence_wid(ffs) + 1; w < ps_search_n_words(ffs); w++) {
+        for (w = search_silence_wid(ffs) + 1; w < search_n_words(ffs); w++) {
             rhmm = (first_node_t *) ffs->word_chan[w];
             /* Noise words that aren't a single phone will have NULL here. */
             if (rhmm == NULL)
@@ -993,7 +993,7 @@ fwdflat_dump_expand_words(fwdflat_search_t *ffs, int sf)
     E_INFO("Frame %d word list:", sf);
     for (i = 0; i < ffs->n_expand_word; ++i) {
         E_INFOCONT(" %s",
-                   dict_wordstr(ps_search_dict(ffs), ffs->expand_word_list[i]));
+                   dict_wordstr(search_dict(ffs), ffs->expand_word_list[i]));
     }
     E_INFOCONT("\n");
 }
@@ -1019,7 +1019,7 @@ fwdflat_create_active_word_list(fwdflat_search_t *ffs, int nf)
 static int
 fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
 {
-    acmod_t *acmod = ps_search_acmod(ffs);
+    acmod_t *acmod = search_acmod(ffs);
     int16 const *senscr;
     int fi;
 
@@ -1037,8 +1037,8 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
     assert(fi == frame_idx);
 
     /* Forward retired backpointers to the arc buffer. */
-    if (ps_search_output_arcs(ffs))
-        arc_buffer_producer_sweep(ps_search_output_arcs(ffs),
+    if (search_output_arcs(ffs))
+        arc_buffer_producer_sweep(search_output_arcs(ffs),
                                   /* FIXME: make configurable */
                                   FALSE);
 
@@ -1077,7 +1077,7 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
 static void
 fwdflat_search_add_expand_word(fwdflat_search_t *ffs, int32 wid)
 {
-    dict_t *dict = ps_search_dict(ffs);
+    dict_t *dict = search_dict(ffs);
 
     if (!bitvec_is_set(ffs->expand_words, wid)) {
         /* Test this after the bitvec to avoid looking up the same
@@ -1096,13 +1096,13 @@ fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
 {
     arc_t *arc_start, *arc_end, *arc;
 
-    arc_start = arc_buffer_iter(ps_search_input_arcs(ffs), sf);
-    arc_end = arc_buffer_iter(ps_search_input_arcs(ffs), ef);
+    arc_start = arc_buffer_iter(search_input_arcs(ffs), sf);
+    arc_end = arc_buffer_iter(search_input_arcs(ffs), ef);
     E_DEBUG(2,("Expanding %ld arcs in %d:%d\n",
                arc_end > arc_start ? arc_end - arc_start : 0, sf, ef));
-    bitvec_clear_all(ffs->expand_words, ps_search_n_words(ffs));
+    bitvec_clear_all(ffs->expand_words, search_n_words(ffs));
     for (arc = arc_start; arc != arc_end;
-         arc = arc_buffer_iter_next(ps_search_input_arcs(ffs), arc)) {
+         arc = arc_buffer_iter_next(search_input_arcs(ffs), arc)) {
         /* Expand things in the vocabulary map, if we have one. */
         if (ffs->vmap) {
             int32 const *wids;
@@ -1122,10 +1122,10 @@ fwdflat_search_expand_arcs(fwdflat_search_t *ffs, int sf, int ef)
 }
 
 static int
-fwdflat_search_decode(ps_search_t *base)
+fwdflat_search_decode(search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
-    acmod_t *acmod = ps_search_acmod(base);
+    acmod_t *acmod = search_acmod(base);
     int frame_idx;
 
     ptmr_start(&ffs->base.t);
@@ -1144,18 +1144,18 @@ fwdflat_search_decode(ps_search_t *base)
 
         /* Stop timing and wait for the arc buffer. */
         ptmr_stop(&ffs->base.t);
-        if (arc_buffer_consumer_wait(ps_search_input_arcs(ffs), -1) < 0)
+        if (arc_buffer_consumer_wait(search_input_arcs(ffs), -1) < 0)
             goto canceled;
 
         /* Figure out the last frame we need. */
         end_win = frame_idx + ffs->max_sf_win;
         /* Decode as many frames as possible. */
-        while (arc_buffer_eou(ps_search_input_arcs(ffs))
-               || arc_buffer_iter(ps_search_input_arcs(ffs),
+        while (arc_buffer_eou(search_input_arcs(ffs))
+               || arc_buffer_iter(search_input_arcs(ffs),
                                   end_win - 1) != NULL) {
             int start_win, k;
 
-            /* Note that if ps_search_input_arcs(ffs)->final changes state
+            /* Note that if search_input_arcs(ffs)->final changes state
              * between the tests above and now, there will be no ill
              * effect, since we will never block on acmod if we
              * believe it to be false.  A full analysis by cases
@@ -1178,7 +1178,7 @@ fwdflat_search_decode(ps_search_t *base)
              *        reset until the next utterance and we wait on
              *        acmod below exclusively
              */
-            if (arc_buffer_eou(ps_search_input_arcs(ffs))) {
+            if (arc_buffer_eou(search_input_arcs(ffs))) {
                 int nfx;
                 /* We are no longer waiting on the arc buffer so it is
                  * okay to wait as long as necessary for acmod
@@ -1206,24 +1206,24 @@ fwdflat_search_decode(ps_search_t *base)
             ptmr_start(&ffs->base.t);
 
             /* Lock the arc buffer while we expand arcs. */
-            arc_buffer_lock(ps_search_input_arcs(ffs));
+            arc_buffer_lock(search_input_arcs(ffs));
             end_win = frame_idx + ffs->max_sf_win;
             start_win = frame_idx - ffs->max_sf_win;
             if (start_win < 0) start_win = 0;
             fwdflat_search_expand_arcs(ffs, start_win, end_win);
-            arc_buffer_unlock(ps_search_input_arcs(ffs));
+            arc_buffer_unlock(search_input_arcs(ffs));
 
             /* Now do our search. */
             if ((k = fwdflat_search_one_frame(ffs, frame_idx)) <= 0)
                 break;
             frame_idx += k;
-            arc_buffer_consumer_release(ps_search_input_arcs(ffs), start_win);
+            arc_buffer_consumer_release(search_input_arcs(ffs), start_win);
             ptmr_stop(&ffs->base.t);
         }
     }
-    arc_buffer_consumer_end_utt(ps_search_input_arcs(ffs));
+    arc_buffer_consumer_end_utt(search_input_arcs(ffs));
     ptmr_start(&ffs->base.t);
-    fwdflat_search_finish(ps_search_base(ffs));
+    fwdflat_search_finish(search_base(ffs));
     ptmr_stop(&ffs->base.t);
     return frame_idx;
 
@@ -1234,10 +1234,10 @@ canceled:
 }
 
 static int
-fwdflat_search_finish(ps_search_t *base)
+fwdflat_search_finish(search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
-    acmod_t *acmod = ps_search_acmod(ffs);
+    acmod_t *acmod = search_acmod(ffs);
     int cf;
     
     /* This is the number of frames of input. */
@@ -1247,8 +1247,8 @@ fwdflat_search_finish(ps_search_t *base)
     bptbl_finalize(ffs->bptbl);
 
     /* Finalize the output arc buffer and wait for consumer. */
-    if (ps_search_output_arcs(ffs))
-        arc_buffer_producer_end_utt(ps_search_output_arcs(ffs), FALSE);
+    if (search_output_arcs(ffs))
+        arc_buffer_producer_end_utt(search_output_arcs(ffs), FALSE);
 
     /* Finalize the input acmod (signals producer) */
     acmod_consumer_end_utt(base->acmod);
@@ -1285,31 +1285,31 @@ fwdflat_search_finish(ps_search_t *base)
 }
 
 static int32
-fwdflat_search_prob(ps_search_t *base)
+fwdflat_search_prob(search_t *base)
 {
     /* FIXME: Going to estimate this from partial results in the future. */
     return 0;
 }
 
 static char const *
-fwdflat_search_hyp(ps_search_t *base, int32 *out_score)
+fwdflat_search_hyp(search_t *base, int32 *out_score)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
 
     ckd_free(base->hyp_str);
-    base->hyp_str = bptbl_hyp(ffs->bptbl, out_score, ps_search_finish_wid(ffs));
+    base->hyp_str = bptbl_hyp(ffs->bptbl, out_score, search_finish_wid(ffs));
     return base->hyp_str;
 }
 
 static ps_seg_t *
-fwdflat_search_seg_iter(ps_search_t *base, int32 *out_score)
+fwdflat_search_seg_iter(search_t *base, int32 *out_score)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
-    return bptbl_seg_iter(ffs->bptbl, out_score, ps_search_finish_wid(ffs));
+    return bptbl_seg_iter(ffs->bptbl, out_score, search_finish_wid(ffs));
 }
 
 vocab_map_t *
-fwdflat_search_set_vocab_map(ps_search_t *search,
+fwdflat_search_set_vocab_map(search_t *search,
                              vocab_map_t *vm)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)search;
@@ -1318,14 +1318,14 @@ fwdflat_search_set_vocab_map(ps_search_t *search,
 }
 
 static bptbl_t *
-fwdflat_search_bptbl(ps_search_t *base)
+fwdflat_search_bptbl(search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
     return ffs->bptbl;
 }
 
 static ngram_model_t *
-fwdflat_search_lmset(ps_search_t *base)
+fwdflat_search_lmset(search_t *base)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;
     return ffs->lmset;

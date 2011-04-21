@@ -50,7 +50,7 @@
 #include "ps_alignment.h"
 #include "hmm.h"
 
-ps_search_t *state_align_search_init(cmd_ln_t *config,
+search_t *state_align_search_init(cmd_ln_t *config,
                                      acmod_t *acmod,
                                      ps_alignment_t *al);
 

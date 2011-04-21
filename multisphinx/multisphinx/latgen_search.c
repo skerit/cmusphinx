@@ -52,11 +52,11 @@
 #include "nodeid_map.h"
 #include "hmm.h"
 
-static int latgen_search_decode(ps_search_t *base);
-static int latgen_search_free(ps_search_t *base);
-static char const *latgen_search_hyp(ps_search_t *base, int32 *out_score);
-static int32 latgen_search_prob(ps_search_t *base);
-static ps_seg_t *latgen_search_seg_iter(ps_search_t *base, int32 *out_score);
+static int latgen_search_decode(search_t *base);
+static int latgen_search_free(search_t *base);
+static char const *latgen_search_hyp(search_t *base, int32 *out_score);
+static int32 latgen_search_prob(search_t *base);
+static ps_seg_t *latgen_search_seg_iter(search_t *base, int32 *out_score);
 
 static ps_searchfuncs_t latgen_funcs = {
     /* name: */   "latgen",
@@ -70,7 +70,7 @@ static ps_searchfuncs_t latgen_funcs = {
 };
 
 typedef struct latgen_search_s {
-    ps_search_t base;
+    search_t base;
     ngram_model_t *lm;
     dict2pid_t *d2p;
     logmath_t *lmath;
@@ -106,7 +106,7 @@ typedef struct latgen_search_s {
     int32 silpen, fillpen;
 } latgen_search_t;
 
-ps_search_t *
+search_t *
 latgen_init(cmd_ln_t *config,
 	    dict2pid_t *d2p,
             ngram_model_t *lm)
@@ -115,7 +115,7 @@ latgen_init(cmd_ln_t *config,
     int32 wip;
 
     latgen = ckd_calloc(1, sizeof(*latgen));
-    ps_search_init(&latgen->base, &latgen_funcs,
+    search_init(&latgen->base, &latgen_funcs,
                    config, NULL, d2p->dict, d2p);
     latgen->d2p = dict2pid_retain(d2p);
     latgen->lmath = logmath_retain(ngram_model_get_lmath(lm));
@@ -578,7 +578,7 @@ create_outgoing_links_one(latgen_search_t *latgen,
         ++n_links;
     }
     else {
-        for (i = 0; i < arc_buffer_max_n_rc(ps_search_input_arcs(latgen)); ++i) {
+        for (i = 0; i < arc_buffer_max_n_rc(search_input_arcs(latgen)); ++i) {
             ms_latlink_t *link;
             /* FIXME: Important observation, it seems that these are
              * always sequential, i.e. if we exit one of them we end
@@ -594,7 +594,7 @@ create_outgoing_links_one(latgen_search_t *latgen,
             link = create_new_link
                 (latgen, srcidx, destidx, incoming_linkid,
                  arc, linkwid,
-                 arc_buffer_get_rcscore(ps_search_input_arcs(latgen), arc, i), i);
+                 arc_buffer_get_rcscore(search_input_arcs(latgen), arc, i), i);
             link->lscr = lscr >> SENSCR_SHIFT;
             E_INFO("Created rc %d link ", i);
             ms_latlink_print(err_get_logfp(),
@@ -640,7 +640,7 @@ latgen_search_process_arcs(latgen_search_t *latgen,
 
     /* Iterate over all arcs exiting in this frame */
     for (n_arc = 0; itor; itor = (sarc_t *)arc_buffer_iter_next
-             (ps_search_input_arcs(latgen), &itor->arc)) {
+             (search_input_arcs(latgen), &itor->arc)) {
         /* See note in arc_buffer.h... */
         if (itor->arc.src != frame_idx)
             break;
@@ -651,8 +651,8 @@ latgen_search_process_arcs(latgen_search_t *latgen,
                     dict_wordstr(latgen->d2p->dict, itor->arc.wid),
                     itor->arc.src, itor->arc.dest,
                     itor->score, itor->lscr);
-            d = deltas = arc_buffer_get_rcdeltas(ps_search_input_arcs(latgen), itor);
-            for (i = 0; i < arc_buffer_max_n_rc(ps_search_input_arcs(latgen)); ++i) {
+            d = deltas = arc_buffer_get_rcdeltas(search_input_arcs(latgen), itor);
+            for (i = 0; i < arc_buffer_max_n_rc(search_input_arcs(latgen)); ++i) {
                 if (bitvec_is_set(itor->rc_bits, i))
                     fprintf(arcfh, " %d:%u", i, *d++);
             }
@@ -711,7 +711,7 @@ latgen_search_cleanup_frame(latgen_search_t *latgen, int32 frame_idx)
 }
 
 static int
-latgen_search_decode(ps_search_t *base)
+latgen_search_decode(search_t *base)
 {
     latgen_search_t *latgen = (latgen_search_t *)base;
     int frame_idx;
@@ -719,13 +719,13 @@ latgen_search_decode(ps_search_t *base)
 
     frame_idx = 0;
     E_INFO("waiting for arc buffer start\n");
-    if (arc_buffer_consumer_start_utt(ps_search_input_arcs(latgen), -1) < 0)
+    if (arc_buffer_consumer_start_utt(search_input_arcs(latgen), -1) < 0)
         return -1;
-    base->uttid = arc_buffer_uttid(ps_search_input_arcs(latgen));
+    base->uttid = arc_buffer_uttid(search_input_arcs(latgen));
 
     /* Create lattice and initial epsilon node. */
     latgen->output_lattice = ms_lattice_init(latgen->lmath,
-                                             ps_search_dict(base));
+                                             search_dict(base));
     ms_lattice_node_init(latgen->output_lattice, 0, -1);
 
     /* Reset some internal arrays. */
@@ -749,32 +749,32 @@ latgen_search_decode(ps_search_t *base)
     }
 
     /* Process frames full of arcs. */
-    while (arc_buffer_consumer_wait(ps_search_input_arcs(latgen), -1) >= 0) {
+    while (arc_buffer_consumer_wait(search_input_arcs(latgen), -1) >= 0) {
         ptmr_start(&base->t);
         while (1) {
             arc_t *itor;
             int n_arc;
 
             /* Grab arcs from the input buffer. */
-            arc_buffer_lock(ps_search_input_arcs(latgen));
-            itor = arc_buffer_iter(ps_search_input_arcs(latgen), frame_idx);
+            arc_buffer_lock(search_input_arcs(latgen));
+            itor = arc_buffer_iter(search_input_arcs(latgen), frame_idx);
             if (itor == NULL) {
-                arc_buffer_unlock(ps_search_input_arcs(latgen));
+                arc_buffer_unlock(search_input_arcs(latgen));
                 break;
             }
             n_arc = latgen_search_process_arcs(latgen, (sarc_t *)itor, frame_idx, arcfh);
-            arc_buffer_unlock(ps_search_input_arcs(latgen));
+            arc_buffer_unlock(search_input_arcs(latgen));
 
             /* Release arcs, we don't need them anymore. */
-            arc_buffer_consumer_release(ps_search_input_arcs(latgen), frame_idx);
+            arc_buffer_consumer_release(search_input_arcs(latgen), frame_idx);
             /* Remove any inaccessible nodes in this frame. */
             latgen_search_cleanup_frame(latgen, frame_idx);
             ++frame_idx;
         }
         ptmr_stop(&base->t);
-        if (arc_buffer_eou(ps_search_input_arcs(latgen))) {
+        if (arc_buffer_eou(search_input_arcs(latgen))) {
             E_INFO("latgen: got EOU\n");
-            arc_buffer_consumer_end_utt(ps_search_input_arcs(latgen));
+            arc_buffer_consumer_end_utt(search_input_arcs(latgen));
             if (arcfh) fclose(arcfh);
             return frame_idx;
         }
@@ -784,7 +784,7 @@ latgen_search_decode(ps_search_t *base)
 }
 
 static int
-latgen_search_free(ps_search_t *base)
+latgen_search_free(search_t *base)
 {
     latgen_search_t *latgen = (latgen_search_t *)base;
 
@@ -800,7 +800,7 @@ latgen_search_free(ps_search_t *base)
  * Bestpath search over the lattice.
  */
 static char const *
-latgen_search_hyp(ps_search_t *base, int32 *out_score)
+latgen_search_hyp(search_t *base, int32 *out_score)
 {
     return NULL;
 }
@@ -809,7 +809,7 @@ latgen_search_hyp(ps_search_t *base, int32 *out_score)
  * Bestpath search over the lattice.
  */
 static ps_seg_t *
-latgen_search_seg_iter(ps_search_t *base, int32 *out_score)
+latgen_search_seg_iter(search_t *base, int32 *out_score)
 {
     return NULL;
 }
@@ -818,7 +818,7 @@ latgen_search_seg_iter(ps_search_t *base, int32 *out_score)
  * Forward-backward calculation over the lattice.
  */
 static int32
-latgen_search_prob(ps_search_t *base)
+latgen_search_prob(search_t *base)
 {
     return 0;
 }

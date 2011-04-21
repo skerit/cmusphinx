@@ -79,8 +79,8 @@ struct ps_decoder_s {
      * acmod_t, which may be cloned). */
     /* FIXME: Currently the fwdtree->fwdflat topology is hardwired,
      * this will change very soon. */
-    ps_search_t *fwdtree;
-    ps_search_t *fwdflat;
+    search_t *fwdtree;
+    search_t *fwdflat;
 };
 
 #endif /* __POCKETSPHINX_INTERNAL_H__ */

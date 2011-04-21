@@ -619,7 +619,7 @@ ps_lattice_read(ps_decoder_t *ps,
      * scores won't be screwed up. */
     if (dict_filler_word(dag->dict, dag->end->wid))
         dag->end->basewid = dag->search
-            ? ps_search_finish_wid(dag->search)
+            ? search_finish_wid(dag->search)
             : dict_wordid(dag->dict, S3_FINISH_WORD);
 
     /* Mark reachable from dag->end */
@@ -658,7 +658,7 @@ ps_lattice_n_frames(ps_lattice_t *dag)
 }
 
 ps_lattice_t *
-ps_lattice_init_search(ps_search_t *search, int n_frame)
+ps_lattice_init_search(search_t *search, int n_frame)
 {
     ps_lattice_t *dag;
 
@@ -899,7 +899,7 @@ ps_lattice_compute_lscr(ps_seg_t *seg, ps_latlink_t *link, int to)
 
     /* Language model score is included in the link score for FSG
      * search.  FIXME: Of course, this is sort of a hack :( */
-    if (0 != strcmp(ps_search_name(seg->search), "ngram")) {
+    if (0 != strcmp(search_name(seg->search), "ngram")) {
         seg->lback = 1; /* Unigram... */
         seg->lscr = 0;
         return;
@@ -953,7 +953,7 @@ ps_lattice_link2itor(ps_seg_t *seg, ps_latlink_t *link, int to)
     else {
         latlink_list_t *x;
         ps_latnode_t *n;
-        logmath_t *lmath = ps_search_acmod(seg->search)->lmath;
+        logmath_t *lmath = search_acmod(seg->search)->lmath;
 
         node = link->from;
         seg->ef = link->ef;
@@ -969,7 +969,7 @@ ps_lattice_link2itor(ps_seg_t *seg, ps_latlink_t *link, int to)
             }
         }
     }
-    seg->word = dict_wordstr(ps_search_dict(seg->search), node->wid);
+    seg->word = dict_wordstr(search_dict(seg->search), node->wid);
     seg->sf = node->sf;
     seg->ascr = link->ascr;
     /* Compute language model score from best predecessors. */
@@ -1224,7 +1224,7 @@ ps_latlink_t *
 ps_lattice_bestpath(ps_lattice_t *dag, ngram_model_t *lmset,
                     float32 lwf, float32 ascale)
 {
-    ps_search_t *search;
+    search_t *search;
     ps_latnode_t *node;
     ps_latlink_t *link;
     ps_latlink_t *bestend;
@@ -1248,7 +1248,7 @@ ps_lattice_bestpath(ps_lattice_t *dag, ngram_model_t *lmset,
         int32 n_used;
 
         /* Ignore filler words. */
-        if (dict_filler_word(ps_search_dict(search), x->link->to->basewid)
+        if (dict_filler_word(search_dict(search), x->link->to->basewid)
             && x->link->to != dag->end)
             continue;
 
@@ -1256,7 +1256,7 @@ ps_lattice_bestpath(ps_lattice_t *dag, ngram_model_t *lmset,
         if (lmset)
             x->link->path_scr = x->link->ascr +
                 (ngram_bg_score(lmset, x->link->to->basewid,
-                                ps_search_start_wid(search), &n_used) 
+                                search_start_wid(search), &n_used) 
                  >> SENSCR_SHIFT)
                  * lwf;
         else
@@ -1272,9 +1272,9 @@ ps_lattice_bestpath(ps_lattice_t *dag, ngram_model_t *lmset,
         int32 bprob, n_used;
 
         /* Skip filler nodes in traversal. */
-        if (dict_filler_word(ps_search_dict(search), link->from->basewid) && link->from != dag->start)
+        if (dict_filler_word(search_dict(search), link->from->basewid) && link->from != dag->start)
             continue;
-        if (dict_filler_word(ps_search_dict(search), link->to->basewid) && link->to != dag->end)
+        if (dict_filler_word(search_dict(search), link->to->basewid) && link->to != dag->end)
             continue;
 
         /* Sanity check, we should not be traversing edges that
@@ -1297,7 +1297,7 @@ ps_lattice_bestpath(ps_lattice_t *dag, ngram_model_t *lmset,
             int32 tscore, score;
 
             /* Skip links to filler words in update. */
-            if (dict_filler_word(ps_search_dict(search), x->link->to->basewid)
+            if (dict_filler_word(search_dict(search), x->link->to->basewid)
                 && x->link->to != dag->end)
                 continue;
 
@@ -1331,7 +1331,7 @@ ps_lattice_bestpath(ps_lattice_t *dag, ngram_model_t *lmset,
     for (x = dag->end->entries; x; x = x->next) {
         int32 bprob, n_used;
 
-        if (dict_filler_word(ps_search_dict(search), x->link->from->basewid))
+        if (dict_filler_word(search_dict(search), x->link->from->basewid))
             continue;
         if (lmset)
             bprob = ngram_ng_prob(lmset,
@@ -1362,7 +1362,7 @@ ps_lattice_joint(ps_lattice_t *dag, ps_latlink_t *link, float32 ascale)
     int32 jprob;
 
     /* Sort of a hack... */
-    if (dag->search && 0 == strcmp(ps_search_name(dag->search), "ngram"))
+    if (dag->search && 0 == strcmp(search_name(dag->search), "ngram"))
         lmset = ((ngram_search_t *)dag->search)->lmset;
     else
         lmset = NULL;
@@ -1394,7 +1394,7 @@ int32
 ps_lattice_posterior(ps_lattice_t *dag, ngram_model_t *lmset,
                      float32 ascale)
 {
-    ps_search_t *search;
+    search_t *search;
     logmath_t *lmath;
     ps_latnode_t *node;
     ps_latlink_t *link;
@@ -1420,9 +1420,9 @@ ps_lattice_posterior(ps_lattice_t *dag, ngram_model_t *lmset,
         int32 bprob, n_used;
 
         /* Skip filler nodes in traversal. */
-        if (dict_filler_word(ps_search_dict(search), link->from->basewid) && link->from != dag->start)
+        if (dict_filler_word(search_dict(search), link->from->basewid) && link->from != dag->start)
             continue;
-        if (dict_filler_word(ps_search_dict(search), link->to->basewid) && link->to != dag->end)
+        if (dict_filler_word(search_dict(search), link->to->basewid) && link->to != dag->end)
             continue;
 
         /* Calculate LM probability. */
@@ -1446,7 +1446,7 @@ ps_lattice_posterior(ps_lattice_t *dag, ngram_model_t *lmset,
         else {
             /* Update beta from all outgoing betas. */
             for (x = link->to->exits; x; x = x->next) {
-                if (dict_filler_word(ps_search_dict(search), x->link->to->basewid) && x->link->to != dag->end)
+                if (dict_filler_word(search_dict(search), x->link->to->basewid) && x->link->to != dag->end)
                     continue;
                 link->beta = logmath_add(lmath, link->beta,
                                          x->link->beta + bprob
@@ -1749,7 +1749,7 @@ ps_astar_next(ps_astar_t *nbest)
 char const *
 ps_astar_hyp(ps_astar_t *nbest, ps_latpath_t *path)
 {
-    ps_search_t *search;
+    search_t *search;
     ps_latpath_t *p;
     size_t len;
     char *c;
@@ -1760,8 +1760,8 @@ ps_astar_hyp(ps_astar_t *nbest, ps_latpath_t *path)
     /* Backtrace once to get hypothesis length. */
     len = 0;
     for (p = path; p; p = p->parent) {
-        if (dict_real_word(ps_search_dict(search), p->node->basewid))
-            len += strlen(dict_wordstr(ps_search_dict(search), p->node->basewid)) + 1;
+        if (dict_real_word(search_dict(search), p->node->basewid))
+            len += strlen(dict_wordstr(search_dict(search), p->node->basewid)) + 1;
     }
 
     if (len == 0) {
@@ -1772,10 +1772,10 @@ ps_astar_hyp(ps_astar_t *nbest, ps_latpath_t *path)
     hyp = ckd_calloc(1, len);
     c = hyp + len - 1;
     for (p = path; p; p = p->parent) {
-        if (dict_real_word(ps_search_dict(search), p->node->basewid)) {
-            len = strlen(dict_wordstr(ps_search_dict(search), p->node->basewid));
+        if (dict_real_word(search_dict(search), p->node->basewid)) {
+            len = strlen(dict_wordstr(search_dict(search), p->node->basewid));
             c -= len;
-            memcpy(c, dict_wordstr(ps_search_dict(search), p->node->basewid), len);
+            memcpy(c, dict_wordstr(search_dict(search), p->node->basewid), len);
             if (c > hyp) {
                 --c;
                 *c = ' ';
@@ -1799,7 +1799,7 @@ ps_astar_node2itor(astar_seg_t *itor)
         seg->ef = node->lef;
     else
         seg->ef = itor->nodes[itor->cur + 1]->sf - 1;
-    seg->word = dict_wordstr(ps_search_dict(seg->search), node->wid);
+    seg->word = dict_wordstr(search_dict(seg->search), node->wid);
     seg->sf = node->sf;
     seg->prob = 0; /* FIXME: implement forward-backward */
 }

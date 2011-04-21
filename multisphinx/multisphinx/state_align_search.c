@@ -45,7 +45,7 @@
  * State alignment search structure.
  */
 struct state_align_search_s {
-    ps_search_t base;       /**< Base search structure. */
+    search_t base;       /**< Base search structure. */
     hmm_context_t *hmmctx;  /**< HMM context structure. */
     ps_alignment_t *al;     /**< Alignment structure being operated on. */
     hmm_t *hmms;            /**< Vector of HMMs corresponding to phone level. */
@@ -62,7 +62,7 @@ typedef struct state_align_search_s state_align_search_t;
 
 
 static int
-state_align_search_start(ps_search_t *search)
+state_align_search_start(search_t *search)
 {
     state_align_search_t *sas = (state_align_search_t *)search;
 
@@ -186,10 +186,10 @@ record_transitions(state_align_search_t *sas, int frame_idx)
 }
 
 static int
-state_align_search_step(ps_search_t *search)
+state_align_search_step(search_t *search)
 {
     state_align_search_t *sas = (state_align_search_t *)search;
-    acmod_t *acmod = ps_search_acmod(search);
+    acmod_t *acmod = search_acmod(search);
     int16 const *senscr;
     int i, frame_idx;
 
@@ -226,7 +226,7 @@ state_align_search_step(ps_search_t *search)
 }
 
 static int
-state_align_search_finish(ps_search_t *search)
+state_align_search_finish(search_t *search)
 {
     state_align_search_t *sas = (state_align_search_t *)search;
     hmm_t *final_phone = sas->hmms + sas->n_phones - 1;
@@ -272,14 +272,14 @@ state_align_search_finish(ps_search_t *search)
 }
 
 static int
-state_align_search_reinit(ps_search_t *search, dict_t *dict, dict2pid_t *d2p)
+state_align_search_reinit(search_t *search, dict_t *dict, dict2pid_t *d2p)
 {
     /* This does nothing. */
     return 0;
 }
 
 static void
-state_align_search_free(ps_search_t *search)
+state_align_search_free(search_t *search)
 {
     state_align_search_t *sas = (state_align_search_t *)search;
     ckd_free(sas->hmms);
@@ -292,7 +292,7 @@ static ps_searchfuncs_t state_align_search_funcs = {
     /* free: */   state_align_search_free,
 };
 
-ps_search_t *
+search_t *
 state_align_search_init(cmd_ln_t *config,
                         acmod_t *acmod,
                         ps_alignment_t *al)
@@ -302,7 +302,7 @@ state_align_search_init(cmd_ln_t *config,
     hmm_t *hmm;
 
     sas = ckd_calloc(1, sizeof(*sas));
-    ps_search_init(ps_search_base(sas), &state_align_search_funcs,
+    search_init(search_base(sas), &state_align_search_funcs,
                    config, acmod, al->d2p->dict, al->d2p);
     sas->hmmctx = hmm_context_init(bin_mdef_n_emit_state(acmod->mdef),
                                    acmod->tmat->tp, NULL, acmod->mdef->sseq);
@@ -322,5 +322,5 @@ state_align_search_init(cmd_ln_t *config,
         hmm_init(sas->hmmctx, hmm, FALSE,
                  ent->id.pid.ssid, ent->id.pid.tmatid);
     }
-    return ps_search_base(sas);
+    return search_base(sas);
 }

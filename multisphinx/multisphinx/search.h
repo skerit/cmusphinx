@@ -59,7 +59,7 @@
 /**
  * Search algorithm structure.
  */
-typedef struct ps_search_s ps_search_t;
+typedef struct search_s search_t;
 
 /**
  * V-table for search algorithm functions, not called directly by users.
@@ -67,15 +67,15 @@ typedef struct ps_search_s ps_search_t;
 typedef struct ps_searchfuncs_s {
     char const *name;
 
-    int (*free)(ps_search_t *search);   /**< Free search-specific stuff. */
-    int (*decode)(ps_search_t *search); /**< Decode an utterance. */
+    int (*free)(search_t *search);   /**< Free search-specific stuff. */
+    int (*decode)(search_t *search); /**< Decode an utterance. */
 
-    char const *(*hyp)(ps_search_t *search, int32 *out_score);
-    int32 (*prob)(ps_search_t *search);
-    ps_seg_t *(*seg_iter)(ps_search_t *search, int32 *out_score);
+    char const *(*hyp)(search_t *search, int32 *out_score);
+    int32 (*prob)(search_t *search);
+    ps_seg_t *(*seg_iter)(search_t *search, int32 *out_score);
 
-    bptbl_t *(*bptbl)(ps_search_t *search);
-    ngram_model_t *(*lmset)(ps_search_t *search);
+    bptbl_t *(*bptbl)(search_t *search);
+    ngram_model_t *(*lmset)(search_t *search);
 } ps_searchfuncs_t;
 
 struct arc_buffer_s;
@@ -83,7 +83,7 @@ struct arc_buffer_s;
 /**
  * Base structure for search module.
  */
-struct ps_search_s {
+struct search_s {
     ps_searchfuncs_t *vt;  /**< V-table of search methods. */
     sbthread_t *thr;       /**< Thread in which this search runs. */
     sbmtx_t *mtx;          /**< Lock for this search. */
@@ -110,51 +110,51 @@ struct ps_search_s {
 };
 
 /* A variety of accessors. */
-#define ps_search_base(s) ((ps_search_t *)s)
-#define ps_search_thread(s) ps_search_base(s)->thr
-#define ps_search_config(s) ps_search_base(s)->config
-#define ps_search_acmod(s) ps_search_base(s)->acmod
-#define ps_search_dict(s) ps_search_base(s)->dict
-#define ps_search_dict2pid(s) ps_search_base(s)->d2p
-#define ps_search_post(s) ps_search_base(s)->post
-#define ps_search_input_arcs(s) ps_search_base(s)->input_arcs
-#define ps_search_output_arcs(s) ps_search_base(s)->output_arcs
-#define ps_search_n_words(s) ps_search_base(s)->n_words
-#define ps_search_silence_wid(s) ps_search_base(s)->silence_wid
-#define ps_search_start_wid(s) ps_search_base(s)->start_wid
-#define ps_search_finish_wid(s) ps_search_base(s)->finish_wid
+#define search_base(s) ((search_t *)s)
+#define search_thread(s) search_base(s)->thr
+#define search_config(s) search_base(s)->config
+#define search_acmod(s) search_base(s)->acmod
+#define search_dict(s) search_base(s)->dict
+#define search_dict2pid(s) search_base(s)->d2p
+#define search_post(s) search_base(s)->post
+#define search_input_arcs(s) search_base(s)->input_arcs
+#define search_output_arcs(s) search_base(s)->output_arcs
+#define search_n_words(s) search_base(s)->n_words
+#define search_silence_wid(s) search_base(s)->silence_wid
+#define search_start_wid(s) search_base(s)->start_wid
+#define search_finish_wid(s) search_base(s)->finish_wid
 
 /**
  * Initialize base structure.
  */
-void ps_search_init(ps_search_t *search, ps_searchfuncs_t *vt,
+void search_init(search_t *search, ps_searchfuncs_t *vt,
                     cmd_ln_t *config, acmod_t *acmod, dict_t *dict,
                     dict2pid_t *d2p);
 
 /**
  * De-initialize base structure.
  */
-void ps_search_deinit(ps_search_t *search);
+void search_deinit(search_t *search);
 
 /**
  * Start a search thread.
  */
-sbthread_t *ps_search_run(ps_search_t *search);
+sbthread_t *search_run(search_t *search);
 
 /**
  * Wait for a search thread to complete.
  */
-int ps_search_wait(ps_search_t *search);
+int search_wait(search_t *search);
 
 /**
  * Free a search structure.
  */
-int ps_search_free(ps_search_t *search);
+int search_free(search_t *search);
 
 /**
  * Link one search structure to another via an arc buffer.
  */
-struct arc_buffer_s *ps_search_link(ps_search_t *from, ps_search_t *to,
+struct arc_buffer_s *search_link(search_t *from, search_t *to,
                                     char const *name, int keep_scores);
 
 /**
@@ -162,23 +162,23 @@ struct arc_buffer_s *ps_search_link(ps_search_t *from, ps_search_t *to,
  *
  * FIXME: This will probably go away due to hypothesis splicing
  */
-char const *ps_search_hyp(ps_search_t *search, int32 *out_score);
+char const *search_hyp(search_t *search, int32 *out_score);
 
 /**
  * Splice hypotheses from multiple searches.
  */
-char const *ps_search_splice(ps_search_t **searches, int nsearches,
+char const *search_splice(search_t **searches, int nsearches,
                              int32 *out_score);
 
 /**
  * Get the backpointer table, if any, from a search.
  */
-bptbl_t *ps_search_bptbl(ps_search_t *search);
+bptbl_t *search_bptbl(search_t *search);
 
 /**
  * Get the N-Gram language model set, if any, from a search.
  */
-ngram_model_t *ps_search_lmset(ps_search_t *search);
+ngram_model_t *search_lmset(search_t *search);
 
 /**
  * V-table for segmentation iterators.
@@ -193,7 +193,7 @@ typedef struct ps_segfuncs_s {
  */
 struct ps_seg_s {
     ps_segfuncs_t *vt;     /**< V-table of seg methods */
-    ps_search_t *search;   /**< Search object from whence this came */
+    search_t *search;   /**< Search object from whence this came */
     char const *word;      /**< Word string (pointer into dictionary hash) */
     int16 sf;                /**< Start frame. */
     int16 ef;                /**< End frame. */
@@ -207,14 +207,14 @@ struct ps_seg_s {
     float32 lwf;           /**< Language weight factor (for second-pass searches) */
 };
 
-#define ps_search_seg_next(seg) (*(seg->vt->seg_next))(seg)
-#define ps_search_seg_free(s) (*(seg->vt->seg_free))(seg)
+#define search_seg_next(seg) (*(seg->vt->seg_next))(seg)
+#define search_seg_free(s) (*(seg->vt->seg_free))(seg)
 
 /**
  * Get the latest segmentation from a search
  *
  * FIXME: This will probably go away due to hypothesis splicing
  */
-struct ps_seg_s *ps_search_seg_iter(ps_search_t *search, int32 *out_score);
+struct ps_seg_s *search_seg_iter(search_t *search, int32 *out_score);
 
 #endif /* __PS_SEARCH_H__ */

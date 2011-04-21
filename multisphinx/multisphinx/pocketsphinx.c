@@ -221,10 +221,10 @@ ps_init(cmd_ln_t *config)
         }
         else {
             ps->fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-                                              ps_search_lmset(ps->fwdtree));
+                                              search_lmset(ps->fwdtree));
         }
         acmod_free(acmod2);
-        ps_search_link(ps->fwdtree, ps->fwdflat, "fwdtree", FALSE);
+        search_link(ps->fwdtree, ps->fwdflat, "fwdtree", FALSE);
     }
 
     /* Release pointers to things now owned by the searches. */
@@ -236,9 +236,9 @@ ps_init(cmd_ln_t *config)
     ptmr_init(&ps->perf);
 
     /* Start search threads. */
-    ps_search_run(ps->fwdtree);
+    search_run(ps->fwdtree);
     if (ps->fwdflat)
-        ps_search_run(ps->fwdflat);
+        search_run(ps->fwdflat);
 
     return ps;
 error_out:
@@ -273,12 +273,12 @@ ps_free(ps_decoder_t *ps)
 
     featbuf_producer_shutdown(ps->fb);
     if (ps->fwdtree) {
-        ps_search_wait(ps->fwdtree);
-        ps_search_free(ps->fwdtree);
+        search_wait(ps->fwdtree);
+        search_free(ps->fwdtree);
     }
     if (ps->fwdflat) {
-        ps_search_wait(ps->fwdflat);
-        ps_search_free(ps->fwdflat);
+        search_wait(ps->fwdflat);
+        search_free(ps->fwdflat);
     }
     featbuf_free(ps->fb);
     logmath_free(ps->lmath);
@@ -442,7 +442,7 @@ ps_end_utt(ps_decoder_t *ps)
 char const *
 ps_get_hyp(ps_decoder_t *ps, int32 *out_best_score, char const **out_uttid)
 {
-    ps_search_t *searches[3];
+    search_t *searches[3];
     char const *hyp;
 
     ptmr_start(&ps->perf);
@@ -450,7 +450,7 @@ ps_get_hyp(ps_decoder_t *ps, int32 *out_best_score, char const **out_uttid)
      * add latgen. */
     searches[0] = ps->fwdtree;
     searches[1] = ps->fwdflat;
-    hyp = ps_search_splice(searches, ps->fwdflat ? 2 : 1, out_best_score);
+    hyp = search_splice(searches, ps->fwdflat ? 2 : 1, out_best_score);
     if (out_uttid)
         *out_uttid = ps->uttid;
     ptmr_stop(&ps->perf);
@@ -469,7 +469,7 @@ ps_seg_iter(ps_decoder_t *ps, int32 *out_best_score)
     ps_seg_t *itor;
 
     ptmr_start(&ps->perf);
-    itor = ps_search_seg_iter(ps->fwdflat ? ps->fwdflat : ps->fwdtree, out_best_score);
+    itor = search_seg_iter(ps->fwdflat ? ps->fwdflat : ps->fwdtree, out_best_score);
     ptmr_stop(&ps->perf);
     return itor;
 }
@@ -477,7 +477,7 @@ ps_seg_iter(ps_decoder_t *ps, int32 *out_best_score)
 ps_seg_t *
 ps_seg_next(ps_seg_t *seg)
 {
-    return ps_search_seg_next(seg);
+    return search_seg_next(seg);
 }
 
 char const *
@@ -505,7 +505,7 @@ ps_seg_prob(ps_seg_t *seg, int32 *out_ascr, int32 *out_lscr, int32 *out_lback)
 void
 ps_seg_free(ps_seg_t *seg)
 {
-    ps_search_seg_free(seg);
+    search_seg_free(seg);
 }
 
 int

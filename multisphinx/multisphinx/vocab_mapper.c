@@ -50,7 +50,7 @@ struct vocab_mapper_s {
     ngram_model_t *bglm;    /**< Background language model */
     dict_t *targdict;       /**< Target dictionary */
     ngram_model_t *targlm;  /**< Target language model */
-    ps_search_t *fwdflat;   /**< Search used to generate mappings */
+    search_t *fwdflat;   /**< Search used to generate mappings */
     acmod_t *acmod;         /**< Acoustic model used in search */
 } vocab_mapper_t;
 

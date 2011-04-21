@@ -44,7 +44,7 @@
 #include <multisphinx/arc_buffer.h>
 
 void
-ps_search_init(ps_search_t *search, ps_searchfuncs_t *vt,
+search_init(search_t *search, ps_searchfuncs_t *vt,
                cmd_ln_t *config, acmod_t *acmod, dict_t *dict,
                dict2pid_t *d2p)
 {
@@ -73,7 +73,7 @@ ps_search_init(ps_search_t *search, ps_searchfuncs_t *vt,
 }
 
 int
-ps_search_free(ps_search_t *search)
+search_free(search_t *search)
 {
     if (search == NULL)
         return 0;
@@ -100,25 +100,25 @@ ps_search_free(ps_search_t *search)
 }
 
 arc_buffer_t *
-ps_search_link(ps_search_t *from, ps_search_t *to,
+search_link(search_t *from, search_t *to,
                char const *name, int keep_scores)
 {
     arc_buffer_t *ab;
 
-    if (ps_search_bptbl(from) == NULL)
+    if (search_bptbl(from) == NULL)
         return NULL;
-    ab = arc_buffer_init(name, ps_search_bptbl(from),
-                         ps_search_lmset(from), keep_scores);
-    ps_search_output_arcs(from) = ab;
-    ps_search_input_arcs(to) = arc_buffer_retain(ab);
+    ab = arc_buffer_init(name, search_bptbl(from),
+                         search_lmset(from), keep_scores);
+    search_output_arcs(from) = ab;
+    search_input_arcs(to) = arc_buffer_retain(ab);
 
     return ab;
 }
 
 static int
-ps_search_main(sbthread_t *thr)
+search_main(sbthread_t *thr)
 {
-    ps_search_t *search = sbthread_arg(thr);
+    search_t *search = sbthread_arg(thr);
     int rv = 0;
 
     while (rv >= 0) {
@@ -131,31 +131,31 @@ ps_search_main(sbthread_t *thr)
 }
 
 sbthread_t *
-ps_search_run(ps_search_t *search)
+search_run(search_t *search)
 {
-    search->thr = sbthread_start(NULL, ps_search_main, search);
+    search->thr = sbthread_start(NULL, search_main, search);
     return search->thr;
 }
 
 int
-ps_search_wait(ps_search_t *search)
+search_wait(search_t *search)
 {
     return sbthread_wait(search->thr);
 }
 
 char const *
-ps_search_hyp(ps_search_t *search, int32 *out_score)
+search_hyp(search_t *search, int32 *out_score)
 {
     /* Search module has to be responsible for locking here... */
     return (*search->vt->hyp)(search, out_score);
 }
 
 char const *
-ps_search_splice(ps_search_t **searches, int nsearches,
+search_splice(search_t **searches, int nsearches,
                  int32 *out_score)
 {
     /* How to do this...  Requires some cooperation from the searches.
-     * Basically instead of ps_search_hyp() they should always return
+     * Basically instead of search_hyp() they should always return
      * segmentations.  Then we pass these off to some other function
      * in here which concatenates the segmentations, and we resolve
      * overlaps according to some heuristic to be determined.
@@ -164,13 +164,13 @@ ps_search_splice(ps_search_t **searches, int nsearches,
 }
 
 ps_seg_t *
-ps_search_seg_iter(ps_search_t *search, int32 *out_score)
+search_seg_iter(search_t *search, int32 *out_score)
 {
     return (*search->vt->seg_iter)(search, out_score);
 }
 
 bptbl_t *
-ps_search_bptbl(ps_search_t *search)
+search_bptbl(search_t *search)
 {
     if (search->vt->bptbl == NULL)
         return NULL;
@@ -178,7 +178,7 @@ ps_search_bptbl(ps_search_t *search)
 }
 
 ngram_model_t *
-ps_search_lmset(ps_search_t *search)
+search_lmset(search_t *search)
 {
     if (search->vt->lmset == NULL)
         return NULL;

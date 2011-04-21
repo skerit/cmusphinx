@@ -50,7 +50,7 @@
 /**
  * Initialize fwdtree search.
  */
-ps_search_t *fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
+search_t *fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
                                  dict_t *dict, dict2pid_t *d2p);
 
 #endif /* __FWDTREE_SEARCH_H__ */
