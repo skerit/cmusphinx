@@ -153,3 +153,5 @@ swig/build
 swig/*.egg-info
 swig/multisphinx.py
 swig/pocketsphinx.py
+src/programs/multisphinx_map_vocab
+src/programs/multisphinx_merge_lmclasses
