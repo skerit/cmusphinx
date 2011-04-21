@@ -149,3 +149,7 @@ test/unit/test_lattice/expanded.dot
 edu
 test/unit/test_search/00000000.arc
 *_wrap.c
+swig/build
+swig/*.egg-info
+swig/multisphinx.py
+swig/pocketsphinx.py
