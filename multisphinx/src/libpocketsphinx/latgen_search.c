@@ -186,6 +186,7 @@ get_backoff_lmstate(ms_lattice_t *l, ngram_model_t *lm,
 static int
 create_outgoing_links_one(latgen_search_t *latgen,
                           ms_latnode_t *node,
+                          bitvec_t *active_incoming_links,
                           sarc_t *arc)
 {
     ms_latlink_t *incoming_link;
@@ -227,6 +228,8 @@ create_outgoing_links_one(latgen_search_t *latgen,
     }
     /* FIXME: This is almost certainly going to fail.  Fuck. */
     assert(incoming_link != NULL);
+    /* Now mark this incoming link as active. */
+    bitvec_set(active_incoming_links, i);
 
     /* Create new language model state */
     n_hist =
@@ -257,6 +260,9 @@ create_outgoing_links_one(latgen_search_t *latgen,
         int32 linkid;
         /* FIXME: Actually calculate ascr here, that's why we found
          * incoming_link in the first place!  */
+        /* FIXME: Also, a matching link may already exist (with a
+         * different alternate word ID) in which case we should just
+         * take the best ascr. */
         link = ms_lattice_link(latgen->output_lattice,
                                node, dest, headwid,
                                arc->score);
@@ -274,6 +280,9 @@ create_outgoing_links_one(latgen_search_t *latgen,
                 int32 linkid;
                 /* FIXME: Actually calculate ascr here, that's why we found
                  * incoming_link in the first place!  */
+                /* FIXME: Also, a matching link may already exist (with a
+                 * different alternate word ID) in which case we should just
+                 * take the best ascr. */
                 link = ms_lattice_link
                     (latgen->output_lattice,
                      node, dest, headwid,
@@ -305,16 +314,39 @@ create_outgoing_links(latgen_search_t *latgen,
         int32 nodeidx = garray_ent(latgen->active_nodes, int32, i);
         ms_latnode_t *node = ms_lattice_get_node_idx
             (latgen->output_lattice, nodeidx);
+        bitvec_t *active_links;
         int node_n_links;
 
-        node_n_links = create_outgoing_links_one(latgen, node, arc);
+        /* FIXME: Should allocate this in latgen and grow as needed. */
+        active_links = bitvec_alloc(ms_latnode_n_entries(node));
+        node_n_links = create_outgoing_links_one(latgen, node,
+                                                 active_links, arc);
         if (node_n_links == 0) {
             /* This node is a goner, prune it. */
+            /* FIXME: Actually it's not clear this will happen. */
         }
         else {
             /* Prune dangling incoming links (with no active right
              * context) */
+            /* FIXME: This is a kind of annoying way to have to do
+             * this... overzealous encapsulation perhaps? */
+            glist_t deadlinks;
+            gnode_t *gn;
+            int j;
+
+            for (j = 0; j < ms_latnode_n_entries(node); ++j) {
+                if (bitvec_is_set(active_links, j))
+                    continue;
+                deadlinks = glist_add_ptr
+                    (deadlinks, ms_latnode_get_entry
+                     (latgen->output_lattice, node, j));
+            }
+            for (gn = deadlinks; gn; gn = gnode_next(gn))
+                ms_latlink_unlink(latgen->output_lattice,
+                                  (ms_latlink_t *)gnode_ptr(gn));
+            glist_free(deadlinks);
         }
+        bitvec_free(active_links);
         n_links += node_n_links;
     }
 
