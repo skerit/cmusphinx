@@ -95,9 +95,7 @@ add_weighted_successors(ngram_trie_t *lm, ngram_trie_node_t *dest,
         return 0;
 
     lmath = ngram_trie_logmath(lm);
-    E_INFOCONT("Merging [ ");
-    ngram_trie_node_print(lm, dest, err_get_logfp());
-    E_INFOCONT(" ] <- (%f) [ ", logmath_exp(lmath, weight));
+    E_INFOCONT("Merging (%f) [ ", logmath_exp(lmath, weight));
     ngram_trie_node_print(lm, src, err_get_logfp());
 
     dmarg = logmath_get_zero(lmath);
@@ -191,7 +189,8 @@ merge_successors(ngram_trie_t *lm, ngram_trie_node_t *node,
 {
     ngram_trie_node_t *pseudo_succ;
     int i;
-    pseudo_succ = ngram_trie_add_successor(lm, node, pseudo_wid);
+    pseudo_succ = ngram_trie_node_alloc(lm);
+    ngram_trie_node_set_word(lm, pseudo_succ, pseudo_wid);
     ngram_trie_node_set_params(lm, pseudo_succ, succ_prob, 0);
     for (i = 0; i < garray_size(word_succ); ++i) {
         i32p_t sent = garray_ent(word_succ, i32p_t, i);
@@ -209,7 +208,7 @@ merge_successors(ngram_trie_t *lm, ngram_trie_node_t *node,
             return -1;
         }
     }
-    return 0;
+    return ngram_trie_add_successor_ngram(lm, node, pseudo_succ);
 }
 
 

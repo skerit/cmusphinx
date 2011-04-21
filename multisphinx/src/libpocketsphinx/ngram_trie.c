@@ -482,7 +482,13 @@ ngram_trie_next_node(ngram_trie_t *t, ngram_trie_node_t *ng)
     assert(h->successors != NULL);
     pos = garray_bisect_left(h->successors, &ng);
     assert(pos < garray_next_idx(h->successors));
-    assert(ng == garray_ent(h->successors, ngram_trie_node_t *, pos));
+    /* Duplicates are not allowed, make it more obvious than just a
+     * fairly meaningless assert. */
+    if (ng != garray_ent(h->successors, ngram_trie_node_t *, pos)) {
+        E_ERROR("Duplicate nodes for word %d = %s\n",
+                ng->word, dict_wordstr(t->dict, ng->word));
+        assert(FALSE);
+    }
     ++pos;
     if (pos == garray_next_idx(h->successors)) {
         h = ngram_trie_next_node(t, h);
