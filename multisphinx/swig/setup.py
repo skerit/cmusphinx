@@ -2,10 +2,9 @@ from setuptools import setup, Extension
 
 multisphinx = Extension("_multisphinx",
                         sources = [ "multisphinx.i" ],
-                        libraries = [ "sphinxbase", "pocketsphinx" ],
-                        include_dirs = ["../include"],
-                        library_dirs = ["../src/libpocketsphinx/.libs",
-                                        "../src/libsphinxbase/.libs"])
+                        libraries = [ "multisphinx" ],
+                        include_dirs = [".."],
+                        library_dirs = ["../.libs"])
 
 setup(name = "multisphinx",
       version = "0.1",

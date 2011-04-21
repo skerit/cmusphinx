@@ -103,7 +103,7 @@
 #ifndef _AD_H_
 #define _AD_H_
 
-#include <sphinx_config.h>
+#include <sphinxbase/sphinx_config.h>
 
 #if defined (__CYGWIN__)
 #include <w32api/windows.h>

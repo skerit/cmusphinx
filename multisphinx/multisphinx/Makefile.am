@@ -29,22 +29,42 @@ libmultisphinx_la_SOURCES =			\
 	vocab_map.c				\
 	pocketsphinx.c
 
-noinst_HEADERS =				\
-	pocketsphinx_internal.h			\
+include_HEADERS = \
+	acmod.h					\
+	arc_buffer.h				\
+	bin_mdef.h				\
+	bptbl.h					\
+	cmdln_macro.h				\
+	dict.h					\
+	dict2pid.h				\
+	featbuf.h				\
+	fwdflat_search.h			\
+	fwdtree_search.h			\
 	hmm.h					\
+	latgen_search.h				\
 	mdef.h					\
 	ms_gauden.h				\
 	ms_lattice.h				\
 	ms_mgau.h				\
 	ms_senone.h				\
+	ngram_trie.h				\
 	nodeid_map.h				\
+	pocketsphinx.h				\
+	pocketsphinx_export.h			\
+	pocketsphinx_internal.h			\
 	posixwin32.h				\
+	ps_alignment.h				\
+	ps_lattice_internal.h			\
+	ps_search.h				\
 	ptm_mgau.h				\
-	sendump.h				\
 	s2_semi_mgau.h				\
+	s3types.h				\
+	sendump.h				\
+	state_align_search.h			\
 	tied_mgau_common.h			\
 	tmat.h					\
-	vector.h
+	vector.h				\
+	vocab_map.h
 
 # Need this to avoid pulling in system includes by accident
 INCLUDES = -I$(top_srcdir)

@@ -48,5 +48,63 @@ libsphinxbase_la_SOURCES = agc.c		\
 	utf8.c					\
 	yin.c
 
+include_HEADERS = \
+	ad.h					\
+	agc.h					\
+	bio.h					\
+	bitvec.h				\
+	byteorder.h				\
+	case.h					\
+	ckd_alloc.h				\
+	cmd_ln.h				\
+	cmn.h					\
+	cont_ad.h				\
+	err.h					\
+	f2c.h					\
+	fe.h					\
+	fe_internal.h				\
+	fe_warp.h				\
+	fe_warp_affine.h			\
+	fe_warp_inverse_linear.h		\
+	fe_warp_piecewise_linear.h		\
+	feat.h					\
+	filename.h				\
+	fixpoint.h				\
+	fsg_model.h				\
+	garray.h				\
+	garray_internal.h			\
+	genrand.h				\
+	glist.h					\
+	gq.h					\
+	hash_table.h				\
+	heap.h					\
+	huff_code.h				\
+	info.h					\
+	jsgf.h					\
+	jsgf_internal.h				\
+	jsgf_parser.h				\
+	jsgf_scanner.h				\
+	libutil.h				\
+	listelem_alloc.h			\
+	lm3g_model.h				\
+	logmath.h				\
+	mmio.h					\
+	ngram_model.h				\
+	ngram_model_arpa.h			\
+	ngram_model_dmp.h			\
+	ngram_model_internal.h			\
+	ngram_model_set.h			\
+	pio.h					\
+	prim_type.h				\
+	profile.h				\
+	ring_queue.h				\
+	sbthread.h				\
+	sphinx_config.h				\
+	sphinxbase_export.h			\
+	strfuncs.h				\
+	sync_array.h				\
+	unlimit.h				\
+	yin.h
+
 # Need this to avoid pulling in system includes by accident
 INCLUDES = -I$(top_srcdir)
