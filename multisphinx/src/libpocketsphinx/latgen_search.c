@@ -638,7 +638,7 @@ latgen_search_process_arcs(latgen_search_t *latgen,
 #endif
 
     if (arcfh)
-        fprintf(arcfh, "FRAME %d\n", frame_idx);
+        fprintf(arcfh, "__START_FRAME %d\n", frame_idx);
     /* Iterate over all arcs exiting in this frame */
     for (n_arc = 0; itor; itor = (sarc_t *)arc_buffer_iter_next
              (latgen->input_arcs, &itor->arc)) {
@@ -648,9 +648,10 @@ latgen_search_process_arcs(latgen_search_t *latgen,
         if (arcfh) {
             rcdelta_t const *deltas, *d;
             int i;
-            fprintf(arcfh, "%d %d %d %d %d %d",
-                    itor->arc.wid, itor->arc.src, itor->arc.dest,
-                    itor->score, itor->lscr, itor->rc_idx);
+            fprintf(arcfh, "%s %d %d %d %d",
+                    dict_wordstr(latgen->d2p->dict, itor->arc.wid),
+                    itor->arc.src, itor->arc.dest,
+                    itor->score, itor->lscr);
             d = deltas = arc_buffer_get_rcdeltas(latgen->input_arcs, itor);
             for (i = 0; i < arc_buffer_max_n_rc(latgen->input_arcs); ++i) {
                 if (bitvec_is_set(itor->rc_bits, i))
@@ -663,6 +664,8 @@ latgen_search_process_arcs(latgen_search_t *latgen,
         /* n_arc += create_outgoing_links(latgen, itor); */
         ++n_arc;
     }
+    if (arcfh)
+        fprintf(arcfh, "__END_FRAME %d\n", frame_idx);
 
     return n_arc;
 }

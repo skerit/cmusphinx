@@ -972,6 +972,7 @@ bptbl_get_rcscores(bptbl_t *bptbl, bpidx_t bpidx, int32 *out_rcscores)
     bpe = bptbl_ent_internal(bptbl, bpidx);
     rcsize = bptbl_rcsize(bptbl, bpe);
     if (rcsize == 0) {
+        assert(dict_is_single_phone(bptbl->d2p->dict, bpe->wid));
         out_rcscores[0] = bpe->score;
         return 1;
     }
@@ -998,6 +999,7 @@ bptbl_get_rcdeltas(bptbl_t *bptbl, bpidx_t bpidx, rcdelta_t *out_rcdeltas)
     bpe = bptbl_ent_internal(bptbl, bpidx);
     rcsize = bptbl_rcsize(bptbl, bpe);
     if (rcsize == 0) {
+        assert(dict_is_single_phone(bptbl->d2p->dict, bpe->wid));
         out_rcdeltas[0] = 0;
         return 1;
     }
@@ -1072,11 +1074,16 @@ bptbl_fake_lmscore(bptbl_t *bptbl, ngram_model_t *lm,
     /* Start word has lscr = 0 */
     if (prev == NULL)
         return 0;
-
-    return ngram_tg_score(lm, ent->real_wid,
-                          prev->real_wid,
-                          prev->prev_real_wid,
-                          out_n_used)>>SENSCR_SHIFT;
+    /* Filler/silence words have search-dependent scores. */
+    else if (dict_filler_word(bptbl->d2p->dict, ent->wid)
+             || ent->wid == dict_startwid(bptbl->d2p->dict))
+        return 0;
+    else {
+        return ngram_tg_score(lm, ent->real_wid,
+                              prev->real_wid,
+                              prev->prev_real_wid,
+                              out_n_used) >> SENSCR_SHIFT;
+    }
 }
 
 bpidx_t

@@ -161,9 +161,25 @@ arc_buffer_dump(arc_buffer_t *fab, dict_t *dict)
     n_arcs = garray_next_idx(fab->arcs);
     E_INFO("Arc buffer '%s': %d arcs:\n", fab->name, n_arcs);
     for (i = garray_base(fab->arcs); i < n_arcs; ++i) {
-        arc_t *arc = garray_ptr(fab->arcs, arc_t, i);
-        E_INFO_NOFN("%s sf %d ef %d\n",
-                    dict_wordstr(dict, arc->wid), arc->src, arc->dest);
+        if (fab->scores) {
+            sarc_t *arc = (sarc_t *)garray_void(fab->arcs, i);
+            rcdelta_t const *d = arc_buffer_get_rcdeltas(fab, arc);
+            int i;
+            E_INFO_NOFN("%s %d %d %d %d",
+                        dict_wordstr(dict, arc->arc.wid),
+                        arc->arc.src, arc->arc.dest,
+                        arc->score, arc->lscr);
+            for (i = 0; i < arc_buffer_max_n_rc(fab); ++i) {
+                if (bitvec_is_set(arc->rc_bits, i))
+                    E_INFOCONT(" %d:%u", i, *d++);
+            }
+            E_INFOCONT("\n");
+        }
+        else {
+            arc_t *arc = (arc_t *)garray_void(fab->arcs, i);
+            E_INFO_NOFN("%s sf %d ef %d\n",
+                        dict_wordstr(dict, arc->wid), arc->src, arc->dest);
+        }
     }
 }
 
@@ -254,6 +270,13 @@ arc_buffer_add_bps(arc_buffer_t *fab,
                 sp->score = ent.score;
                 if (fab->lm)
                     sp->lscr = bptbl_fake_lmscore(bptbl, fab->lm, idx, &n_used);
+                else
+                    sp->lscr = 0;
+                if (dict_filler_word(bptbl->d2p->dict, sp->arc.wid)
+                    || sp->arc.wid == dict_startwid(bptbl->d2p->dict)) {
+                    assert(sp->lscr == 0);
+                    assert(rcsize == 1);
+                }
                 sp->rc_idx = garray_next_idx(fab->rc_deltas);
                 bitvec_clear_all(sp->rc_bits, fab->max_n_rc);
                 for (i = 0; i < rcsize; ++i) {
@@ -398,10 +421,11 @@ arc_buffer_commit(arc_buffer_t *fab)
         active_arc = garray_slice(fab->arcs, fab->active_arc, n_arcs);
 
         for (i = 0; i < n_arcs; ++i) {
-            arc_t *arc = garray_ptr(active_arc, arc_t, i);
-            int *pos = garray_ptr(active_sf, int, arc->src - fab->active_sf);
+            arc_t *arc = (arc_t *)garray_void(active_arc, i);
+            int *pos = garray_ptr(active_sf, int,
+                                  arc->src - fab->active_sf);
             /* Copy it into place. */
-            garray_ent(fab->arcs, arc_t, *pos) = *arc;
+            memcpy(garray_void(fab->arcs, *pos), arc, fab->arc_size);
             /* Increment local frame counter. */
             *pos += 1;
         }
