@@ -184,6 +184,31 @@ search_seg_iter(search_t *search, int32 *out_score)
     return (*search->vt->seg_iter)(search, out_score);
 }
 
+seg_iter_t *
+seg_iter_next(seg_iter_t *itor)
+{
+    return (*itor->vt->seg_next)(itor);
+}
+
+void
+seg_iter_free(seg_iter_t *itor)
+{
+    (*itor->vt->seg_free)(itor);
+}
+
+char const *
+seg_iter_word(seg_iter_t *itor)
+{
+    return itor->word;
+}
+
+void
+seg_iter_times(seg_iter_t *itor, int *out_sf, int *out_ef)
+{
+    if (out_sf) *out_sf = itor->sf;
+    if (out_ef) *out_ef = itor->ef;
+}
+
 bptbl_t *
 search_bptbl(search_t *search)
 {

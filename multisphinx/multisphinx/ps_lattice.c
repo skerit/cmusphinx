@@ -1006,7 +1006,7 @@ ps_lattice_seg_next(seg_iter_t *seg)
     return seg;
 }
 
-static ps_segfuncs_t ps_lattice_segfuncs = {
+static segfuncs_t ps_lattice_segfuncs = {
     /* seg_next */ ps_lattice_seg_next,
     /* seg_free */ ps_lattice_seg_free
 };
@@ -1829,7 +1829,7 @@ ps_astar_seg_next(seg_iter_t *seg)
     return seg;
 }
 
-static ps_segfuncs_t ps_astar_segfuncs = {
+static segfuncs_t ps_astar_segfuncs = {
     /* seg_next */ ps_astar_seg_next,
     /* seg_free */ ps_astar_seg_free
 };

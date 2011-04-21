@@ -362,10 +362,71 @@ state_align_search_prob(search_t *base)
     return 0;
 }
 
+typedef struct state_align_seg_s {
+    struct seg_iter_s base;  /**< Base structure. */
+    alignment_iter_t *itor;
+} state_align_seg_t;
+
+static void
+state_align_bp2itor(state_align_seg_t *itor)
+{
+    state_align_search_t *sas = (state_align_search_t *)itor->base.search;
+    alignment_entry_t *ent = alignment_iter_get(itor->itor);
+    itor->base.word = dict_wordstr(search_dict(sas), ent->id.wid);
+    itor->base.sf = ent->start;
+    itor->base.ef = ent->start + ent->duration - 1;
+}
+
+static void
+state_align_seg_free(seg_iter_t *seg)
+{
+    state_align_seg_t *itor = (state_align_seg_t *)seg;
+
+    alignment_iter_free(itor->itor);
+    ckd_free(itor);
+}
+
+static seg_iter_t *
+state_align_seg_next(seg_iter_t *seg)
+{
+    state_align_seg_t *itor = (state_align_seg_t *)seg;
+    if ((itor->itor = alignment_iter_next(itor->itor)) == NULL) {
+        state_align_seg_free(seg);
+        return NULL;
+    }
+    state_align_bp2itor(itor);
+    return seg;
+}
+
+static segfuncs_t state_align_segfuncs = {
+    /* seg_next */ state_align_seg_next,
+    /* seg_free */ state_align_seg_free
+};
+
+
 static seg_iter_t *
 state_align_search_seg_iter(search_t *base, int32 *out_score)
 {
-    return NULL;
+    state_align_search_t *sas = (state_align_search_t *)base;
+    state_align_seg_t *itor;
+
+    if (sas->al == NULL)
+        return NULL;
+
+    if (out_score)
+        *out_score = sas->best_score;
+
+    itor = ckd_calloc(1, sizeof(*itor));
+    itor->base.vt = &state_align_segfuncs;
+    itor->base.lwf = 1.0;
+    itor->base.search = base;
+    if ((itor->itor = alignment_words(sas->al)) == NULL) {
+        state_align_seg_free(&itor->base);
+        return NULL;
+    }
+    state_align_bp2itor(itor);
+
+    return &itor->base;
 }
 
 static searchfuncs_t state_align_search_funcs = {

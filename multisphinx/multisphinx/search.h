@@ -129,6 +129,26 @@ char const *search_hyp(search_t *search, int32 *out_score);
 seg_iter_t *search_seg_iter(search_t *search, int32 *out_score);
 
 /**
+ * Move iterator vorwart.
+ */
+seg_iter_t *seg_iter_next(seg_iter_t *itor);
+
+/**
+ * Free iterator.
+ */
+void seg_iter_free(seg_iter_t *itor);
+
+/**
+ * Get word from iterator.
+ */
+char const *seg_iter_word(seg_iter_t *itor);
+
+/**
+ * Get frames from iterator.
+ */
+void seg_iter_times(seg_iter_t *itor, int *out_sf, int *out_ef);
+
+/**
  * Get the backpointer table, if any, from a search.
  */
 bptbl_t *search_bptbl(search_t *search);

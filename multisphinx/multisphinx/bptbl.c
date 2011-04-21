@@ -1277,7 +1277,7 @@ bptbl_seg_next(seg_iter_t *seg)
     return seg;
 }
 
-static ps_segfuncs_t bptbl_segfuncs = {
+static segfuncs_t bptbl_segfuncs = {
     /* seg_next */ bptbl_seg_next,
     /* seg_free */ bptbl_seg_free
 };

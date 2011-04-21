@@ -140,13 +140,13 @@ void search_deinit(search_t *search);
 typedef struct segfuncs_s {
     seg_iter_t *(*seg_next)(seg_iter_t *seg);
     void (*seg_free)(seg_iter_t *seg);
-} ps_segfuncs_t;
+} segfuncs_t;
 
 /**
  * Base structure for hypothesis segmentation iterator.
  */
 struct seg_iter_s {
-    ps_segfuncs_t *vt;     /**< V-table of seg methods */
+    segfuncs_t *vt;     /**< V-table of seg methods */
     search_t *search;   /**< Search object from whence this came */
     char const *word;      /**< Word string (pointer into dictionary hash) */
     int16 sf;                /**< Start frame. */
