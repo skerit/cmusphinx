@@ -259,7 +259,11 @@ vocab_map_iter_get(vocab_map_iter_t *itor,
                    int32 *out_pseudo_wid,
                    int32 *out_n_mapped)
 {
-    int32 pseudo_wid = garray_ent(itor->vm->pseudos, int32, itor->pos);
-    if (out_pseudo_wid) *out_pseudo_wid = pseudo_wid;
-    return vocab_map_unmap(itor->vm, pseudo_wid, out_n_mapped);
+    i32p_t ent;
+
+    ent = garray_ent(itor->vm->pseudos, i32p_t, itor->pos);
+    if (out_pseudo_wid) *out_pseudo_wid = ent.a;
+    if (out_n_mapped)
+        *out_n_mapped = garray_ent(itor->vm->wids, int32, ent.b);
+    return garray_ptr(itor->vm->wids, int32, ent.b + 1);
 }
