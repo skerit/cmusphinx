@@ -1220,7 +1220,7 @@ bptbl_hyp(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
  * Segmentation "iterator" for backpointer table results.
  */
 typedef struct bptbl_seg_s {
-    struct ps_seg_s base;  /**< Base structure. */
+    struct seg_iter_s base;  /**< Base structure. */
     bptbl_t *bptbl; /**< Backpointer table. */
     int32 *bpidx;   /**< Sequence of backpointer IDs. */
     int16 n_bpidx;  /**< Number of backpointer IDs. */
@@ -1228,7 +1228,7 @@ typedef struct bptbl_seg_s {
 } bptbl_seg_t;
 
 static void
-bptbl_bp2itor(ps_seg_t *seg, int bp)
+bptbl_bp2itor(seg_iter_t *seg, int bp)
 {
     bptbl_seg_t *bseg = (bptbl_seg_t *)seg;
     bp_t *be, *pbe;
@@ -1255,7 +1255,7 @@ bptbl_bp2itor(ps_seg_t *seg, int bp)
 }
 
 static void
-bptbl_seg_free(ps_seg_t *seg)
+bptbl_seg_free(seg_iter_t *seg)
 {
     bptbl_seg_t *itor = (bptbl_seg_t *)seg;
     
@@ -1263,8 +1263,8 @@ bptbl_seg_free(ps_seg_t *seg)
     ckd_free(itor);
 }
 
-static ps_seg_t *
-bptbl_seg_next(ps_seg_t *seg)
+static seg_iter_t *
+bptbl_seg_next(seg_iter_t *seg)
 {
     bptbl_seg_t *itor = (bptbl_seg_t *)seg;
 
@@ -1282,7 +1282,7 @@ static ps_segfuncs_t bptbl_segfuncs = {
     /* seg_free */ bptbl_seg_free
 };
 
-ps_seg_t *
+seg_iter_t *
 bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
 {
     bptbl_seg_t *itor;
@@ -1337,7 +1337,7 @@ bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
 
 
     /* Fill in relevant fields for first element. */
-    bptbl_bp2itor((ps_seg_t *)itor, itor->bpidx[0]);
+    bptbl_bp2itor((seg_iter_t *)itor, itor->bpidx[0]);
 
-    return (ps_seg_t *)itor;
+    return (seg_iter_t *)itor;
 }

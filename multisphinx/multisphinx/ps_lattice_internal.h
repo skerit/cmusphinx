@@ -136,7 +136,7 @@ struct ps_latnode_s {
  * Segmentation "iterator" for backpointer table results.
  */
 typedef struct dag_seg_s {
-    ps_seg_t base;       /**< Base structure. */
+    seg_iter_t base;       /**< Base structure. */
     ps_latlink_t **links;   /**< Array of lattice links. */
     int32 norm;     /**< Normalizer for posterior probabilities. */
     int16 n_links;  /**< Number of lattice links. */
@@ -187,7 +187,7 @@ typedef struct ps_astar_s {
  * Segmentation "iterator" for A* search results.
  */
 typedef struct astar_seg_s {
-    ps_seg_t base;
+    seg_iter_t base;
     ps_latnode_t **nodes;
     int n_nodes;
     int cur;
@@ -237,7 +237,7 @@ char const *ps_lattice_hyp(ps_lattice_t *dag, ps_latlink_t *link);
 /**
  * Get hypothesis segmentation iterator after bestpath search.
  */
-ps_seg_t *ps_lattice_seg_iter(ps_lattice_t *dag, ps_latlink_t *link,
+seg_iter_t *ps_lattice_seg_iter(ps_lattice_t *dag, ps_latlink_t *link,
                               float32 lwf);
 
 /**
@@ -275,7 +275,7 @@ char const *ps_astar_hyp(ps_astar_t *nbest, ps_latpath_t *path);
 /**
  * Get hypothesis segmentation from A* search.
  */
-ps_seg_t *ps_astar_seg_iter(ps_astar_t *astar, ps_latpath_t *path, float32 lwf);
+seg_iter_t *ps_astar_seg_iter(ps_astar_t *astar, ps_latpath_t *path, float32 lwf);
 
 
 #endif /* __PS_LATTICE_INTERNAL_H__ */

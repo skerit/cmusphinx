@@ -53,9 +53,10 @@
 #include <sphinxbase/ngram_model.h>
 #include <sphinxbase/garray.h>
 #include <sphinxbase/cmd_ln.h>
+#include <sphinxbase/bitvec.h>
 
 /* MultiSphinx headers. */
-#include <multisphinx/pocketsphinx_internal.h>
+#include <multisphinx/cmdln_macro.h>
 #include <multisphinx/vocab_map.h>
 #include <multisphinx/ngram_trie.h>
 

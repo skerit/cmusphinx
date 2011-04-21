@@ -178,7 +178,7 @@ search_hyp(search_t *search, int32 *out_score)
     return (*search->vt->hyp)(search, out_score);
 }
 
-ps_seg_t *
+seg_iter_t *
 search_seg_iter(search_t *search, int32 *out_score)
 {
     return (*search->vt->seg_iter)(search, out_score);

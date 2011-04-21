@@ -201,7 +201,7 @@ static int fwdflat_search_finish(search_t *base);
 static int fwdflat_search_free(search_t *base);
 static char const *fwdflat_search_hyp(search_t *base, int32 *out_score);
 static int32 fwdflat_search_prob(search_t *base);
-static ps_seg_t *fwdflat_search_seg_iter(search_t *base, int32 *out_score);
+static seg_iter_t *fwdflat_search_seg_iter(search_t *base, int32 *out_score);
 static bptbl_t *fwdflat_search_bptbl(search_t *base);
 static ngram_model_t *fwdflat_search_lmset(search_t *base);
 
@@ -1335,7 +1335,7 @@ fwdflat_search_hyp(search_t *base, int32 *out_score)
     return base->hyp_str;
 }
 
-static ps_seg_t *
+static seg_iter_t *
 fwdflat_search_seg_iter(search_t *base, int32 *out_score)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *)base;

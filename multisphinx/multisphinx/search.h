@@ -59,6 +59,11 @@ typedef struct search_s search_t;
 typedef struct searchfuncs_s searchfuncs_t;
 
 /**
+ * Segmentation iterator.
+ */
+typedef struct seg_iter_s seg_iter_t;
+
+/**
  * Event in search.
  */
 typedef struct search_event_s search_event_t;
@@ -117,6 +122,11 @@ void search_set_cb(search_t *search, search_cb_func cb, void *udata);
  * Get the latest hypothesis from a search.
  */
 char const *search_hyp(search_t *search, int32 *out_score);
+
+/**
+ * Get the latest segmentation from a search
+ */
+seg_iter_t *search_seg_iter(search_t *search, int32 *out_score);
 
 /**
  * Get the backpointer table, if any, from a search.

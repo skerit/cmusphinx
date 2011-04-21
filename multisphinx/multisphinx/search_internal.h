@@ -56,11 +56,6 @@
 #include <multisphinx/dict2pid.h>
 
 /**
- * Segmentation.
- */
-typedef struct ps_seg_s ps_seg_t;
-
-/**
  * V-table for search algorithm functions, not called directly by users.
  */
 struct searchfuncs_s {
@@ -72,7 +67,7 @@ struct searchfuncs_s {
 
     char const *(*hyp)(search_t *search, int32 *out_score);
     int32 (*prob)(search_t *search);
-    ps_seg_t *(*seg_iter)(search_t *search, int32 *out_score);
+    seg_iter_t *(*seg_iter)(search_t *search, int32 *out_score);
 
     bptbl_t *(*bptbl)(search_t *search);
     ngram_model_t *(*lmset)(search_t *search);
@@ -142,15 +137,15 @@ void search_deinit(search_t *search);
 /**
  * V-table for segmentation iterators.
  */
-typedef struct ps_segfuncs_s {
-    ps_seg_t *(*seg_next)(ps_seg_t *seg);
-    void (*seg_free)(ps_seg_t *seg);
+typedef struct segfuncs_s {
+    seg_iter_t *(*seg_next)(seg_iter_t *seg);
+    void (*seg_free)(seg_iter_t *seg);
 } ps_segfuncs_t;
 
 /**
  * Base structure for hypothesis segmentation iterator.
  */
-struct ps_seg_s {
+struct seg_iter_s {
     ps_segfuncs_t *vt;     /**< V-table of seg methods */
     search_t *search;   /**< Search object from whence this came */
     char const *word;      /**< Word string (pointer into dictionary hash) */
@@ -173,12 +168,5 @@ struct ps_seg_s {
  * Call an event simply.
  */
 int search_call_event(search_t *search, int event, int frame);
-
-/**
- * Get the latest segmentation from a search
- *
- * FIXME: This will probably go away due to hypothesis splicing
- */
-struct ps_seg_s *search_seg_iter(search_t *search, int32 *out_score);
 
 #endif /* __PS_SEARCH_INTERNAL_H__ */

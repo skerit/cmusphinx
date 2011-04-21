@@ -350,7 +350,7 @@ static int fwdtree_search_decode(search_t *base);
 static int fwdtree_search_free(search_t *base);
 static char const *fwdtree_search_hyp(search_t *base, int32 *out_score);
 static int32 fwdtree_search_prob(search_t *base);
-static ps_seg_t *fwdtree_search_seg_iter(search_t *base, int32 *out_score);
+static seg_iter_t *fwdtree_search_seg_iter(search_t *base, int32 *out_score);
 static bptbl_t *fwdtree_search_bptbl(search_t *base);
 static ngram_model_t *fwdtree_search_lmset(search_t *base);
 
@@ -2347,7 +2347,7 @@ fwdtree_search_hyp(search_t *base, int32 *out_score)
     return base->hyp_str;
 }
 
-static ps_seg_t *
+static seg_iter_t *
 fwdtree_search_seg_iter(search_t *base, int32 *out_score)
 {
     fwdtree_search_t *fts = (fwdtree_search_t *)base;

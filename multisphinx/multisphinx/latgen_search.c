@@ -55,7 +55,7 @@ static int latgen_search_decode(search_t *base);
 static int latgen_search_free(search_t *base);
 static char const *latgen_search_hyp(search_t *base, int32 *out_score);
 static int32 latgen_search_prob(search_t *base);
-static ps_seg_t *latgen_search_seg_iter(search_t *base, int32 *out_score);
+static seg_iter_t *latgen_search_seg_iter(search_t *base, int32 *out_score);
 
 static searchfuncs_t latgen_funcs = {
     /* name: */   "latgen",
@@ -814,7 +814,7 @@ latgen_search_hyp(search_t *base, int32 *out_score)
 /**
  * Bestpath search over the lattice.
  */
-static ps_seg_t *
+static seg_iter_t *
 latgen_search_seg_iter(search_t *base, int32 *out_score)
 {
     return NULL;

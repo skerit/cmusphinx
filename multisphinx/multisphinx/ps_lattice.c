@@ -893,7 +893,7 @@ ps_lattice_hyp(ps_lattice_t *dag, ps_latlink_t *link)
 }
 
 static void
-ps_lattice_compute_lscr(ps_seg_t *seg, ps_latlink_t *link, int to)
+ps_lattice_compute_lscr(seg_iter_t *seg, ps_latlink_t *link, int to)
 {
     ngram_model_t *lmset;
 
@@ -940,7 +940,7 @@ ps_lattice_compute_lscr(ps_seg_t *seg, ps_latlink_t *link, int to)
 }
 
 static void
-ps_lattice_link2itor(ps_seg_t *seg, ps_latlink_t *link, int to)
+ps_lattice_link2itor(seg_iter_t *seg, ps_latlink_t *link, int to)
 {
     dag_seg_t *itor = (dag_seg_t *)seg;
     ps_latnode_t *node;
@@ -977,7 +977,7 @@ ps_lattice_link2itor(ps_seg_t *seg, ps_latlink_t *link, int to)
 }
 
 static void
-ps_lattice_seg_free(ps_seg_t *seg)
+ps_lattice_seg_free(seg_iter_t *seg)
 {
     dag_seg_t *itor = (dag_seg_t *)seg;
     
@@ -985,8 +985,8 @@ ps_lattice_seg_free(ps_seg_t *seg)
     ckd_free(itor);
 }
 
-static ps_seg_t *
-ps_lattice_seg_next(ps_seg_t *seg)
+static seg_iter_t *
+ps_lattice_seg_next(seg_iter_t *seg)
 {
     dag_seg_t *itor = (dag_seg_t *)seg;
 
@@ -1011,7 +1011,7 @@ static ps_segfuncs_t ps_lattice_segfuncs = {
     /* seg_free */ ps_lattice_seg_free
 };
 
-ps_seg_t *
+seg_iter_t *
 ps_lattice_seg_iter(ps_lattice_t *dag, ps_latlink_t *link, float32 lwf)
 {
     dag_seg_t *itor;
@@ -1043,8 +1043,8 @@ ps_lattice_seg_iter(ps_lattice_t *dag, ps_latlink_t *link, float32 lwf)
         --cur;
     }
 
-    ps_lattice_link2itor((ps_seg_t *)itor, itor->links[0], FALSE);
-    return (ps_seg_t *)itor;
+    ps_lattice_link2itor((seg_iter_t *)itor, itor->links[0], FALSE);
+    return (seg_iter_t *)itor;
 }
 
 latlink_list_t *
@@ -1790,7 +1790,7 @@ ps_astar_hyp(ps_astar_t *nbest, ps_latpath_t *path)
 static void
 ps_astar_node2itor(astar_seg_t *itor)
 {
-    ps_seg_t *seg = (ps_seg_t *)itor;
+    seg_iter_t *seg = (seg_iter_t *)itor;
     ps_latnode_t *node;
 
     assert(itor->cur < itor->n_nodes);
@@ -1805,15 +1805,15 @@ ps_astar_node2itor(astar_seg_t *itor)
 }
 
 static void
-ps_astar_seg_free(ps_seg_t *seg)
+ps_astar_seg_free(seg_iter_t *seg)
 {
     astar_seg_t *itor = (astar_seg_t *)seg;
     ckd_free(itor->nodes);
     ckd_free(itor);
 }
 
-static ps_seg_t *
-ps_astar_seg_next(ps_seg_t *seg)
+static seg_iter_t *
+ps_astar_seg_next(seg_iter_t *seg)
 {
     astar_seg_t *itor = (astar_seg_t *)seg;
 
@@ -1834,7 +1834,7 @@ static ps_segfuncs_t ps_astar_segfuncs = {
     /* seg_free */ ps_astar_seg_free
 };
 
-ps_seg_t *
+seg_iter_t *
 ps_astar_seg_iter(ps_astar_t *astar, ps_latpath_t *path, float32 lwf)
 {
     astar_seg_t *itor;
@@ -1858,7 +1858,7 @@ ps_astar_seg_iter(ps_astar_t *astar, ps_latpath_t *path, float32 lwf)
     }
 
     ps_astar_node2itor(itor);
-    return (ps_seg_t *)itor;
+    return (seg_iter_t *)itor;
 }
 
 void

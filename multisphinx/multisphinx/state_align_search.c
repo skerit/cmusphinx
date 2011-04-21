@@ -362,7 +362,7 @@ state_align_search_prob(search_t *base)
     return 0;
 }
 
-static ps_seg_t *
+static seg_iter_t *
 state_align_search_seg_iter(search_t *base, int32 *out_score)
 {
     return NULL;

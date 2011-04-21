@@ -324,6 +324,6 @@ char *bptbl_hyp(bptbl_t *bptbl, int32 *out_score, int32 finish_wid);
  * regardless of word ID)
  * @return New segmentation iterator.
  */
-struct ps_seg_s *bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid);
+struct seg_iter_s *bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid);
 
 #endif /* __BPTBL_H__ */

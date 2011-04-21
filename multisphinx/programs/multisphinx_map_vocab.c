@@ -54,9 +54,9 @@
 #include <sphinxbase/cmd_ln.h>
 
 /* S3kr3t headerz. */
-#include <multisphinx/pocketsphinx_internal.h>
 #include <multisphinx/fwdflat_search.h>
 #include <multisphinx/s2_semi_mgau.h>
+#include <multisphinx/cmdln_macro.h>
 
 static const arg_t ps_args_def[] = {
     POCKETSPHINX_OPTIONS,

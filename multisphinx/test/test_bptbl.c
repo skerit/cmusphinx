@@ -17,7 +17,7 @@ main(int argc, char *argv[])
 	dict2pid_t *d2p;
 	dict_t *dict;
 	cmd_ln_t *config;
-	ps_seg_t *seg;
+	seg_iter_t *seg;
 	bptbl_t *bptbl;
 	bp_t bpe;
 	bpidx_t bp;
