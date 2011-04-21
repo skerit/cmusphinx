@@ -1,7 +1,7 @@
-bin_PROGRAMS = pocketsphinx_batch \
+bin_PROGRAMS = \
 	multisphinx_batch \
-	pocketsphinx_map_vocab \
-	ngram_homos
+	multisphinx_map_vocab \
+	multisphinx_merge_lmclasses
 
 LDADD = \
 	$(top_builddir)/src/libsphinxbase/libsphinxbase.la \

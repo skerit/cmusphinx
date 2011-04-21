@@ -37,6 +37,7 @@
 
 /* System headers. */
 #include <stdio.h>
+#include <string.h>
 
 /* SphinxBase headers. */
 #include <sphinxbase/pio.h>
@@ -44,12 +45,13 @@
 #include <sphinxbase/strfuncs.h>
 #include <sphinxbase/filename.h>
 #include <sphinxbase/byteorder.h>
+#include <sphinxbase/ckd_alloc.h>
+
+/* MultiSphinx headers. */
+#include <multisphinx/dict.h>
 
 /* PocketSphinx headers. */
 #include <pocketsphinx.h>
-
-/* S3kr3t headerz. */
-#include "pocketsphinx_internal.h"
 
 static const arg_t ps_args_def[] = {
     POCKETSPHINX_OPTIONS,
@@ -104,10 +106,6 @@ static const arg_t ps_args_def[] = {
       ARG_STRING,
       NULL,
       "Recognition output with segmentation file name" },
-    { "-ctm",
-      ARG_STRING,
-      NULL,
-      "Recognition output in CTM file format (may require post-sorting)" },
     { "-outlatdir",
       ARG_STRING,
       NULL,
@@ -312,60 +310,6 @@ write_hypseg(FILE *fh, ps_decoder_t *ps, char const *uttid)
     return 0;
 }
 
-static int
-write_ctm(FILE *fh, ps_decoder_t *ps, ps_seg_t *itor, char const *uttid, int32 frate)
-{
-    logmath_t *lmath = ps_get_logmath(ps);
-    char *dupid, *show, *channel, *c;
-    double ustart = 0.0;
-
-    /* We have semi-standardized on comma-separated uttids which
-     * correspond to the fields of the STM file.  So if there's a
-     * comma in the uttid, take the first two fields as show and
-     * channel, and also try to find the start time. */
-    show = dupid = ckd_salloc(uttid ? uttid : "(null)");
-    if ((c = strchr(dupid, ',')) != NULL) {
-        *c++ = '\0';
-        channel = c;
-        if ((c = strchr(c, ',')) != NULL) {
-            *c++ = '\0';
-            if ((c = strchr(c, ',')) != NULL) {
-                ustart = atof_c(c + 1);
-            }
-        }
-    }
-    else {
-        channel = NULL;
-    }
-
-    while (itor) {
-        int32 prob, sf, ef, wid;
-        char const *w;
-
-        /* Skip things that aren't "real words" (FIXME: currently
-         * requires s3kr3t h34d3rz...) */
-        w = ps_seg_word(itor);
-        wid = dict_wordid(ps->fwdtree->dict, w);
-        if (wid >= 0 && dict_real_word(ps->fwdtree->dict, wid)) {
-            prob = ps_seg_prob(itor, NULL, NULL, NULL);
-            ps_seg_frames(itor, &sf, &ef);
-        
-            fprintf(fh, "%s %s %.2f %.2f %s %.3f\n",
-                    show,
-                    channel ? channel : "1",
-                    ustart + (double)sf / frate,
-                    (double)(ef - sf) / frate,
-                    /* FIXME: More s3kr3tz */
-                    dict_basestr(ps->fwdtree->dict, wid),
-                    logmath_exp(lmath, prob));
-        }
-        itor = ps_seg_next(itor);
-    }
-    ckd_free(dupid);
-
-    return 0;
-}
-
 static void
 process_ctl(ps_decoder_t *ps, cmd_ln_t *config, FILE *ctlfh)
 {
@@ -373,7 +317,7 @@ process_ctl(ps_decoder_t *ps, cmd_ln_t *config, FILE *ctlfh)
     int32 i;
     char *line;
     size_t len;
-    FILE *hypfh = NULL, *hypsegfh = NULL, *ctmfh = NULL;
+    FILE *hypfh = NULL, *hypsegfh = NULL;
     double n_speech, n_cpu, n_wall;
     char const *outlatdir;
     char const *nbestdir;
@@ -402,14 +346,6 @@ process_ctl(ps_decoder_t *ps, cmd_ln_t *config, FILE *ctlfh)
             goto done;
         }
         setbuf(hypsegfh, NULL);
-    }
-    if ((str = cmd_ln_str_r(config, "-ctm"))) {
-        ctmfh = fopen(str, "w");
-        if (ctmfh == NULL) {
-            E_ERROR_SYSTEM("Failed to open hypothesis file %s for writing", str);
-            goto done;
-        }
-        setbuf(ctmfh, NULL);
     }
 
     i = 0;
@@ -457,10 +393,6 @@ process_ctl(ps_decoder_t *ps, cmd_ln_t *config, FILE *ctlfh)
             if (hypsegfh) {
                 write_hypseg(hypsegfh, ps, uttid);
             }
-            if (ctmfh) {
-                ps_seg_t *itor = ps_seg_iter(ps, &score);
-                write_ctm(ctmfh, ps, itor, uttid, frate);
-            }
             if (outlatdir) {
             }
             if (nbestdir) {
@@ -487,8 +419,6 @@ done:
         fclose(hypfh);
     if (hypsegfh)
         fclose(hypsegfh);
-    if (ctmfh)
-        fclose(ctmfh);
 }
 
 int
