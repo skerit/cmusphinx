@@ -348,7 +348,7 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
            (float)ffs->lw / 32768, ffs->lw);
 
     /* Create output arc buffer. */
-    ps_search_output_arcs(ffs) = arc_buffer_init("fwdtree", ffs->bptbl,
+    ps_search_output_arcs(ffs) = arc_buffer_init("fwdflat", ffs->bptbl,
                                                  ffs->lmset, TRUE /* FIXME */);
 
     /* Load a vocabulary map if needed. */
