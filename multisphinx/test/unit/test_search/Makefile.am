@@ -5,8 +5,7 @@ check_PROGRAMS = \
 	test_fwdtree_fwdflat_homos \
 	test_latgen
 
-TESTS = $(check_PROGRAMS) \
-	test_batch.sh
+TESTS = $(check_PROGRAMS)
 
 INCLUDES = \
 	-I$(top_srcdir)/include/sphinxbase \
