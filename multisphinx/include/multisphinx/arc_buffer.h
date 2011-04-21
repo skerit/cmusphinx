@@ -117,7 +117,7 @@ void arc_buffer_producer_start_utt(arc_buffer_t *fab);
  * Sweep newly available arcs from the bptbl into the arc buffer and
  * commit them.
  *
- * @param release If true, elease arcs from input_bptbl.
+ * @param release If true, release arcs from input_bptbl.
  * @return The first backpointer index between start and end which
  *         starts after the next active frame, i.e. the first
  *         backpointer index which must be preserved for the next pass
@@ -143,18 +143,6 @@ int arc_buffer_producer_shutdown(arc_buffer_t *fab);
  * Query end-of-utterance condition.
  */
 int arc_buffer_eou(arc_buffer_t *fab);
-
-/**
- * Commit extended arcs to the arc buffer.
- *
- * This freezes in place the start frames added since the last call to
- * arc_buffer_extend().  No more arcs with these start frames may be
- * added to the arc buffer.
- *
- * It also signals the consumer thread.  IMPORTANT: It is assumed for
- * now that there is only one consumer thread.
- */
-int arc_buffer_producer_commit(arc_buffer_t *fab);
 
 /**
  * Iterate over arcs in the arc buffer starting at given frame.

@@ -151,27 +151,26 @@ add_weighted_successors(ngram_trie_t *lm, ngram_trie_node_t *dest,
 static int32
 find_word_succ(ngram_trie_t *lm, ngram_trie_node_t *node,
                garray_t *word_succ,
-               bitvec_t *seen, int32 const *wids, int32 n_wids)
+               bitvec_t *cset, int32 const *wids, int32 n_wids)
 {
     int32 succ_prob, i;
     dict_t *dict;
     logmath_t *lmath;
+    ngram_trie_iter_t *ni;
 
     dict = ngram_trie_dict(lm);
     lmath = ngram_trie_logmath(lm);
     succ_prob = logmath_get_zero(lmath);
-    bitvec_clear_all(seen, dict_size(dict));
+    bitvec_clear_all(cset, dict_size(dict));
     for (i = 0; i < n_wids; ++i) {
         int32 basewid = dict_basewid(dict, wids[i]);
-        ngram_trie_node_t *succ;
-        /* Don't look at the same base word twice. */
-        if (bitvec_is_set(seen, basewid))
-            continue;
-        bitvec_set(seen, basewid);
-        /* FIXME: We should turn this inside out and iterate over
-         * successors rather than searching for them, as it is
-         * slow. */
-        if ((succ = ngram_trie_successor(lm, node, basewid)) != NULL) {
+        bitvec_set(cset, basewid);
+    }
+    for (ni = ngram_trie_successors(lm, node);
+         ni; ni = ngram_trie_iter_next(ni)) {
+        ngram_trie_node_t *succ = ngram_trie_iter_get(ni);
+        int32 basewid = ngram_trie_node_word(lm, succ);
+        if (bitvec_is_set(cset, basewid)) {
             int32 log_prob, log_bowt;
             i32p_t sent;
             ngram_trie_node_params(lm, succ, &log_prob, &log_bowt);
@@ -186,7 +185,7 @@ find_word_succ(ngram_trie_t *lm, ngram_trie_node_t *node,
 
 static int
 merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
-            vocab_map_t *vm, bitvec_t *seen)
+            vocab_map_t *vm, bitvec_t *cset)
 {
     ngram_trie_iter_t *ni;
     vocab_map_iter_t *vi;
@@ -200,7 +199,7 @@ merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
 
     /* Traverse the N-Gram trie in pre-order. */
     for (; ni; ni = ngram_trie_iter_next(ni))
-        if (merge_homos(lm, ngram_trie_iter_get(ni), vm, seen) < 0)
+        if (merge_homos(lm, ngram_trie_iter_get(ni), vm, cset) < 0)
             return -1;
 
     /* Merge within-distribution probabilities. */
@@ -218,7 +217,7 @@ merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
         if (n_wids == 0)
             continue;
         /* Calculate normalizer for weights along the way. */
-        succ_prob = find_word_succ(lm, node, word_succ, seen, wids, n_wids);
+        succ_prob = find_word_succ(lm, node, word_succ, cset, wids, n_wids);
         if (garray_size(word_succ) == 0)
             continue;
         else if (garray_size(word_succ) == 1) {
@@ -299,7 +298,7 @@ main(int argc, char *argv[])
     vocab_map_t *vm;
     vocab_map_iter_t *vi;
     ngram_trie_t *lm;
-    bitvec_t *seen;
+    bitvec_t *cset;
     logmath_t *lmath;
     dict_t *dict, *vdict;
     FILE *fh;
@@ -345,10 +344,10 @@ main(int argc, char *argv[])
         return 1;
     fclose(fh);
 
-    seen = bitvec_alloc(dict_size(dict));
-    if (merge_homos(lm, ngram_trie_root(lm), vm, seen) < 0)
+    cset = bitvec_alloc(dict_size(dict));
+    if (merge_homos(lm, ngram_trie_root(lm), vm, cset) < 0)
         return 1;
-    bitvec_free(seen);
+    bitvec_free(cset);
 
     if (recalc_bowts(lm) < 0)
         return 1;
