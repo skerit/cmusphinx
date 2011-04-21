@@ -56,10 +56,13 @@ static int latgen_search_free(search_t *base);
 static char const *latgen_search_hyp(search_t *base, int32 *out_score);
 static int32 latgen_search_prob(search_t *base);
 static seg_iter_t *latgen_search_seg_iter(search_t *base, int32 *out_score);
+static search_t *latgen_search_init(search_t *other, cmd_ln_t *config, acmod_t *acmod,
+            dict2pid_t *d2p);
+
 
 static searchfuncs_t latgen_funcs = {
     /* name: */   "latgen",
-    NULL,
+    /* init: */   latgen_search_init,
     /* free: */   latgen_search_free,
     /* decode: */ latgen_search_decode,
     /* hyp: */      latgen_search_hyp,
@@ -113,9 +116,10 @@ latgen_search_query(void)
 }
 
 search_t *
-latgen_init(cmd_ln_t *config,
-	    dict2pid_t *d2p,
-            ngram_model_t *lm)
+latgen_search_init(search_t *other,
+            cmd_ln_t *config,
+            acmod_t *acmod,
+	    dict2pid_t *d2p)
 {
     latgen_search_t *latgen;
     int32 wip;
@@ -124,14 +128,13 @@ latgen_init(cmd_ln_t *config,
     search_base_init(&latgen->base, &latgen_funcs,
                      config, NULL, d2p);
     latgen->d2p = dict2pid_retain(d2p);
-    latgen->lmath = logmath_retain(ngram_model_get_lmath(lm));
-    latgen->lm = ngram_model_retain(lm);
+    latgen->lmath = logmath_retain(acmod->lmath);
 
     latgen->outarcdir = cmd_ln_str_r(config, "-arcdumpdir");
 
     /* NOTE: this is one larger than the actual history size for a
      * language model state. */
-    latgen->max_n_hist = ngram_model_get_size(lm) - 1;
+    latgen->max_n_hist = 16; // FIXME
     latgen->lmhist = ckd_calloc(latgen->max_n_hist,
                                 sizeof(*latgen->lmhist));
     latgen->active_nodes = garray_init(0, sizeof(int32));

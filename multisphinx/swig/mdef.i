@@ -3,6 +3,12 @@ typedef struct bin_mdef_s {
 } Mdef;
 
 %extend Mdef {
+	Mdef(Config *config, char const *filename) {
+		return bin_mdef_read(config, filename);
+	}
+	~Mdef() {
+		bin_mdef_free($self);
+	}
 	int ciphone_id(char const *ciphone) {
 		return bin_mdef_ciphone_id($self, ciphone);
 	}

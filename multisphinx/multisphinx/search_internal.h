@@ -61,7 +61,7 @@
 struct searchfuncs_s {
     char const *name;
 
-    search_t *(*init)(cmd_ln_t *config, acmod_t *acmod, dict2pid_t *d2p);
+    search_t *(*init)(search_t *other, cmd_ln_t *config, acmod_t *acmod, dict2pid_t *d2p);
     int (*free)(search_t *search);   /**< Free search-specific stuff. */
     int (*decode)(search_t *search); /**< Decode an utterance. */
 

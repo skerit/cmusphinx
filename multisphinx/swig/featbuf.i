@@ -3,6 +3,12 @@ typedef struct featbuf_s {
 } FeatBuf;
 
 %extend FeatBuf {
+	FeatBuf(Config *c) {
+		return featbuf_init(c);
+	}
+	~FeatBuf() {
+		featbuf_free($self);
+	}
 	void producer_start_utt(char *uttid) {
 		/* FIXME: Need to copy uttid or something. */
 		/* FIXME: Also, exceptions, etc. */
@@ -12,12 +18,12 @@ typedef struct featbuf_s {
 		/* FIXME: exceptions, etc. */
 		featbuf_producer_end_utt($self);
 	}
-	void shutdown() {
+	void producer_shutdown() {
 		featbuf_producer_shutdown($self);
 	}
-	int producer_process_raw(void *indata, int inlen, bool full_utt=false) {
-		return featbuf_producer_process_raw($self, indata,
-						    inlen / sizeof(int16),
+	int producer_process_raw(short const *SDATA, size_t NSAMP, bool full_utt=false) {
+		return featbuf_producer_process_raw($self, SDATA,
+						    NSAMP / sizeof(int16),
 						    full_utt);
 	}
 %pythoncode %{

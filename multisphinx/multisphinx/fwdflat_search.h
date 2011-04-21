@@ -51,9 +51,6 @@
 
 searchfuncs_t const *fwdflat_search_query(void);
 
-search_t *fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
-                              dict2pid_t *d2p);
-
 vocab_map_t *fwdflat_search_set_vocab_map(search_t *search,
                                           vocab_map_t *vm);
 

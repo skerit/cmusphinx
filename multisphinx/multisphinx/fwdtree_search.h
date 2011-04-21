@@ -50,6 +50,4 @@
 
 searchfuncs_t const *fwdtree_search_query(void);
 
-search_t *fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod, dict2pid_t *d2p);
-
 #endif /* __FWDTREE_SEARCH_H__ */

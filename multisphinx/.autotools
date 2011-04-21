@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configurations>
-<configuration id="org.eclipse.linuxtools.cdt.autotools.core.configuration.build.1684644072">
-<option id="configure" value="configure"/>
+<configuration id="org.eclipse.linuxtools.cdt.autotools.core.configuration.build.1710749305">
+<option id="configure" value="CFLAGS=&quot;-g -Wall&quot; configure"/>
 <option id="configdir" value=""/>
 <option id="cache-file" value=""/>
 <option id="help" value="false"/>

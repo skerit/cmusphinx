@@ -50,7 +50,13 @@ int search_factory_free(search_factory_t *dcf);
 /**
  * Construct a new search from the factory, optionally overriding some parameters.
  */
-search_t *search_factory_create(search_factory_t *dcf, char const *name, ...);
+search_t *search_factory_create(search_factory_t *dcf, search_t *other, char const *name, ...);
+
+/**
+ * Construct a new search from the factory, optionally overriding some parameters.
+ */
+search_t *search_factory_create_argv(search_factory_t *dcf, search_t *other, char const *name,
+				     int argc, char const *argv[]);
 
 /**
  * Get the feature buffer from the search factory.

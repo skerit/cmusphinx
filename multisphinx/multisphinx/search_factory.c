@@ -24,6 +24,9 @@ struct search_factory_s
 {
     int refcnt;
 
+    int argc;
+    char **argv;
+
     featbuf_t *fb;
     cmd_ln_t *config;
     logmath_t *lmath;
@@ -194,11 +197,18 @@ search_factory_t *
 search_factory_init_argv(int argc, char const *argv[])
 {
     search_factory_t *dcf;
+    int i;
 
     dcf = ckd_calloc(1, sizeof(*dcf));
     dcf->refcnt = 1;
 
-    dcf->config = cmd_ln_parse_r(NULL, ms_args_def, argc, (char **)argv, FALSE);
+    dcf->argc = argc;
+    dcf->argv = ckd_calloc(argc, sizeof(*dcf->argv));
+    for (i = 0; i < argc; ++i)
+        dcf->argv[i] = ckd_salloc(argv[i]);
+
+    dcf->config
+            = cmd_ln_parse_r(NULL, ms_args_def, dcf->argc, dcf->argv, FALSE);
     if (dcf->config == NULL)
         goto error_out;
     init_defaults(dcf->config);
@@ -226,30 +236,30 @@ search_factory_init(char const *key, char const *val, ...)
         v = va_arg(args, char const *);
         if (v == NULL)
             E_ABORT("Odd number of arguments passed to search_factory_init(), giving up");
-        ++argc;
-    }
-    va_end(args);
+            ++argc;
+        }
+        va_end(args);
 
-    argv = ckd_calloc(argc * 2 + 2, sizeof(*argv));
-    argv[0] = key;
-    argv[1] = val;
-    va_start(args, val);
-    if (key != NULL)
+        argv = ckd_calloc(argc * 2 + 2, sizeof(*argv));
+        argv[0] = key;
+        argv[1] = val;
+        va_start(args, val);
+        if (key != NULL)
         argc = 2;
-    else
+        else
         argc = 0;
-    while ((k = va_arg(args, char const *))!= NULL)
-    {
-        v = va_arg(args, char const *);
-        argv[argc++] = k;
-        argv[argc++] = v;
-    }
-    va_end(args);
+        while ((k = va_arg(args, char const *))!= NULL)
+        {
+            v = va_arg(args, char const *);
+            argv[argc++] = k;
+            argv[argc++] = v;
+        }
+        va_end(args);
 
-    sf = search_factory_init_argv(argc, argv);
-    ckd_free(argv);
-    return sf;
-}
+        sf = search_factory_init_argv(argc, argv);
+        ckd_free(argv);
+        return sf;
+    }
 
 search_factory_t *
 search_factory_retain(search_factory_t *dcf)
@@ -260,10 +270,14 @@ search_factory_retain(search_factory_t *dcf)
 
 int search_factory_free(search_factory_t *dcf)
 {
+    int i;
     if (dcf == NULL)
         return 0;
     if (--dcf->refcnt > 0)
         return dcf->refcnt;
+    for (i = 0; i < dcf->argc; ++i)
+        ckd_free(dcf->argv[i]);
+    ckd_free(dcf->argv);
     acmod_free(dcf->acmod);
     cmd_ln_free_r(dcf->config);
     dict2pid_free(dcf->d2p);
@@ -291,7 +305,9 @@ search_factory_find(search_factory_t *dcf, char const *name)
 }
 
 search_t *
-search_factory_create_argv(search_factory_t *dcf, char const *name, int argc, char const *argv[])
+search_factory_create_argv(search_factory_t *dcf, search_t *other,
+        char const *name, int argc,
+        char const *argv[])
 {
     /* Find the matching search module. */
     searchfuncs_t *sf;
@@ -306,26 +322,32 @@ search_factory_create_argv(search_factory_t *dcf, char const *name, int argc, ch
     }
 
     /* Copy and override the configuration with extra parameters. */
-    config = cmd_ln_parse_r(cmd_ln_copy(dcf->config), ms_args_def, argc, (char **)argv, FALSE);
-
-    if (dcf->build_count > 0)
-        acmod = acmod_copy(dcf->acmod);
+    /* FIXME: mmory from arg comes from ... ?? */
+    if (argc > 0)
+        config = cmd_ln_parse_r(cmd_ln_copy(dcf->config), ms_args_def, argc, (char **)argv, FALSE);
     else
-        acmod = dcf->acmod;
-    ++dcf->build_count;
+        config = cmd_ln_copy(dcf->config);
 
     /* FIXME: clone dictionary and language model here... */
-    return (*sf->init)(config, acmod, dcf->d2p);
+    if (dcf->build_count > 0)
+    acmod = acmod_copy(dcf->acmod);
+    else
+    acmod = dcf->acmod;
+    ++dcf->build_count;
+
+    return (*sf->init)(other, config, acmod, dcf->d2p);
 }
 
 search_t *
-search_factory_create(search_factory_t *dcf, char const *name, ...)
+search_factory_create(search_factory_t *dcf, search_t *other, char const *name, ...)
 {
     char const *k, *v, **argv;
     search_t *search;
     va_list args;
     int argc;
 
+    if (name == NULL)
+        return search_factory_create_argv(dcf, other, NULL, 0, NULL);
     va_start(args, name);
     argc = 0;
     while ((k = va_arg(args, char *)) != NULL)
@@ -333,25 +355,25 @@ search_factory_create(search_factory_t *dcf, char const *name, ...)
         v = va_arg(args, char *);
         if (v == NULL)
             E_ABORT("Odd number of arguments passed to search_factory_create(), giving up");
-        ++argc;
-    }
-    va_end(args);
+            ++argc;
+        }
+        va_end(args);
 
-    argv = ckd_calloc(argc * 2, sizeof(*argv));
-    va_start(args, name);
-    argc = 0;
-    while ((k = va_arg(args, char *))!= NULL)
-    {
-        v = va_arg(args, char *);
-        argv[argc++] = k;
-        argv[argc++] = v;
-    }
-    va_end(args);
+        argv = ckd_calloc(argc * 2, sizeof(*argv));
+        va_start(args, name);
+        argc = 0;
+        while ((k = va_arg(args, char *))!= NULL)
+        {
+            v = va_arg(args, char *);
+            argv[argc++] = k;
+            argv[argc++] = v;
+        }
+        va_end(args);
 
-    search = search_factory_create_argv(dcf, name, argc, argv);
-    ckd_free(argv);
-    return search;
-}
+        search = search_factory_create_argv(dcf, other, name, argc, argv);
+        ckd_free(argv);
+        return search;
+    }
 
 featbuf_t *
 search_factory_featbuf(search_factory_t *dcf)

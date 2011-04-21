@@ -51,8 +51,4 @@
 
 searchfuncs_t const *latgen_search_query(void);
 
-search_t *latgen_init(cmd_ln_t *config,
-			 dict2pid_t *d2p,
-                         ngram_model_t *lm);
-
 #endif /* __LATGEN_SEARCH_H__ */

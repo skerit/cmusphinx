@@ -38,6 +38,7 @@
 /* System headers. */
 #include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
 
 /* SphinxBase headers. */
 #include <sphinxbase/pio.h>
@@ -72,7 +73,6 @@ typedef struct batch_decoder_s
  */
 static const arg_t ms_args_def[] =
 { MULTISPHINX_OPTIONS,
-/* Various options specific to batch-mode processing. */
 /* Control file. */
 { "-ctl",
 ARG_STRING,
@@ -113,10 +113,11 @@ ARG_STRING,
 CMDLN_EMPTY_OPTION
 };
 
-static int batch_decoder_decode_adc(batch_decoder_t *bd, FILE *infh, int sf, int ef)
+static int batch_decoder_decode_adc(batch_decoder_t *bd, FILE *infh, int sf,
+        int ef)
 {
     featbuf_t *fb = search_factory_featbuf(bd->sf);
-    int16 *buf;
+    int16 buf[2048];
 
     if (ef != -1)
     {
@@ -130,19 +131,23 @@ static int batch_decoder_decode_adc(batch_decoder_t *bd, FILE *infh, int sf, int
     fseek(infh, cmd_ln_int32_r(bd->config, "-adchdr") + sf * sizeof(int16),
             SEEK_SET);
 
-    while (sf < ef) {
-        size_t nread = fread(buf, sizeof(int16), 2048, infh);
+    while (ef == -1 || sf < ef)
+    {
+        size_t nread = 2048;
+        if (ef != -1 && nread > ef - sf)
+            nread = ef - sf;
+        nread = fread(buf, sizeof(int16), 2048, infh);
         if (nread == 0)
             break;
-        if (nread > ef - sf)
-            nread = ef - sf;
         featbuf_producer_process_raw(fb, buf, nread, FALSE);
+        //usleep((int)((double)nread / 16000 * 1000000));
         sf += nread;
     }
     return 0;
 }
 
-static int batch_decoder_decode_mfc(batch_decoder_t *bd, FILE *infh, int sf, int ef)
+static int batch_decoder_decode_mfc(batch_decoder_t *bd, FILE *infh, int sf,
+        int ef)
 {
     featbuf_t *fb = search_factory_featbuf(bd->sf);
     mfcc_t **mfcs;
@@ -157,8 +162,8 @@ static int batch_decoder_decode_mfc(batch_decoder_t *bd, FILE *infh, int sf, int
     return rv;
 }
 
-int batch_decoder_decode(batch_decoder_t *bd, char *file,
-        char *uttid, int32 sf, int32 ef)
+int batch_decoder_decode(batch_decoder_t *bd, char *file, char *uttid,
+        int32 sf, int32 ef)
 {
     featbuf_t *fb;
     FILE *infh;
@@ -193,9 +198,9 @@ int batch_decoder_decode(batch_decoder_t *bd, char *file,
     featbuf_producer_start_utt(fb, uttid);
 
     if (cmd_ln_boolean_r(bd->config, "-adcin"))
-        rv = batch_decoder_decode_adc(bd, infh, sf, ef);
+    rv = batch_decoder_decode_adc(bd, infh, sf, ef);
     else
-        rv = batch_decoder_decode_mfc(bd, infh, sf, ef);
+    rv = batch_decoder_decode_mfc(bd, infh, sf, ef);
 
     featbuf_producer_end_utt(fb);
 
@@ -254,43 +259,45 @@ int batch_decoder_run(batch_decoder_t *bd)
             batch_decoder_decode(bd, file, uttid, sf, ef);
         }
     }
+    featbuf_producer_shutdown(search_factory_featbuf(bd->sf));
     return 0;
 }
 
-static int
-search_cb(search_t *search, search_event_t *evt, void *udata)
+static int search_cb(search_t *search, search_event_t *evt, void *udata)
 {
-    batch_decoder_t *bd = (batch_decoder_t *)udata;
+    batch_decoder_t *bd = (batch_decoder_t *) udata;
     struct timeval tv;
 
     gettimeofday(&tv, NULL);
     E_INFO("%s: time delta %f ",
-            search_name(search),
-           ((double)tv.tv_sec + (double)tv.tv_usec / 1000000)
-           - ((double)bd->utt_start.tv_sec + (double)bd->utt_start.tv_usec / 1000000));
-    switch (evt->event) {
-    case SEARCH_PARTIAL_RESULT: {
-        int32 score;
-        char const *hyp = search_hyp(search, &score);
-        E_INFOCONT("partial: %s (%d)\n", hyp, score);
-        break;
-    }
-    case SEARCH_START_UTT:
+    search_name(search),
+    ((double)tv.tv_sec + (double)tv.tv_usec / 1000000)
+    - ((double)bd->utt_start.tv_sec + (double)bd->utt_start.tv_usec / 1000000));
+    switch (evt->event)
+    {
+        case SEARCH_PARTIAL_RESULT:
+        {
+            int32 score;
+            char const *hyp = search_hyp(search, &score);
+            E_INFOCONT("partial: %s (%d)\n", hyp, score);
+            break;
+        }
+        case SEARCH_START_UTT:
         E_INFOCONT("start\n");
         break;
-    case SEARCH_END_UTT:
+        case SEARCH_END_UTT:
         E_INFOCONT("end\n");
         break;
-    case SEARCH_FINAL_RESULT: {
-        int32 score;
-        char const *hyp = search_hyp(search, &score);
-        E_INFOCONT("full: %s (%d)\n", hyp, score);
-        break;
-    }
+        case SEARCH_FINAL_RESULT:
+        {
+            int32 score;
+            char const *hyp = search_hyp(search, &score);
+            E_INFOCONT("full: %s (%d)\n", hyp, score);
+            break;
+        }
     }
     return 0;
 }
-
 
 batch_decoder_t *
 batch_decoder_init_argv(int argc, char *argv[])
@@ -313,12 +320,12 @@ batch_decoder_init_argv(int argc, char *argv[])
 
     if ((bd->sf = search_factory_init_cmdln(bd->config)) == NULL)
     goto error_out;
-    if ((bd->fwdtree = search_factory_create(bd->sf, "fwdtree", NULL)) == NULL)
+    if ((bd->fwdtree = search_factory_create(bd->sf, NULL, "fwdtree", NULL)) == NULL)
     goto error_out;
-    if ((bd->fwdflat = search_factory_create(bd->sf, "fwdflat", NULL)) == NULL)
+    if ((bd->fwdflat = search_factory_create(bd->sf, bd->fwdtree, "fwdflat", NULL)) == NULL)
     goto error_out;
-    if ((bd->latgen = search_factory_create(bd->sf, "latgen", NULL)) == NULL)
-    goto error_out;
+    //if ((bd->latgen = search_factory_create(bd->sf, "latgen", NULL)) == NULL)
+    //goto error_out;
 
     search_link(bd->fwdtree, bd->fwdflat, "fwdtree", FALSE);
     // search_link(bd->fwdflat, bd->latgen, "fwdflat", TRUE);
@@ -340,7 +347,7 @@ int batch_decoder_free(batch_decoder_t *bd)
     cmd_ln_free_r(bd->config);
     search_free(bd->fwdtree);
     search_free(bd->fwdflat);
-    search_free(bd->latgen);
+    //search_free(bd->latgen);
     search_factory_free(bd->sf);
     ckd_free(bd);
     return 0;
@@ -352,7 +359,7 @@ int main(int argc, char *argv[])
 
     if ((bd = batch_decoder_init_argv(argc, argv)) == NULL)
     {
-        E_ERROR("Failed to initialize decoder");
+        E_ERROR("Failed to initialize decoder\n");
         return 1;
     }
 

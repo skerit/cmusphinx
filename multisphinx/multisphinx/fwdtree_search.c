@@ -353,6 +353,9 @@ static int32 fwdtree_search_prob(search_t *base);
 static seg_iter_t *fwdtree_search_seg_iter(search_t *base, int32 *out_score);
 static bptbl_t *fwdtree_search_bptbl(search_t *base);
 static ngram_model_t *fwdtree_search_lmset(search_t *base);
+static search_t *fwdtree_search_init(search_t *other, cmd_ln_t *config,
+        acmod_t *acmod, dict2pid_t *d2p);
+
 
 static searchfuncs_t fwdtree_funcs = {
     /* name: */   "fwdtree",
@@ -403,8 +406,8 @@ fwdtree_search_query(void)
     return &fwdtree_funcs;
 }
 
-search_t *
-fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod, dict2pid_t *d2p)
+static search_t *
+fwdtree_search_init(search_t *other, cmd_ln_t *config, acmod_t *acmod, dict2pid_t *d2p)
 {
     fwdtree_search_t *fts;
     const char *path;
@@ -2099,6 +2102,9 @@ fwdtree_search_finish(search_t *base)
 
     /* This is the number of frames processed. */
     cf = acmod_frame(search_acmod(fts));
+
+    /* Final result for this thread. */
+    search_call_event(base, SEARCH_FINAL_RESULT, cf);
 
     /* Finalize the backpointer table. */
     bptbl_finalize(fts->bptbl);
