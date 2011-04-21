@@ -305,8 +305,17 @@ create_outgoing_links(latgen_search_t *latgen,
         int32 nodeidx = garray_ent(latgen->active_nodes, int32, i);
         ms_latnode_t *node = ms_lattice_get_node_idx
             (latgen->output_lattice, nodeidx);
+        int node_n_links;
 
-        n_links += create_outgoing_links_one(latgen, node, arc);
+        node_n_links = create_outgoing_links_one(latgen, node, arc);
+        if (node_n_links == 0) {
+            /* This node is a goner, prune it. */
+        }
+        else {
+            /* Prune dangling incoming links (with no active right
+             * context) */
+        }
+        n_links += node_n_links;
     }
 
     return n_links;
@@ -333,11 +342,6 @@ latgen_search_process_arcs(latgen_search_t *latgen,
         /* Create new outgoing links for each source node. */
         n_arc += create_outgoing_links(latgen, itor);
     }
-
-    /* Prune dangling incoming links (with no active right context)
-     * for all active nodes. */
-
-    /* Prune unreachable nodes. */
 
     return n_arc;
 }
