@@ -3,7 +3,8 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "ms_lattice.h"
+#include <multisphinx/ms_lattice.h>
+
 #include "test_macros.h"
 
 int

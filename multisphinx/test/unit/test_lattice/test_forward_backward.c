@@ -3,8 +3,9 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "ms_lattice.h"
-#include "ngram_model.h"
+#include <multisphinx/ms_lattice.h>
+#include <sphinxbase/ngram_model.h>
+
 #include "test_macros.h"
 
 int

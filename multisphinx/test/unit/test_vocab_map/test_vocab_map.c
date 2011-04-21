@@ -4,13 +4,12 @@
  * @author David Huggins-Daines <dhuggins@cs.cmu.edu>
  */
 
-#include <pocketsphinx.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
 
-#include "pocketsphinx_internal.h"
-#include "vocab_map.h"
+#include <multisphinx/pocketsphinx_internal.h>
+#include <multisphinx/vocab_map.h>
 #include "test_macros.h"
 
 int

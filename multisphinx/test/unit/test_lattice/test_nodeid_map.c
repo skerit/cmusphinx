@@ -3,7 +3,8 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "nodeid_map.h"
+#include <multisphinx/nodeid_map.h>
+
 #include "test_macros.h"
 
 int

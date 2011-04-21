@@ -1,10 +1,10 @@
-#include <pocketsphinx.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 
 #include <sphinxbase/feat.h>
 
+#include <multisphinx/pocketsphinx.h>
 #include <multisphinx/fwdtree_search.h>
 #include <multisphinx/fwdflat_search.h>
 #include <multisphinx/acmod.h>

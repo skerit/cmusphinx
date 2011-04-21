@@ -5,8 +5,9 @@
 
 #include <sphinxbase/feat.h>
 
-#include "pocketsphinx_internal.h"
-#include "fwdflat_search.h"
+#include <multisphinx/pocketsphinx_internal.h>
+#include <multisphinx/fwdflat_search.h>
+
 #include "test_macros.h"
 
 int

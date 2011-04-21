@@ -1,11 +1,10 @@
-#include <pocketsphinx.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 
 #include <sphinxbase/feat.h>
 
-
+#include <multisphinx/pocketsphinx.h>
 #include <multisphinx/fwdtree_search.h>
 #include <multisphinx/fwdflat_search.h>
 #include <multisphinx/acmod.h>
@@ -77,7 +76,7 @@ main(int argc, char *argv[])
 
 	/* This will wait for search to complete. */
 	E_INFO("Waiting for end of utt\n");
-	featbuf_producer_end_utt(fb, -1);
+	featbuf_producer_end_utt(fb);
 	E_INFO("Done waiting\n");
 
 	/* Retrieve the hypothesis from the search thread. */

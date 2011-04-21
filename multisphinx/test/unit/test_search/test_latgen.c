@@ -1,14 +1,15 @@
-#include <pocketsphinx.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 
 #include <sphinxbase/feat.h>
 
-#include "pocketsphinx_internal.h"
-#include "fwdtree_search.h"
-#include "fwdflat_search.h"
-#include "latgen_search.h"
+#include <multisphinx/pocketsphinx.h>
+#include <multisphinx/pocketsphinx_internal.h>
+#include <multisphinx/fwdtree_search.h>
+#include <multisphinx/fwdflat_search.h>
+#include <multisphinx/latgen_search.h>
+
 #include "test_macros.h"
 
 int
@@ -74,7 +75,7 @@ main(int argc, char *argv[])
 
 	/* This will wait for search to complete. */
 	E_INFO("Waiting for end of utt\n");
-	featbuf_producer_end_utt(fb, -1);
+	featbuf_producer_end_utt(fb);
 	E_INFO("Done waiting\n");
 
 	/* Retrieve the hypothesis from the search thread. */
