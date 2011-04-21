@@ -55,6 +55,8 @@
 
 typedef struct huff_code_s huff_code_t;
 
+typedef uint64 huff_cw_t;
+
 /**
  * Create a codebook from 32-bit integer data.
  */
@@ -103,12 +105,12 @@ FILE *huff_code_detach(huff_code_t *hc);
 /**
  * Encode an integer, writing it to the file handle, if any.
  */
-int huff_code_encode_int(huff_code_t *hc, int32 sym, uint32 *outcw);
+int huff_code_encode_int(huff_code_t *hc, int32 sym, huff_cw_t *outcw);
 
 /**
  * Encode a string, writing it to the file handle, if any.
  */
-int huff_code_encode_str(huff_code_t *hc, char const *sym, uint32 *outcw);
+int huff_code_encode_str(huff_code_t *hc, char const *sym, huff_cw_t *outcw);
 
 /**
  * Decode an integer, reading it from the file if no data given.

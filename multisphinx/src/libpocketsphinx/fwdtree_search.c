@@ -2012,7 +2012,7 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     assert(fi == frame_idx);
 
     /* Forward retired backpointers to the arc buffer. */
-    arc_buffer_producer_sweep(ps_search_output_arcs(fts), TRUE);
+    arc_buffer_producer_sweep(ps_search_output_arcs(fts), FALSE);
 
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
@@ -2065,7 +2065,7 @@ fwdtree_search_finish(ps_search_t *base)
     bptbl_finalize(fts->bptbl);
 
     /* Finalize the output arc buffer. */
-    arc_buffer_producer_end_utt(ps_search_output_arcs(fts), TRUE);
+    arc_buffer_producer_end_utt(ps_search_output_arcs(fts), FALSE);
 
     /* Deactivate channels lined up for the next frame */
     /* First, root channels of HMM tree */

@@ -60,7 +60,8 @@ typedef struct huff_codeword_s {
         int32 ival;
         char *sval;
     } r;
-    uint32 nbits, codeword;
+    int nbits;
+    huff_cw_t codeword; /* FIXME: Use a variable array or something */
 } huff_codeword_t;
 
 enum {
@@ -72,7 +73,7 @@ struct huff_code_s {
     int16 refcount;
     uint8 maxbits;
     uint8 type;
-    uint32 *firstcode;
+    huff_cw_t *firstcode;
     uint32 *numl;
     huff_codeword_t **syms;
     hash_table_t *codewords;
@@ -158,12 +159,12 @@ static void
 huff_code_canonicalize(huff_code_t *hc, huff_node_t *root)
 {
     glist_t agenda;
-    uint32 *nextcode;
+    huff_cw_t *nextcode;
     int i, ncw;
 
     hc->firstcode = ckd_calloc(hc->maxbits+1, sizeof(*hc->firstcode));
     hc->syms = ckd_calloc(hc->maxbits+1, sizeof(*hc->syms));
-    hc->numl = ckd_calloc(hc->maxbits+1, sizeof(*nextcode));
+    hc->numl = ckd_calloc(hc->maxbits+1, sizeof(*hc->numl));
     nextcode = ckd_calloc(hc->maxbits+1, sizeof(*nextcode));
 
     /* Traverse the tree, annotating it with the actual bit
@@ -205,7 +206,7 @@ huff_code_canonicalize(huff_code_t *hc, huff_node_t *root)
         else {
             /* Initialize codebook entry, which also retains symbol pointer. */
             huff_codeword_t *cw;
-            uint32 codeword = nextcode[node->nbits] & ((1 << node->nbits) - 1);
+            huff_cw_t codeword = nextcode[node->nbits] & ((1ULL << node->nbits) - 1);
             cw = hc->syms[node->nbits] + (codeword - hc->firstcode[node->nbits]);
             cw->nbits = node->nbits;
             cw->r.sval = node->r.sval; /* Will copy ints too... */
@@ -248,7 +249,7 @@ huff_code_build_int(int32 const *values, int32 const *frequencies, int nvals)
     /* Now build the tree, which gives us codeword lengths. */
     root = huff_code_build_tree(q);
     heap_destroy(q);
-    if (root == NULL || root->nbits > 32) {
+    if (root == NULL || root->nbits > 64) {
         E_ERROR("Huffman trees currently limited to 32 bits\n");
         huff_node_free_int(root);
         huff_code_free(hc);
@@ -288,8 +289,8 @@ huff_code_build_str(char * const *values, int32 const *frequencies, int nvals)
     /* Now build the tree, which gives us codeword lengths. */
     root = huff_code_build_tree(q);
     heap_destroy(q);
-    if (root == NULL || root->nbits > 32) {
-        E_ERROR("Huffman trees currently limited to 32 bits\n");
+    if (root == NULL || root->nbits > 64) {
+        E_ERROR("Huffman trees currently limited to 64 bits\n");
         huff_node_free_str(root, TRUE);
         huff_code_free(hc);
         return NULL;
@@ -329,10 +330,10 @@ huff_code_read(FILE *infh)
     /* Read the symbol tables. */
     hc->codewords = hash_table_new(hc->maxbits, HASH_CASE_YES);
     for (i = 1; i <= hc->maxbits; ++i) {
-        if (fread(&hc->firstcode[i], 4, 1, infh) != 1)
+        if (fread(&hc->firstcode[i], sizeof(*hc->firstcode), 1, infh) != 1)
             goto error_out;
-        SWAP_BE_32(&hc->firstcode[i]);
-        if (fread(&hc->numl[i], 4, 1, infh) != 1)
+        SWAP_BE_64(&hc->firstcode[i]);
+        if (fread(&hc->numl[i], sizeof(*hc->numl), 1, infh) != 1)
             goto error_out;
         SWAP_BE_32(&hc->numl[i]);
         hc->syms[i] = ckd_calloc(hc->numl[i], sizeof(**hc->syms));
@@ -378,16 +379,17 @@ huff_code_write(huff_code_t *hc, FILE *outfh)
     fputc(0, outfh);
     /* For each codeword length: */
     for (i = 1; i <= hc->maxbits; ++i) {
-        uint32 val;
+        huff_cw_t val;
+        uint32 val32;
 
         /* Starting code, number of codes. */
         val = hc->firstcode[i];
         /* Canonically big-endian (like the data itself) */
-        SWAP_BE_32(&val);
-        fwrite(&val, 4, 1, outfh);
-        val = hc->numl[i];
-        SWAP_BE_32(&val);
-        fwrite(&val, 4, 1, outfh);
+        SWAP_BE_64(&val);
+        fwrite(&val, sizeof(val), 1, outfh);
+        val32 = hc->numl[i];
+        SWAP_BE_32(&val32);
+        fwrite(&val, sizeof(val32), 1, outfh);
 
         /* Symbols for each code (FIXME: Should compress these too) */
         for (j = 0; j < hc->numl[i]; ++j) {
@@ -407,12 +409,12 @@ huff_code_write(huff_code_t *hc, FILE *outfh)
 }
 
 int
-huff_code_dump_codebits(FILE *dumpfh, uint32 nbits, uint32 codeword)
+huff_code_dump_codebits(FILE *dumpfh, uint32 nbits, huff_cw_t codeword)
 {
     uint32 i;
 
     for (i = 0; i < nbits; ++i)
-        fputc((codeword & (1<<(nbits-i-1))) ? '1' : '0', dumpfh);
+        fputc((codeword & (1ULL<<(nbits-i-1))) ? '1' : '0', dumpfh);
     return 0;
 }
 
@@ -497,7 +499,7 @@ huff_code_detach(huff_code_t *hc)
 }
 
 int
-huff_code_encode_int(huff_code_t *hc, int32 sym, uint32 *outcw)
+huff_code_encode_int(huff_code_t *hc, int32 sym, huff_cw_t *outcw)
 {
     huff_codeword_t *cw;
 
@@ -513,7 +515,7 @@ huff_code_encode_int(huff_code_t *hc, int32 sym, uint32 *outcw)
 }
 
 int
-huff_code_encode_str(huff_code_t *hc, char const *sym, uint32 *outcw)
+huff_code_encode_str(huff_code_t *hc, char const *sym, huff_cw_t *outcw)
 {
     huff_codeword_t *cw;
 
@@ -534,7 +536,7 @@ huff_code_decode_data(huff_code_t *hc, char const **inout_data,
     char const *data = *inout_data;
     char const *end = data + *inout_data_len;
     int offset = *inout_offset;
-    uint32 cw;
+    huff_cw_t cw;
     int cwlen;
     int byte;
 
@@ -575,7 +577,7 @@ huff_code_decode_data(huff_code_t *hc, char const **inout_data,
 static huff_codeword_t *
 huff_code_decode_fh(huff_code_t *hc)
 {
-    uint32 cw;
+    huff_cw_t cw;
     int cwlen;
     int byte;
 

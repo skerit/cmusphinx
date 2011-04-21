@@ -74,10 +74,17 @@
 #define SWAP_FLOAT32(x)	SWAP_INT32((int32 *) x)
 
 /* Macro to byteswap a float64 variable.  x = ptr to variable */
-#define SWAP_FLOAT64(x)	{ int *low = (int *) (x), *high = (int *) (x) + 1,\
-			      temp;\
-			  SWAP_INT32(low);  SWAP_INT32(high);\
-			  temp = *low; *low = *high; *high = temp;}
+#define SWAP_FLOAT64(x)	{                       \
+        int32 tmp;                              \
+        memcpy(&tmp, x, 4);                     \
+        SWAP_INT32(&tmp);                       \
+        memcpy(x, &tmp, 4);                     \
+        memcpy(&tmp, ((char *)x) + 4, 4);       \
+        SWAP_INT32(&tmp);                       \
+        memcpy(((char *)x) + 4, &tmp, 4);       \
+        memcpy(&tmp, x, 4);                     \
+        memcpy(x, ((char *)x) + 4, 4);          \
+        memcpy(((char *)x) + 4, &tmp, 4);}
 
 #ifdef WORDS_BIGENDIAN
 #define SWAP_BE_64(x)

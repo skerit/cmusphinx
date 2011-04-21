@@ -191,7 +191,7 @@ typedef struct {
 		return dict_wordstr($self, wid);
 	}
 	char const *basestr(int wid) {
-		return dict_wordstr($self, wid);
+		return dict_basestr($self, wid);
 	}
 	int basewid(int wid) {
 		return dict_basewid($self, wid);
@@ -210,6 +210,25 @@ typedef struct {
 	}
 	int last_phone(int wid) {
 		return dict_last_phone($self, wid);
+	}
+	int size() {
+		return dict_size($self);
+	}
+	int num_fillers() {
+		return dict_num_fillers($self);
+	}
+	int startwid() {
+		return dict_startwid($self);
+	}
+	int finishwid() {
+		return dict_finishwid($self);
+	}
+	int silwid() {
+		return dict_silwid($self);
+	}
+	/* FIXME: Pythonify this, eventually. */
+	int pron(int wid, int pos) {
+		return dict_pron($self, wid, pos);
 	}
 }
 
