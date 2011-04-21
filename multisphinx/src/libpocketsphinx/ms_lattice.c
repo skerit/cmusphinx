@@ -897,7 +897,7 @@ ms_lattice_traverse_frame(ms_lattice_t *l, int frame_idx)
         if (node->id.sf == frame_idx)
             break;
     }
-    if (start == -1)
+    if (start == garray_size(l->node_list))
         return NULL;
 
     itor = ckd_calloc(1, sizeof(*itor));

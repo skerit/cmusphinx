@@ -158,6 +158,12 @@ main(int argc, char *argv[])
 	TEST_ASSERT(ms_latnode_iter_get(itor) == e);
 	TEST_ASSERT(ms_latnode_iter_next(itor) == NULL);
 
+	itor = ms_lattice_traverse_frame(l, 2);
+	TEST_ASSERT(itor == NULL);
+
+	itor = ms_lattice_traverse_frame(l, 999);
+	TEST_ASSERT(itor == NULL);
+
 	ms_lattice_free(l);
 	return 0;
 }
