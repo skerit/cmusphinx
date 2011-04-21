@@ -941,7 +941,8 @@ fwdtree_search_start(ps_search_t *base)
     fts->oldest_bp = NO_BP;
 
     /* Reset output arc buffer. */
-    arc_buffer_producer_start_utt(ps_search_output_arcs(fts));
+    arc_buffer_producer_start_utt(ps_search_output_arcs(fts),
+                                  base->uttid);
 
     /* Reset word lattice. */
     for (i = 0; i < n_words; ++i)
@@ -2141,7 +2142,7 @@ fwdtree_search_decode(ps_search_t *base)
         arc_buffer_producer_shutdown(base->output_arcs);
         return -1;
     }
-
+    base->uttid = base->acmod->uttid;
     nfr = 0;
     fwdtree_search_start(base);
     while ((k = fwdtree_search_one_frame(fts)) > 0) {

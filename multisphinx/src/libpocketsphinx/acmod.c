@@ -286,6 +286,7 @@ acmod_consumer_start_utt(acmod_t *acmod, int timeout)
     E_INFO("Finished waiting for start of utt\n");
     acmod->output_frame = 0;
     acmod->eou = FALSE;
+    acmod->uttid = featbuf_uttid(acmod->fb);
 
     return 0;
 }

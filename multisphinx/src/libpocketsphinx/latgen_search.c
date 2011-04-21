@@ -637,8 +637,6 @@ latgen_search_process_arcs(latgen_search_t *latgen,
         return 0;
 #endif
 
-    if (arcfh)
-        fprintf(arcfh, "__START_FRAME %d\n", frame_idx);
     /* Iterate over all arcs exiting in this frame */
     for (n_arc = 0; itor; itor = (sarc_t *)arc_buffer_iter_next
              (latgen->input_arcs, &itor->arc)) {
@@ -664,8 +662,6 @@ latgen_search_process_arcs(latgen_search_t *latgen,
         /* n_arc += create_outgoing_links(latgen, itor); */
         ++n_arc;
     }
-    if (arcfh)
-        fprintf(arcfh, "__END_FRAME %d\n", frame_idx);
 
     return n_arc;
 }
@@ -724,6 +720,7 @@ latgen_search_decode(ps_search_t *base)
     E_INFO("waiting for arc buffer start\n");
     if (arc_buffer_consumer_start_utt(latgen->input_arcs, -1) < 0)
         return -1;
+    base->uttid = arc_buffer_uttid(latgen->input_arcs);
 
     /* Create lattice and initial epsilon node. */
     latgen->output_lattice = ms_lattice_init(latgen->lmath,
@@ -737,11 +734,16 @@ latgen_search_decode(ps_search_t *base)
 
     /* Start logging arcs. */
     if (latgen->outarcdir) {
-        char uttno[16];
         char *outfile;
-        sprintf(uttno, "%08d", latgen->ctr++);
-        outfile = string_join(latgen->outarcdir, "/", uttno, ".arc", NULL);
-        arcfh = fopen(outfile, "w");
+        char *basedir;
+        outfile = string_join(latgen->outarcdir, "/",
+                              base->uttid, ".arc", NULL);
+        basedir = ckd_salloc(outfile);
+        path2dirname(outfile, basedir);
+        build_directory(basedir);
+        if ((arcfh = fopen(outfile, "w")) == NULL)
+            E_FATAL_SYSTEM("WTF %s", outfile);
+        ckd_free(basedir);
         ckd_free(outfile);
     }
 

@@ -78,6 +78,7 @@ struct featbuf_s {
      * Flag signifying that featbuf_cancel() was called.  Reset by
      * featbuf_start_utt().  */
     int canceled;
+    char *uttid;
 };
 
 static int
@@ -283,7 +284,7 @@ featbuf_consumer_end_utt(featbuf_t *fb, int sidx)
 }
 
 int
-featbuf_producer_start_utt(featbuf_t *fb)
+featbuf_producer_start_utt(featbuf_t *fb, char *uttid)
 {
     /* Reset the sync array. */
     sync_array_reset(fb->sa);
@@ -291,6 +292,7 @@ featbuf_producer_start_utt(featbuf_t *fb)
     /* Set utterance processing state. */
     fb->beginutt = TRUE;
     fb->endutt = FALSE;
+    fb->uttid = uttid;
 
     fe_start_utt(fb->fe);
 
@@ -551,3 +553,8 @@ featbuf_set_rawfh(featbuf_t *fb, FILE *logfh)
     return 0;
 }
 
+char *
+featbuf_uttid(featbuf_t *fb)
+{
+    return fb->uttid;
+}

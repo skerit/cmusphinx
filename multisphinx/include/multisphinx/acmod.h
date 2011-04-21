@@ -139,6 +139,7 @@ struct acmod_s {
     int output_frame;          /**< Index of next frame to score. */
     int compallsen;            /**< Compute all senone scores. */
     int eou;                   /**< At end of utterance input. */
+    char *uttid;
 };
 typedef struct acmod_s acmod_t;
 

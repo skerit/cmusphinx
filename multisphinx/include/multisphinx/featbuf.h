@@ -186,7 +186,7 @@ int featbuf_consumer_end_utt(featbuf_t *fb, int sidx);
  * @param fb Feature buffer.
  * @return 0, or <0 on error (but that is unlikely)
  */
-int featbuf_producer_start_utt(featbuf_t *fb);
+int featbuf_producer_start_utt(featbuf_t *fb, char *uttid);
 
 /**
  * End processing for an utterance.
@@ -263,5 +263,7 @@ int featbuf_producer_process_cep(featbuf_t *fb,
  */
 int featbuf_producer_process_feat(featbuf_t *fb,
                                   mfcc_t **feat);
+
+char *featbuf_uttid(featbuf_t *fb);
 
 #endif /* __FEATBUF_H__ */

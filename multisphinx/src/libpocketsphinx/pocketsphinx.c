@@ -228,12 +228,16 @@ ps_init(cmd_ln_t *config)
                                               fwdtree_search_lmset(ps->fwdtree));
         }
         acmod_free(acmod2);
-        /* ps->latgen = latgen_init(config, d2p, ps_search_output_arcs(ps->fwdflat)); */
+        ps->latgen = latgen_init(config, d2p,
+                                 fwdflat_search_lmset(ps->fwdflat),
+                                 ps_search_output_arcs(ps->fwdflat));
     }
     else {
         /* FIXME: Eventually this will take a language model too so it
          * can do N-Gram expansion. */
-        /* ps->latgen = latgen_init(config, d2p, ps_search_output_arcs(ps->fwdtree)); */
+        ps->latgen = latgen_init(config, d2p,
+                                 fwdtree_search_lmset(ps->fwdtree),
+                                 ps_search_output_arcs(ps->fwdtree));
     }
 
     /* Release pointers to things now owned by the searches. */
@@ -248,7 +252,7 @@ ps_init(cmd_ln_t *config)
     ps_search_run(ps->fwdtree);
     if (ps->fwdflat)
         ps_search_run(ps->fwdflat);
-    /* ps_search_run(ps->latgen); */
+    ps_search_run(ps->latgen);
 
     return ps;
 error_out:
@@ -393,7 +397,7 @@ ps_start_utt(ps_decoder_t *ps, char const *uttid)
         ++ps->uttno;
     }
 
-    return featbuf_producer_start_utt(ps->fb);
+    return featbuf_producer_start_utt(ps->fb, ps->uttid);
 }
 
 int

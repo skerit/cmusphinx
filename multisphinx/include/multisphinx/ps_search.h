@@ -97,6 +97,7 @@ struct ps_search_s {
     int32 post;            /**< Utterance posterior probability. */
     int32 n_words;         /**< Number of words known to search (may
                               be less than in the dictionary) */
+    char *uttid;
 
     struct arc_buffer_s *output_arcs; /**< Arc buffer, used to forward search
                                        * results to next pass of search. */

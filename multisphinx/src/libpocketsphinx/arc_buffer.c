@@ -52,6 +52,7 @@ typedef enum arc_buffer_state_s {
 struct arc_buffer_s {
     int refcount;
     char *name;
+    char *uttid;
     /* FIXME: Probably non-orthogonal set of synchronization primitives */
     sbmtx_t *mtx;
     sbsem_t *start, *release;
@@ -210,12 +211,13 @@ arc_buffer_consumer_end_utt(arc_buffer_t *fab)
 }
 
 void
-arc_buffer_producer_start_utt(arc_buffer_t *fab)
+arc_buffer_producer_start_utt(arc_buffer_t *fab, char *uttid)
 {
     fab->active_sf = fab->next_sf = 0;
     fab->active_arc = 0;
     fab->next_idx = 0;
     fab->state = ARC_BUFFER_RUNNING;
+    fab->uttid = uttid;
     garray_reset(fab->arcs);
     garray_reset(fab->sf_idx);
     /* If we ever have multiple consumers this will be sbsem_set() */
@@ -507,4 +509,10 @@ arc_buffer_consumer_release(arc_buffer_t *fab, int first_sf)
     arc_buffer_unlock(fab);
 
     return 0;
+}
+
+char *
+arc_buffer_uttid(arc_buffer_t *fab)
+{
+    return fab->uttid;
 }

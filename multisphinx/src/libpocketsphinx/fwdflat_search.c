@@ -563,7 +563,8 @@ fwdflat_search_start(ps_search_t *base)
         ffs->word_idx[i] = NO_BP;
 
     /* Reset output arc buffer. */
-    arc_buffer_producer_start_utt(ps_search_output_arcs(ffs));
+    arc_buffer_producer_start_utt(ps_search_output_arcs(ffs),
+                                  base->uttid);
 
     /* Create word HMM for start, end, and silence words. */
     for (i = ps_search_start_wid(ffs);
@@ -1143,7 +1144,8 @@ fwdflat_search_decode(ps_search_t *base)
         arc_buffer_producer_shutdown(base->output_arcs);
         return -1;
     }
-    fwdflat_search_start(ps_search_base(ffs));
+    base->uttid = base->acmod->uttid;
+    fwdflat_search_start(base);
     while (!acmod_eou(base->acmod)) {
         int end_win;
 
@@ -1318,4 +1320,11 @@ fwdflat_search_set_vocab_map(ps_search_t *search,
     fwdflat_search_t *ffs = (fwdflat_search_t *)search;
     ffs->vmap = vm;
     return vm;
+}
+
+ngram_model_t *
+fwdflat_search_lmset(ps_search_t *base)
+{
+    fwdflat_search_t *ffs = (fwdflat_search_t *)base;
+    return ffs->lmset;
 }

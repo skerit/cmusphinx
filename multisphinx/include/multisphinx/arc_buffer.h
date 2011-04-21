@@ -111,7 +111,7 @@ void arc_buffer_dump(arc_buffer_t *fab, dict_t *dict);
 /**
  * Start processing for an utterance and wake up consumer.
  */
-void arc_buffer_producer_start_utt(arc_buffer_t *fab);
+void arc_buffer_producer_start_utt(arc_buffer_t *fab, char *uttid);
 
 /**
  * Sweep newly available arcs from the bptbl into the arc buffer and
@@ -222,5 +222,7 @@ int arc_buffer_consumer_release(arc_buffer_t *fab, int first_sf);
  * It releases all remaining arcs being waited on.
  */
 int arc_buffer_consumer_end_utt(arc_buffer_t *fab);
+
+char *arc_buffer_uttid(arc_buffer_t *fab);
 
 #endif /* __ARC_BUFFER_H__ */
