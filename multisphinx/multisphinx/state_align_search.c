@@ -324,11 +324,58 @@ state_align_search_free(search_t *search)
     return 0;
 }
 
+static char const *
+state_align_search_hyp(search_t *base, int32 *out_score)
+{
+    state_align_search_t *sas = (state_align_search_t *)base;
+    alignment_iter_t *itor;
+    size_t len;
+
+    if (out_score)
+        *out_score = sas->best_score;
+
+    if (sas->al == NULL)
+        return NULL;
+
+    ckd_free(base->hyp_str);
+    len = 0;
+    for (itor = alignment_words(sas->al); itor; itor = alignment_iter_next(itor)) {
+        alignment_entry_t *ent = alignment_iter_get(itor);
+        char *w = dict_wordstr(search_dict(base), ent->id.wid);
+        len += strlen(w) + 2;
+    }
+    base->hyp_str = ckd_calloc(1, len);
+    for (itor = alignment_words(sas->al); itor; itor = alignment_iter_next(itor)) {
+        alignment_entry_t *ent = alignment_iter_get(itor);
+        char *w = dict_wordstr(search_dict(base), ent->id.wid);
+        strcat(base->hyp_str, w);
+        strcat(base->hyp_str, " ");
+    }
+    base->hyp_str[strlen(base->hyp_str)-1] = '\0';
+
+    return base->hyp_str;
+}
+
+static int32
+state_align_search_prob(search_t *base)
+{
+    return 0;
+}
+
+static ps_seg_t *
+state_align_search_seg_iter(search_t *base, int32 *out_score)
+{
+    return NULL;
+}
+
 static searchfuncs_t state_align_search_funcs = {
     /* name: */   "state_align",
     /* init: */   state_align_search_init,
     /* free: */   state_align_search_free,
     /* decode: */ state_align_search_decode,
+    /* hyp: */    state_align_search_hyp,
+    /* prob: */   state_align_search_prob,
+    /* seg_iter: */state_align_search_seg_iter
 };
 
 searchfuncs_t const *
