@@ -122,6 +122,11 @@ SPHINXBASE_EXPORT
 int err_set_logfile(char const *file);
 
 /**
+ * Exit with SIGABRT after error message
+ */
+#define E_ABORT  _E__pr_header(__FILE__, __LINE__, "FATAL_ERROR"),_E__abort_error
+
+/**
  * Exit with non-zero status after error message 
  */
 #define E_FATAL  _E__pr_header(__FILE__, __LINE__, "FATAL_ERROR"),_E__die_error

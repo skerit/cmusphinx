@@ -347,6 +347,7 @@ static ngram_model_t *fwdtree_search_lmset(search_t *base);
 
 static searchfuncs_t fwdtree_funcs = {
     /* name: */   "fwdtree",
+    /* init: */   fwdtree_search_init,
     /* free: */   fwdtree_search_free,
     /* decode: */ fwdtree_search_decode,
     /* hyp: */      fwdtree_search_hyp,
@@ -394,14 +395,13 @@ fwdtree_search_query(void)
 }
 
 search_t *
-fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
-                    dict_t *dict, dict2pid_t *d2p)
+fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod, dict2pid_t *d2p)
 {
     fwdtree_search_t *fts;
     const char *path;
 
     fts = ckd_calloc(1, sizeof(*fts));
-    search_init(&fts->base, &fwdtree_funcs, config, acmod, dict, d2p);
+    search_base_init(&fts->base, &fwdtree_funcs, config, acmod, d2p);
     fts->hmmctx = hmm_context_init(bin_mdef_n_emit_state(acmod->mdef),
                                    acmod->tmat->tp,
                                    NULL, acmod->mdef->sseq);
@@ -418,18 +418,18 @@ fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
     fwdtree_search_calc_beams(fts);
 
     /* Allocate a billion different tables for stuff. */
-    fts->word_chan = ckd_calloc(dict_size(dict),
+    fts->word_chan = ckd_calloc(dict_size(d2p->dict),
                                 sizeof(*fts->word_chan));
-    fts->word_active = bitvec_alloc(dict_size(dict));
-    fts->last_ltrans = ckd_calloc(dict_size(dict),
+    fts->word_active = bitvec_alloc(dict_size(d2p->dict));
+    fts->last_ltrans = ckd_calloc(dict_size(d2p->dict),
                                   sizeof(*fts->last_ltrans));
 
     fts->bptbl = bptbl_init("fwdtree",
                             d2p, cmd_ln_int32_r(config, "-latsize"), 256);
-    fts->word_idx = ckd_calloc(dict_size(dict), sizeof(*fts->word_idx));
+    fts->word_idx = ckd_calloc(dict_size(d2p->dict), sizeof(*fts->word_idx));
 
     /* Allocate active word list array */
-    fts->active_word_list = ckd_calloc_2d(2, dict_size(dict),
+    fts->active_word_list = ckd_calloc_2d(2, dict_size(d2p->dict),
                                           sizeof(**fts->active_word_list));
 
     /* Load language model(s) */

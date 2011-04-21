@@ -303,7 +303,7 @@ state_align_search_init(cmd_ln_t *config,
 
     sas = ckd_calloc(1, sizeof(*sas));
     search_init(search_base(sas), &state_align_search_funcs,
-                   config, acmod, al->d2p->dict, al->d2p);
+                   config, acmod, al->d2p);
     sas->hmmctx = hmm_context_init(bin_mdef_n_emit_state(acmod->mdef),
                                    acmod->tmat->tp, NULL, acmod->mdef->sseq);
     if (sas->hmmctx == NULL) {

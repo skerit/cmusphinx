@@ -499,6 +499,21 @@ cmd_ln_appl_exit()
     cmd_ln_free();
 }
 
+cmd_ln_t *
+cmd_ln_copy(cmd_ln_t *cmdln)
+{
+    hash_iter_t *itor;
+    cmd_ln_t *copy;
+
+    copy = ckd_calloc(1, sizeof(*copy));
+    copy->refcount = 1;
+    copy->ht = hash_table_new(cmdln->ht->size, cmdln->ht->nocase);
+    for (itor = hash_table_iter(cmdln->ht); itor; itor = hash_table_iter_next(itor)) {
+        hash_table_enter(copy->ht, itor->ent->key, itor->ent->val);
+    }
+    return copy;
+}
+
 
 cmd_ln_t *
 cmd_ln_parse_r(cmd_ln_t *inout_cmdln, const arg_t * defn, int32 argc, char *argv[], int strict)

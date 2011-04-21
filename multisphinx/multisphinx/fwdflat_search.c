@@ -198,6 +198,7 @@ static ngram_model_t *fwdflat_search_lmset(search_t *base);
 
 static searchfuncs_t fwdflat_funcs = {
     /* name: */   "fwdflat",
+    /* init: */   fwdflat_search_init,
     /* free: */   fwdflat_search_free,
     /* decode: */ fwdflat_search_decode,
     /* hyp: */      fwdflat_search_hyp,
@@ -257,15 +258,13 @@ fwdflat_search_query(void)
 }
 
 search_t *
-fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
-                    dict_t *dict, dict2pid_t *d2p,
-                    ngram_model_t *lmset)
+fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod, dict2pid_t *d2p)
 {
     fwdflat_search_t *ffs;
     const char *path;
 
     ffs = ckd_calloc(1, sizeof(*ffs));
-    search_init(&ffs->base, &fwdflat_funcs, config, acmod, dict, d2p);
+    search_base_init(&ffs->base, &fwdflat_funcs, config, acmod, d2p);
     ffs->hmmctx = hmm_context_init(bin_mdef_n_emit_state(acmod->mdef),
                                    acmod->tmat->tp, NULL, acmod->mdef->sseq);
     if (ffs->hmmctx == NULL) {
@@ -304,10 +303,8 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
             + search_n_words(ffs) * sizeof(*ffs->active_word_list)) / 1024);
 
     /* Load language model(s) */
-    if (lmset) {
-        ffs->lmset = ngram_model_retain(lmset);
-    }
-    else if ((path = cmd_ln_str_r(config, "-lmctl"))) {
+    /* FIXME: need to be able to share language model with fwdtree. */
+    if ((path = cmd_ln_str_r(config, "-lmctl"))) {
         ffs->lmset = ngram_model_set_read(config, path, acmod->lmath);
         if (ffs->lmset == NULL) {
             E_ERROR("Failed to read language model control file: %s\n",

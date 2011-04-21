@@ -66,6 +66,7 @@ typedef struct ps_seg_s ps_seg_t;
 struct searchfuncs_s {
     char const *name;
 
+    search_t *(*init)(cmd_ln_t *config, acmod_t *acmod, dict2pid_t *d2p);
     int (*free)(search_t *search);   /**< Free search-specific stuff. */
     int (*decode)(search_t *search); /**< Decode an utterance. */
 
@@ -124,9 +125,9 @@ struct search_s {
 /**
  * Initialize base structure.
  */
-void search_init(search_t *search, searchfuncs_t *vt,
-                 cmd_ln_t *config, acmod_t *acmod, dict_t *dict,
-                 dict2pid_t *d2p);
+void search_base_init(search_t *search, searchfuncs_t *vt,
+                      cmd_ln_t *config, acmod_t *acmod,
+                      dict2pid_t *d2p);
 
 /**
  * De-initialize base structure.

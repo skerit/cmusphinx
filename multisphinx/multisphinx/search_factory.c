@@ -9,9 +9,15 @@
 #include <sphinxbase/feat.h>
 #include <sphinxbase/fe.h>
 #include <sphinxbase/err.h>
+#include <sphinxbase/strfuncs.h>
 
 #include <multisphinx/cmdln_macro.h>
 #include <multisphinx/search_factory.h>
+#include <multisphinx/fwdtree_search.h>
+#include <multisphinx/fwdflat_search.h>
+#include <multisphinx/latgen_search.h>
+
+#include "search_internal.h"
 
 struct search_factory_s
 {
@@ -27,7 +33,7 @@ struct search_factory_s
     glist_t searches;
 };
 
-static const arg_t ps_args_def[] =
+static const arg_t ms_args_def[] =
 { POCKETSPHINX_OPTIONS, CMDLN_EMPTY_OPTION };
 
 /* Feature and front-end parameters that may be in feat.params */
@@ -70,9 +76,10 @@ static void add_file(cmd_ln_t *config, const char *arg, const char *hmmdir,
 
 static void init_defaults(cmd_ln_t *config)
 {
-    char const *hmmdir, *lmfile, *dictfile, *featparams;
+    char const *hmmdir, *featparams;
 
 #ifdef MODELDIR
+    char const *lmfile, *dictfile;
     /* Set default acoustic and language models. */
     hmmdir = cmd_ln_str_r(config, "-hmm");
     lmfile = cmd_ln_str_r(config, "-lm");
@@ -140,17 +147,17 @@ static void init_defaults(cmd_ln_t *config)
     }
 }
 
-static int search_factory_initialize(search_factory_t *dcf, cmd_ln_t *config)
+static int search_factory_initialize(search_factory_t *dcf)
 {
-    dcf->config = cmd_ln_retain(config);
     if ((dcf->lmath = logmath_init(
-            (float64) cmd_ln_float32_r(config, "-logbase"), 0, FALSE)) == NULL)
+            (float64) cmd_ln_float32_r(dcf->config, "-logbase"), 0, FALSE))
+            == NULL)
         return -1;
-    if ((dcf->fb = featbuf_init(config)) == NULL)
+    if ((dcf->fb = featbuf_init(dcf->config)) == NULL)
         return -1;
-    if ((dcf->acmod = acmod_init(config, dcf->lmath, dcf->fb)) == NULL)
+    if ((dcf->acmod = acmod_init(dcf->config, dcf->lmath, dcf->fb)) == NULL)
         return -1;
-    if ((dcf->dict = dict_init(config, dcf->acmod->mdef)) == NULL)
+    if ((dcf->dict = dict_init(dcf->config, dcf->acmod->mdef)) == NULL)
         return -1;
     if ((dcf->d2p = dict2pid_build(dcf->acmod->mdef, dcf->dict)) == NULL)
         return -1;
@@ -158,62 +165,78 @@ static int search_factory_initialize(search_factory_t *dcf, cmd_ln_t *config)
     /* If search engines become pluggable then we would scan for them
      * here.  For now we just build the list from the ones that are
      * known inside multisphinx. */
-    dcf->searches = glist_add_ptr(dcf->searches, fwdtree_search_query());
-    dcf->searches = glist_add_ptr(dcf->searches, fwdflat_search_query());
-    dcf->searches = glist_add_ptr(dcf->searches, latgen_search_query());
+    dcf->searches = glist_add_ptr(dcf->searches,
+            (void *) fwdtree_search_query());
+    dcf->searches = glist_add_ptr(dcf->searches,
+            (void *) fwdflat_search_query());
+    dcf->searches
+            = glist_add_ptr(dcf->searches, (void *) latgen_search_query());
 
     return 0;
 }
 
-config_t *
-search_factory_config(char const *key, char const *val, ...)
-{
-    char const *k, *v, **argv;
-    config_t *config;
-    va_list args;
-    int argc;
-
-    va_start(args, val);
-    argc = 0;
-    while ((k = va_arg(args, char const *))!= NULL) {
-        v = va_arg(args, char const *);
-        if (v == NULL) {
-            E_ERROR("Odd number of arguments passed to search_factory_config(), giving up");
-            return NULL;
-        }
-        ++argc;
-    }
-    va_end(args);
-
-    argv = ckd_calloc(argc, sizeof(*argv));
-    va_start(args, val);
-    argc = 0;
-    while ((k = va_arg(args, char const *))!= NULL) {
-        argv[argc++] = k;
-        v = va_arg(args, char const *);
-        argv[argc++] = v;
-    }
-    va_end(args);
-
-    config = cmd_ln_parse_r(NULL, ps_args_def, argc, argv, FALSE);
-    ckd_free(argv);
-    return config;
-}
-
+/**
+ * Construct a search factory from an array of strings.
+ */
 search_factory_t *
-search_factory_init(config_t *config)
+search_factory_init_argv(int argc, char const *argv[])
 {
     search_factory_t *dcf;
 
     dcf = ckd_calloc(1, sizeof(*dcf));
     dcf->refcnt = 1;
 
-    if (search_factory_initialize(dcf, config) < 0) {
-        search_factory_free(dcf);
-        return NULL;
-    }
+    dcf->config = cmd_ln_parse_r(NULL, ms_args_def, argc, (char **)argv, FALSE);
+    if (dcf->config == NULL)
+        goto error_out;
+    init_defaults(dcf->config);
+    if (search_factory_initialize(dcf) < 0)
+        goto error_out;
 
     return dcf;
+
+    error_out: search_factory_free(dcf);
+    return NULL;
+}
+
+search_factory_t *
+search_factory_init(char const *key, char const *val, ...)
+{
+    search_factory_t *sf;
+    char const *k, *v, **argv;
+    va_list args;
+    int argc;
+
+    va_start(args, val);
+    argc = 0;
+    while ((k = va_arg(args, char const *)) != NULL)
+    {
+        v = va_arg(args, char const *);
+        if (v == NULL)
+            E_ABORT("Odd number of arguments passed to search_factory_init(), giving up");
+        ++argc;
+    }
+    va_end(args);
+
+    argv = ckd_calloc(argc * 2 + 2, sizeof(*argv));
+    argv[0] = key;
+    argv[1] = val;
+    va_start(args, val);
+    if (key != NULL)
+        argc = 2;
+    else
+        argc = 0;
+    while ((k = va_arg(args, char const *))!= NULL)
+    {
+        v = va_arg(args, char const *);
+        argv[argc++] = k;
+        argv[argc++] = v;
+    }
+    va_end(args);
+
+    sf = search_factory_init_argv(argc, argv);
+    ckd_free(argv);
+    return sf;
 }
 
 search_factory_t *
@@ -233,14 +256,73 @@ int search_factory_free(search_factory_t *dcf)
     return 0;
 }
 
+static searchfuncs_t *
+search_factory_find(search_factory_t *dcf, char const *name)
+{
+    gnode_t *gn;
+
+    for (gn = dcf->searches; gn; gn = gnode_next(gn))
+    {
+        searchfuncs_t *sf = (searchfuncs_t *) gnode_ptr(gn);
+        if (0 == strcmp(sf->name, name))
+            return sf;
+    }
+    return NULL;
+}
+
+search_t *
+search_factory_create_argv(search_factory_t *dcf, char const *name, int argc, char const *argv[])
+{
+    /* Find the matching search module. */
+    searchfuncs_t *sf;
+    cmd_ln_t *config;
+
+    sf = search_factory_find(dcf, name);
+    if (sf == NULL)
+    {
+        E_ERROR("No search module %s found\n", name);
+        return NULL;
+    }
+
+    /* Copy and override the configuration with extra parameters. */
+    config = cmd_ln_parse_r(cmd_ln_copy(dcf->config), ms_args_def, argc, (char **)argv, FALSE);
+
+    return (*sf->init)(config, dcf->acmod, dcf->d2p);
+}
+
 search_t *
 search_factory_create(search_factory_t *dcf, char const *name, ...)
 {
+    char const *k, *v, **argv;
     search_t *search;
+    va_list args;
+    int argc;
 
-    /* Find the matching search module. */
+    va_start(args, name);
+    argc = 0;
+    while ((k = va_arg(args, char *)) != NULL)
+    {
+        v = va_arg(args, char *);
+        if (v == NULL)
+            E_ABORT("Odd number of arguments passed to search_factory_create(), giving up");
+        ++argc;
+    }
+    va_end(args);
 
-    /* Copy and override the configuration with extra parameters. */
+    argv = ckd_calloc(argc * 2, sizeof(*argv));
+    va_start(args, name);
+    argc = 0;
+    while ((k = va_arg(args, char *))!= NULL)
+    {
+        v = va_arg(args, char *);
+        argv[argc++] = k;
+        argv[argc++] = v;
+    }
+    va_end(args);
+
+    search = search_factory_create_argv(dcf, name, argc, argv);
+    ckd_free(argv);
+    return search;
 }
 
 featbuf_t *

@@ -54,7 +54,6 @@
  *		functions into one, eliminated validation, and simplified the interface.
  */
 
-
 #ifndef _LIBUTIL_CMD_LN_H_
 #define _LIBUTIL_CMD_LN_H_
 
@@ -71,10 +70,10 @@
  *  
  * Configuration parameters, optionally parsed from the command line.
  */
-  
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 #if 0
 /* Fool Emacs. */
@@ -85,11 +84,12 @@ extern "C" {
  * @struct arg_t
  * Argument definition structure.
  */
-typedef struct arg_s {
-	char const *name;   /**< Name of the command line switch */
-	int type;           /**< Type of the argument in question */
-	char const *deflt;  /**< Default value (as a character string), or NULL if none */
-	char const *doc;    /**< Documentation/description string */
+typedef struct arg_s
+{
+    char const *name; /**< Name of the command line switch */
+    int type; /**< Type of the argument in question */
+    char const *deflt; /**< Default value (as a character string), or NULL if none */
+    char const *doc; /**< Documentation/description string */
 } arg_t;
 
 /**
@@ -160,7 +160,6 @@ typedef struct arg_s {
 #define REQARG_FLOAT64 (ARG_FLOAT64 | ARG_REQUIRED)
 /* @} */
 
-
 /**
  * Helper macro to stringify enums and other non-string values for
  * default arguments.
@@ -193,7 +192,8 @@ typedef struct cmd_ln_s cmd_ln_t;
  * @return A cmd_ln_t* containing the results of command line parsing, or NULL on failure.
  */
 SPHINXBASE_EXPORT
-cmd_ln_t *cmd_ln_init(cmd_ln_t *inout_cmdln, arg_t const *defn, int32 strict, ...);
+cmd_ln_t *cmd_ln_init(cmd_ln_t *inout_cmdln, arg_t const *defn, int32 strict,
+        ...);
 
 /**
  * Retain ownership of a command-line argument set.
@@ -202,6 +202,17 @@ cmd_ln_t *cmd_ln_init(cmd_ln_t *inout_cmdln, arg_t const *defn, int32 strict, ..
  */
 SPHINXBASE_EXPORT
 cmd_ln_t *cmd_ln_retain(cmd_ln_t *cmdln);
+
+/**
+ * Copy a command-line argument set.
+ *
+ * @note This is a shallow copy - the strings for the parameter names and values remain
+ * shared.  However any changes made with cmd_ln_set_*_r() will only be reflected in the copy.
+ *
+ * @return pointer to new command-line argument set.
+ */
+SPHINXBASE_EXPORT
+cmd_ln_t *cmd_ln_copy(cmd_ln_t *cmdln);
 
 /**
  * Release a command-line argument set and all associated strings.
@@ -232,13 +243,13 @@ int cmd_ln_free_r(cmd_ln_t *cmdln);
  **/
 SPHINXBASE_EXPORT
 cmd_ln_t *cmd_ln_parse_r(cmd_ln_t *inout_cmdln, /**< In/Out: Previous command-line to update,
-                                                     or NULL to create a new one. */
-                         arg_t const *defn,	/**< In: Array of argument name definitions */
-                         int32 argc,		/**< In: Number of actual arguments */
-                         char *argv[],		/**< In: Actual arguments */
-                         int32 strict           /**< In: Fail on duplicate or unknown
-                                                   arguments, or no arguments? */
-    );
+ or NULL to create a new one. */
+arg_t const *defn, /**< In: Array of argument name definitions */
+int32 argc, /**< In: Number of actual arguments */
+char *argv[], /**< In: Actual arguments */
+int32 strict /**< In: Fail on duplicate or unknown
+ arguments, or no arguments? */
+);
 
 /**
  * Parse an arguments file by deliminating on " \r\t\n" and putting each tokens
@@ -248,13 +259,13 @@ cmd_ln_t *cmd_ln_parse_r(cmd_ln_t *inout_cmdln, /**< In/Out: Previous command-li
  */
 SPHINXBASE_EXPORT
 cmd_ln_t *cmd_ln_parse_file_r(cmd_ln_t *inout_cmdln, /**< In/Out: Previous command-line to update,
-                                                     or NULL to create a new one. */
-                              arg_t const *defn,   /**< In: Array of argument name definitions*/
-                              char const *filename,/**< In: A file that contains all
-                                                     the arguments */ 
-                              int32 strict         /**< In: Fail on duplicate or unknown
-                                                     arguments, or no arguments? */
-    );
+ or NULL to create a new one. */
+arg_t const *defn, /**< In: Array of argument name definitions*/
+char const *filename,/**< In: A file that contains all
+ the arguments */
+int32 strict /**< In: Fail on duplicate or unknown
+ arguments, or no arguments? */
+);
 
 /**
  * Access the generic type union for a command line argument.
@@ -372,10 +383,9 @@ int cmd_ln_exists_r(cmd_ln_t *cmdln, char const *name);
  * attributes as given in defn.
  */
 SPHINXBASE_EXPORT
-void cmd_ln_print_help_r (cmd_ln_t *cmdln,
-                          FILE *fp,	   /**< In: File to which to print */
-			  const arg_t *defn /**< In: Array of argument name definitions */
-	);
+void cmd_ln_print_help_r(cmd_ln_t *cmdln, FILE *fp, /**< In: File to which to print */
+const arg_t *defn /**< In: Array of argument name definitions */
+);
 
 /**
  * Non-reentrant version of cmd_ln_parse().
@@ -385,12 +395,12 @@ void cmd_ln_print_help_r (cmd_ln_t *cmdln,
  * @return 0 if successful, <0 if error.
  */
 SPHINXBASE_EXPORT
-int32 cmd_ln_parse(const arg_t *defn,  /**< In: Array of argument name definitions */
-                   int32 argc,	       /**< In: Number of actual arguments */
-                   char *argv[],       /**< In: Actual arguments */
-                   int32 strict        /**< In: Fail on duplicate or unknown
-                                          arguments, or no arguments? */
-	);
+int32 cmd_ln_parse(const arg_t *defn, /**< In: Array of argument name definitions */
+int32 argc, /**< In: Number of actual arguments */
+char *argv[], /**< In: Actual arguments */
+int32 strict /**< In: Fail on duplicate or unknown
+ arguments, or no arguments? */
+);
 
 /**
  * Parse an arguments file by deliminating on " \r\t\n" and putting each tokens
@@ -402,11 +412,11 @@ int32 cmd_ln_parse(const arg_t *defn,  /**< In: Array of argument name definitio
  * @return 0 if successful, <0 on error.
  */
 SPHINXBASE_EXPORT
-int32 cmd_ln_parse_file(const arg_t *defn,   /**< In: Array of argument name definitions*/
-			char const *filename,/**< In: A file that contains all the arguments */ 
-                        int32 strict         /**< In: Fail on duplicate or unknown
-                                                arguments, or no arguments? */
-	);
+int32 cmd_ln_parse_file(const arg_t *defn, /**< In: Array of argument name definitions*/
+char const *filename,/**< In: A file that contains all the arguments */
+int32 strict /**< In: Fail on duplicate or unknown
+ arguments, or no arguments? */
+);
 
 /**
  * Old application initialization routine for Sphinx3 code.
@@ -414,12 +424,11 @@ int32 cmd_ln_parse_file(const arg_t *defn,   /**< In: Array of argument name def
  * @deprecated This is deprecated in favor of the re-entrant API.
  */
 SPHINXBASE_EXPORT
-void cmd_ln_appl_enter(int argc,   /**< In: Number of actual arguments */
-		       char *argv[], /**< In: Number of actual arguments */
-		       char const* default_argfn, /**< In: default argument file name*/
-		       const arg_t *defn /**< Command-line argument definition */
-	);
-
+void cmd_ln_appl_enter(int argc, /**< In: Number of actual arguments */
+char *argv[], /**< In: Number of actual arguments */
+char const* default_argfn, /**< In: default argument file name*/
+const arg_t *defn /**< Command-line argument definition */
+);
 
 /**
  * Finalization routine corresponding to cmd_ln_appl_enter().
@@ -545,13 +554,11 @@ cmd_ln_t *cmd_ln_get(void);
  * @deprecated Use the re-entrant API instead.
  */
 SPHINXBASE_EXPORT
-void cmd_ln_free (void);
-
+void cmd_ln_free(void);
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif
-
 

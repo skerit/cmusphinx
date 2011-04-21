@@ -604,6 +604,8 @@ feat_array_alloc(feat_t * fcb, int32 nfr)
 void
 feat_array_free(mfcc_t ***feat)
 {
+    if (feat == NULL)
+        return;
     ckd_free(feat[0][0]);
     ckd_free_2d((void **)feat);
 }

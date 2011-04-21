@@ -59,6 +59,7 @@ static ps_seg_t *latgen_search_seg_iter(search_t *base, int32 *out_score);
 
 static searchfuncs_t latgen_funcs = {
     /* name: */   "latgen",
+    NULL,
     /* free: */   latgen_search_free,
     /* decode: */ latgen_search_decode,
     /* hyp: */      latgen_search_hyp,
@@ -120,8 +121,8 @@ latgen_init(cmd_ln_t *config,
     int32 wip;
 
     latgen = ckd_calloc(1, sizeof(*latgen));
-    search_init(&latgen->base, &latgen_funcs,
-                   config, NULL, d2p->dict, d2p);
+    search_base_init(&latgen->base, &latgen_funcs,
+                     config, NULL, d2p);
     latgen->d2p = dict2pid_retain(d2p);
     latgen->lmath = logmath_retain(ngram_model_get_lmath(lm));
     latgen->lm = ngram_model_retain(lm);

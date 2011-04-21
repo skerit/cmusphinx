@@ -18,19 +18,18 @@
 #include <multisphinx/acmod.h>
 
 typedef struct search_factory_s search_factory_t;
-typedef struct cmd_ln_s config_t;
 
 /**
- * Construct a set of configuration parameters.
- */
-config_t *search_factory_config(char const *key, char const *val, ...);
-
-/**
- * Construct a search factory from a set of parameters.
+ * Construct a search factory from a list of key-value pairs.
  *
  * This will initialize the various models needed for search initialization.
  */
-search_factory_t *search_factory_init(config_t *config);
+search_factory_t *search_factory_init(char const *key, char const *val, ...);
+
+/**
+ * Construct a search factory from an array of strings.
+ */
+search_factory_t *search_factory_init_argv(int argc, char const *argv[]);
 
 /**
  * Retain a reference to a search factory.

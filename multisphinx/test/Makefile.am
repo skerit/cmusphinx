@@ -12,10 +12,10 @@ check_PROGRAMS =				\
 	test_ngram_trie				\
 	test_ngram_trie_iteration		\
 	test_nodeid_map				\
-	test_partial_backward
+	test_partial_backward			\
+	test_search_factory
 
 TESTS = $(check_PROGRAMS)
 
 LDADD = $(top_builddir)/libmultisphinx.la
-INCLUDES = -I$(top_srcdir) -DTESTDATADIR=\"$(srcdir)/data\"
-
+INCLUDES = -I$(top_srcdir) -DTESTDATADIR=\"$(abs_srcdir)/data\"

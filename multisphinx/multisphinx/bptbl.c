@@ -50,7 +50,6 @@
 
 #include <multisphinx/bptbl.h>
 #include <multisphinx/search.h>
-
 #include "search_internal.h"
 #include "hmm.h"
 

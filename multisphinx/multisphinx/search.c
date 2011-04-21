@@ -46,27 +46,24 @@
 #include "search_internal.h"
 
 void
-search_init(search_t *search, searchfuncs_t *vt,
-            cmd_ln_t *config, acmod_t *acmod, dict_t *dict,
-            dict2pid_t *d2p)
+search_base_init(search_t *search, searchfuncs_t *vt,
+            cmd_ln_t *config, acmod_t *acmod, dict2pid_t *d2p)
 {
     ptmr_init(&search->t);
     search->vt = vt;
     search->config = cmd_ln_retain(config);
     if (acmod)
         search->acmod = acmod_retain(acmod);
-    if (d2p)
+    if (d2p) {
         search->d2p = dict2pid_retain(d2p);
-    else
-        search->d2p = NULL;
-    if (dict) {
-        search->dict = dict_retain(dict);
-        search->start_wid = dict_startwid(dict);
-        search->finish_wid = dict_finishwid(dict);
-        search->silence_wid = dict_silwid(dict);
-        search->n_words = dict_size(dict);
+        search->dict = dict_retain(d2p->dict);
+        search->start_wid = dict_startwid(d2p->dict);
+        search->finish_wid = dict_finishwid(d2p->dict);
+        search->silence_wid = dict_silwid(d2p->dict);
+        search->n_words = dict_size(d2p->dict);
     }
     else {
+        search->d2p = NULL;
         search->dict = NULL;
         search->start_wid = search->finish_wid = search->silence_wid = -1;
         search->n_words = 0;
