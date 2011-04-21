@@ -303,6 +303,12 @@ ms_lattice_get_idx_link(ms_lattice_t *l, ms_latlink_t *link)
     return garray_idx(l->link_list, link);
 }
 
+ms_latlink_t *
+ms_lattice_get_link_idx(ms_lattice_t *l, int32 idx)
+{
+    return garray_ptr(l->link_list, ms_latlink_t, idx);
+}
+
 ms_latnode_t *
 ms_lattice_get_node_idx(ms_lattice_t *l, int32 idx)
 {
@@ -982,6 +988,12 @@ ms_latnode_iter_get(ms_latnode_iter_t *itor)
     return ms_lattice_get_node_idx(itor->l, itor->cur);
 }
 
+int32
+ms_latnode_iter_get_idx(ms_latnode_iter_t *itor)
+{
+    return itor->cur;
+}
+
 void
 ms_latnode_iter_free(ms_latnode_iter_t *itor)
 {
@@ -1006,6 +1018,13 @@ ms_latnode_get_entry(ms_lattice_t *l, ms_latnode_t *node, int idx)
 {
     int32 linkid = garray_ent(node->entries, int32, idx);
     return garray_ptr(l->link_list, ms_latlink_t, linkid);
+}
+
+int32
+ms_latnode_get_entry_idx(ms_lattice_t *l,
+                         ms_latnode_t *node, int idx)
+{
+    return garray_ent(node->entries, int32, idx);
 }
 
 ms_latlink_t *

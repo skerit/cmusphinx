@@ -180,6 +180,15 @@ ms_latnode_t *ms_lattice_get_end(ms_lattice_t *l);
 ms_latlink_t *ms_lattice_link(ms_lattice_t *l,
 			      ms_latnode_t *src, ms_latnode_t *dest,
 			      int32 wid, int32 ascr);
+/**
+ * Get a link by index.
+ */
+ms_latlink_t *ms_lattice_get_link_idx(ms_lattice_t *l, int32 idx);
+
+/**
+ * Get a link's index.
+ */
+int32 ms_lattice_get_idx_link(ms_lattice_t *l, ms_latlink_t *link);
 
 /**
  * Read a lattice in HTK format.
@@ -225,6 +234,11 @@ ms_latnode_iter_t *ms_latnode_iter_next(ms_latnode_iter_t *itor);
 ms_latnode_t *ms_latnode_iter_get(ms_latnode_iter_t *itor);
 
 /**
+ * Get index of current node in traversal.
+ */
+int32 ms_latnode_iter_get_idx(ms_latnode_iter_t *itor);
+
+/**
  * Terminate traversal over lattice nodes.
  */
 void ms_latnode_iter_free(ms_latnode_iter_t *itor);
@@ -239,6 +253,12 @@ int ms_latnode_n_entries(ms_latnode_t *node);
  */
 ms_latlink_t *ms_latnode_get_entry(ms_lattice_t *l,
                                    ms_latnode_t *node, int idx);
+
+/**
+ * Get an entry index from a node.
+ */
+int32 ms_latnode_get_entry_idx(ms_lattice_t *l,
+                               ms_latnode_t *node, int idx);
 
 /**
  * Get number of exits.

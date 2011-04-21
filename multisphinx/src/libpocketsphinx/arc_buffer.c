@@ -254,6 +254,8 @@ arc_buffer_add_bps(arc_buffer_t *fab,
                         rcdelta_t delta;
                         assert(fab->tmp_rcscores[i] <= ent.score);
                         bitvec_set(sp->rc_bits, i);
+                        /* FIXME: Yeah, this is real dumb, since bptbl
+                         * has the deltas we need anyway. */
                         delta = ent.score - fab->tmp_rcscores[i];
                         garray_append(fab->rc_deltas, &delta);
                     }
@@ -276,6 +278,18 @@ arc_buffer_add_bps(arc_buffer_t *fab,
     if (next_idx == -1)
         next_idx = end;
     return next_idx;
+}
+
+int32
+arc_buffer_get_rcscore(arc_buffer_t *fab, sarc_t *ab, int rc)
+{
+    return ab->score - garray_ent(fab->rc_deltas, rcdelta_t, ab->rc_idx + rc);
+}
+
+int
+arc_buffer_max_n_rc(arc_buffer_t *fab)
+{
+    return fab->max_n_rc;
 }
 
 bpidx_t

@@ -151,6 +151,16 @@ arc_t *arc_buffer_iter(arc_buffer_t *fab, int sf);
 arc_t *arc_buffer_iter_next(arc_buffer_t *fab, arc_t *ab);
 
 /**
+ * Get the score corresponding to a right context entry for an arc.
+ */
+int32 arc_buffer_get_rcscore(arc_buffer_t *fab, sarc_t *ab, int rc);
+
+/**
+ * Get the maximum number of right context entries for any arc.
+ */
+int arc_buffer_max_n_rc(arc_buffer_t *fab);
+
+/**
  * Lock the arc buffer.
  *
  * The pointers returned by arc_buffer_iter() and arc_next() can
