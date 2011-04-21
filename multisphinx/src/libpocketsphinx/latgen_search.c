@@ -269,9 +269,10 @@ create_outgoing_links_one(latgen_search_t *latgen,
         }
     }
     /* FIXME: This is almost certainly going to fail.  Fuck. */
-    assert(incoming_link != NULL);
+    assert(node->id.sf == 0 || incoming_link != NULL);
     /* Now mark this incoming link as active. */
-    bitvec_set(active_incoming_links, i);
+    if (i < ms_latnode_n_entries(node))
+        bitvec_set(active_incoming_links, i);
 
     /* Create new language model state */
     n_hist =
@@ -368,6 +369,7 @@ create_outgoing_links(latgen_search_t *latgen,
             gnode_t *gn;
             int j;
 
+            deadlinks = NULL;
             for (j = 0; j < ms_latnode_n_entries(node); ++j) {
                 if (bitvec_is_set(active_links, j))
                     continue;
@@ -416,7 +418,6 @@ static int
 latgen_search_decode(ps_search_t *base)
 {
     latgen_search_t *latgen = (latgen_search_t *)base;
-    int32 epsilon;
     int frame_idx;
 
     frame_idx = 0;
@@ -427,9 +428,7 @@ latgen_search_decode(ps_search_t *base)
     /* Create lattice and initial epsilon node. */
     latgen->output_lattice = ms_lattice_init(latgen->lmath,
                                              ps_search_dict(base));
-    epsilon = ms_lattice_lmstate_init(latgen->output_lattice, -1,
-                                      NULL, 0);
-    ms_lattice_node_init(latgen->output_lattice, 0, epsilon);
+    ms_lattice_node_init(latgen->output_lattice, 0, -1);
 
     /* Reset some internal arrays. */
     garray_reset(latgen->link_rcid);

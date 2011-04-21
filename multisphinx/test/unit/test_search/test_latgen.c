@@ -7,7 +7,6 @@
 
 #include "pocketsphinx_internal.h"
 #include "fwdtree_search.h"
-#include "fwdflat_search.h"
 #include "latgen_search.h"
 #include "test_macros.h"
 
@@ -19,9 +18,9 @@ main(int argc, char *argv[])
 	dict_t *dict;
 	logmath_t *lmath;
 	cmd_ln_t *config;
-	acmod_t *acmod, *acmod2;
+	acmod_t *acmod;
 	featbuf_t *fb;
-	ps_search_t *fwdtree, *fwdflat, *latgen;
+	ps_search_t *fwdtree, *latgen;
 	FILE *mfcfh;
 	size_t nsamp;
 	char const *hyp;
@@ -42,21 +41,16 @@ main(int argc, char *argv[])
 	lmath = logmath_init(cmd_ln_float32_r(config, "-logbase"),
 			     0, FALSE);
 	acmod = acmod_init(config, lmath, fb);
-	acmod2 = acmod_copy(acmod);
 	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));
 	dict = dict_init(config, mdef);
 	d2p = dict2pid_build(mdef, dict);
 	fwdtree = fwdtree_search_init(config, acmod, dict, d2p);
-	fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-				      ps_search_output_arcs(fwdtree),
-				      fwdtree_search_lmset(fwdtree));
 	latgen = latgen_init(config, d2p, 
 			     fwdtree_search_lmset(fwdtree),
-			     ps_search_output_arcs(fwdflat));
+			     ps_search_output_arcs(fwdtree));
 
 	/* Launch search threads. */
 	ps_search_run(fwdtree);
-	ps_search_run(fwdflat);
 	ps_search_run(latgen);
 
 	/* Feed them a bunch of data. */
@@ -77,22 +71,15 @@ main(int argc, char *argv[])
 	featbuf_producer_end_utt(fb, -1);
 	E_INFO("Done waiting\n");
 
-	/* Retrieve the hypothesis from the search thread. */
-	hyp = ps_search_hyp(fwdflat, &score);
-	E_INFO("hyp: %s (%d)\n", hyp, score);
-
 	/* Reap the search thread. */
 	E_INFO("Reaping the search threads\n");
 	featbuf_producer_shutdown(fb);
 	ps_search_wait(fwdtree);
-	ps_search_wait(fwdflat);
 	ps_search_wait(latgen);
 	E_INFO("Done reaping\n");
 	ps_search_free(fwdtree);
-	ps_search_free(fwdflat);
 	ps_search_free(latgen);
 	acmod_free(acmod);
-	acmod_free(acmod2);
 	featbuf_free(fb);
 
 	/* Clean everything else up. */
