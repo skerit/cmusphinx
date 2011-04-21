@@ -43,6 +43,8 @@
 #include <multisphinx/search.h>
 #include <multisphinx/arc_buffer.h>
 
+#include "search_internal.h"
+
 void
 search_init(search_t *search, ps_searchfuncs_t *vt,
                cmd_ln_t *config, acmod_t *acmod, dict_t *dict,

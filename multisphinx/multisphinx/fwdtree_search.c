@@ -51,6 +51,7 @@
 /* Local headers. */
 #include "tmat.h"
 #include "hmm.h"
+#include "search_internal.h"
 #include "fwdtree_search.h"
 #include "arc_buffer.h"
 

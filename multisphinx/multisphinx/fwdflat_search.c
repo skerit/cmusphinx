@@ -50,6 +50,7 @@
 #include <sphinxbase/err.h>
 
 /* Local headers. */
+#include "search_internal.h"
 #include "fwdflat_search.h"
 #include "tmat.h"
 #include "hmm.h"

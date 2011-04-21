@@ -53,7 +53,7 @@
 #include <multisphinx/dict.h>
 
 /**
- * Command-line argument definitions for batch processing. */
+ * Command-line argument definitions for batch processing.
  */
 static const arg_t ms_args_def[] = {
     POCKETSPHINX_OPTIONS,
@@ -107,6 +107,10 @@ static const arg_t ms_args_def[] = {
  * Master configuration object for decoders.
  */
 static cmd_ln_t *config;
+
+/**
+ * Decoders.
+ */
 
 static int
 build_outdir_one(cmd_ln_t *config, char const *arg, char const *uttpath)
@@ -329,6 +333,9 @@ main(int32 argc, char *argv[])
         /* This probably just means that we got no arguments. */
         return 2;
     }
+
+    init_searches(config);
+
     if ((ctl = cmd_ln_str_r(config, "-ctl")) == NULL) {
         E_FATAL("-ctl argument not present, nothing to do in batch mode!\n");
     }
@@ -337,6 +344,8 @@ main(int32 argc, char *argv[])
     }
     process_ctl(ctlfh);
     fclose(ctlfh);
-    ps_free(ps);
+
+    fini_searches();
+
     return 0;
 }

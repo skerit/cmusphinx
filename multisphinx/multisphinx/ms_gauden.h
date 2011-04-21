@@ -57,7 +57,6 @@
 
 /* Local headers. */
 #include "vector.h"
-#include "pocketsphinx_internal.h"
 #include "hmm.h"
 
 #ifdef __cplusplus

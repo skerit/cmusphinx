@@ -47,7 +47,7 @@
 struct state_align_search_s {
     search_t base;       /**< Base search structure. */
     hmm_context_t *hmmctx;  /**< HMM context structure. */
-    ps_alignment_t *al;     /**< Alignment structure being operated on. */
+    alignment_t *al;     /**< Alignment structure being operated on. */
     hmm_t *hmms;            /**< Vector of HMMs corresponding to phone level. */
     int n_phones;	    /**< Number of HMMs (phones). */
 
@@ -230,8 +230,8 @@ state_align_search_finish(search_t *search)
 {
     state_align_search_t *sas = (state_align_search_t *)search;
     hmm_t *final_phone = sas->hmms + sas->n_phones - 1;
-    ps_alignment_iter_t *itor;
-    ps_alignment_entry_t *ent;
+    alignment_iter_t *itor;
+    alignment_entry_t *ent;
     int next_state, next_start, state, frame;
 
     /* Best state exiting the last frame. */
@@ -240,15 +240,15 @@ state_align_search_finish(search_t *search)
         E_ERROR("Failed to reach final state in alignment\n");
         return -1;
     }
-    itor = ps_alignment_states(sas->al);
+    itor = alignment_states(sas->al);
     next_start = sas->frame + 1;
     for (frame = sas->frame - 1; frame >= 0; --frame) {
         state = sas->tokens[frame * sas->n_emit_state + state];
         /* State boundary, update alignment entry for next state. */
         if (state != next_state) {
-            itor = ps_alignment_iter_goto(itor, next_state);
+            itor = alignment_iter_goto(itor, next_state);
             assert(itor != NULL);
-            ent = ps_alignment_iter_get(itor);
+            ent = alignment_iter_get(itor);
             ent->start = frame + 1;
             ent->duration = next_start - ent->start;
             E_DEBUG(1,("state %d start %d end %d\n", next_state,
@@ -258,15 +258,15 @@ state_align_search_finish(search_t *search)
         }
     }
     /* Update alignment entry for initial state. */
-    itor = ps_alignment_iter_goto(itor, 0);
+    itor = alignment_iter_goto(itor, 0);
     assert(itor != NULL);
-    ent = ps_alignment_iter_get(itor);
+    ent = alignment_iter_get(itor);
     ent->start = 0;
     ent->duration = next_start;
     E_DEBUG(1,("state %d start %d end %d\n", 0,
                ent->start, next_start));
-    ps_alignment_iter_free(itor);
-    ps_alignment_propagate(sas->al);
+    alignment_iter_free(itor);
+    alignment_propagate(sas->al);
 
     return 0;
 }
@@ -295,10 +295,10 @@ static ps_searchfuncs_t state_align_search_funcs = {
 search_t *
 state_align_search_init(cmd_ln_t *config,
                         acmod_t *acmod,
-                        ps_alignment_t *al)
+                        alignment_t *al)
 {
     state_align_search_t *sas;
-    ps_alignment_iter_t *itor;
+    alignment_iter_t *itor;
     hmm_t *hmm;
 
     sas = ckd_calloc(1, sizeof(*sas));
@@ -313,12 +313,12 @@ state_align_search_init(cmd_ln_t *config,
     sas->al = al;
 
     /* Generate HMM vector from phone level of alignment. */
-    sas->n_phones = ps_alignment_n_phones(al);
-    sas->n_emit_state = ps_alignment_n_states(al);
+    sas->n_phones = alignment_n_phones(al);
+    sas->n_emit_state = alignment_n_states(al);
     sas->hmms = ckd_calloc(sas->n_phones, sizeof(*sas->hmms));
-    for (hmm = sas->hmms, itor = ps_alignment_phones(al); itor;
-         ++hmm, itor = ps_alignment_iter_next(itor)) {
-        ps_alignment_entry_t *ent = ps_alignment_iter_get(itor);
+    for (hmm = sas->hmms, itor = alignment_phones(al); itor;
+         ++hmm, itor = alignment_iter_next(itor)) {
+        alignment_entry_t *ent = alignment_iter_get(itor);
         hmm_init(sas->hmmctx, hmm, FALSE,
                  ent->id.pid.ssid, ent->id.pid.tmatid);
     }

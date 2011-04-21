@@ -41,7 +41,6 @@
  * @author David Huggins-Daines <dhuggins@cs.cmu.edu>
  */
 
-#include "pocketsphinx_internal.h"
 #include "vocab_mapper.h"
 
 struct vocab_mapper_s {

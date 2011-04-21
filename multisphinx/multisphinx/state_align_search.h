@@ -46,12 +46,11 @@
 #include <sphinxbase/prim_type.h>
 
 /* Local headers. */
-#include "pocketsphinx_internal.h"
 #include "ps_alignment.h"
 #include "hmm.h"
 
 search_t *state_align_search_init(cmd_ln_t *config,
                                      acmod_t *acmod,
-                                     ps_alignment_t *al);
+                                     alignment_t *al);
 
 #endif /* __STATE_ALIGN_SEARCH_H__ */

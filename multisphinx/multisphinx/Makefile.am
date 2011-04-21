@@ -19,15 +19,14 @@ libmultisphinx_la_SOURCES =			\
 	ms_senone.c				\
 	nodeid_map.c				\
 	ngram_trie.c				\
-	ps_alignment.c				\
+	alignment.c				\
 	search.c				\
 	ptm_mgau.c				\
 	sendump.c				\
 	s2_semi_mgau.c				\
 	tmat.c					\
 	vector.c				\
-	vocab_map.c				\
-	pocketsphinx.c
+	vocab_map.c
 
 pkginclude_HEADERS = \
 	acmod.h					\
@@ -49,13 +48,11 @@ pkginclude_HEADERS = \
 	ms_senone.h				\
 	ngram_trie.h				\
 	nodeid_map.h				\
-	pocketsphinx.h				\
 	pocketsphinx_export.h			\
-	pocketsphinx_internal.h			\
 	posixwin32.h				\
-	ps_alignment.h				\
-	ps_lattice_internal.h			\
+	alignment.h				\
 	search.h				\
+	search_internal.h			\
 	ptm_mgau.h				\
 	s2_semi_mgau.h				\
 	s3types.h				\
