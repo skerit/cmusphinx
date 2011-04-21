@@ -78,6 +78,7 @@ struct alignment_vector_s {
 typedef struct alignment_vector_s alignment_vector_t;
 
 struct alignment_s {
+    int refcnt;
     dict2pid_t *d2p;
     alignment_vector_t word;
     alignment_vector_t sseq;

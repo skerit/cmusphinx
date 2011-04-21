@@ -59,7 +59,7 @@ struct state_align_search_s {
 
     int n_emit_state;       /**< Number of emitting states (tokens per frame) */
     uint16 *tokens;         /**< Tokens (backpointers) for state alignment. */
-    int n_fr_alloc;         /**< Number of frames of tokens allocated. */
+    int n_tok_alloc;         /**< Number of  tokens allocated. */
 };
 typedef struct state_align_search_s state_align_search_t;
 
@@ -150,11 +150,10 @@ phone_transition(state_align_search_t *sas, int frame_idx)
 static void
 extend_tokenstack(state_align_search_t *sas, int frame_idx)
 {
-    if (frame_idx >= sas->n_fr_alloc) {
-        sas->n_fr_alloc = frame_idx + TOKEN_STEP + 1;
+    if ((frame_idx + 1) * sas->n_emit_state >= sas->n_tok_alloc) {
+        sas->n_tok_alloc = (frame_idx + TOKEN_STEP) * sas->n_emit_state;
         sas->tokens = ckd_realloc(sas->tokens,
-                                  sas->n_emit_state * sas->n_fr_alloc
-                                  * sizeof(*sas->tokens));
+                                  sas->n_tok_alloc * sizeof(*sas->tokens));
     }
     memset(sas->tokens + frame_idx * sas->n_emit_state, 0xff,
            sas->n_emit_state * sizeof(*sas->tokens));
@@ -458,7 +457,7 @@ state_align_search_set_alignment(search_t *base, alignment_t *al)
     hmm_t *hmm;
 
     alignment_free(sas->al);
-    sas->al = al;
+    sas->al = alignment_retain(al);
     /* Generate HMM vector from phone level of alignment. */
     sas->n_phones = alignment_n_phones(al);
     sas->n_emit_state = alignment_n_states(al);
