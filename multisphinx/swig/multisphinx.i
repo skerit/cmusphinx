@@ -236,10 +236,16 @@ typedef struct {
 		dict2pid_free($self);
 	}
 	cipidArray *get_rcmap(int wid) {
-		return dict2pid_get_rcmap(self, wid);
+		return dict2pid_get_rcmap($self, wid);
 	}
 	int get_nssid(int wid) {
-		return get_rc_nssid(self, wid);
+		return get_rc_nssid($self, wid);
+	}
+	Mdef* get_mdef() {
+		return bin_mdef_retain($self->mdef);
+	}
+	Dict* get_dict() {
+		return dict_retain($self->dict);
 	}
 }
 
