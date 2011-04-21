@@ -442,11 +442,15 @@ ps_end_utt(ps_decoder_t *ps)
 char const *
 ps_get_hyp(ps_decoder_t *ps, int32 *out_best_score, char const **out_uttid)
 {
+    ps_search_t *searches[3];
     char const *hyp;
 
     ptmr_start(&ps->perf);
-    /* Get the hypothesis string from the last search pass, whichever it was. */
-    hyp = ps_search_hyp(ps->fwdflat ? ps->fwdflat : ps->fwdtree, out_best_score);
+    /* FIXME: This array/list will be inside ps_decoder_t soon, also
+     * add latgen. */
+    searches[0] = ps->fwdtree;
+    searches[1] = ps->fwdflat;
+    hyp = ps_search_splice(searches, ps->fwdflat ? 2 : 1, out_best_score);
     if (out_uttid)
         *out_uttid = ps->uttid;
     ptmr_stop(&ps->perf);

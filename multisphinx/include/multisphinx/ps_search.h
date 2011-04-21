@@ -165,6 +165,12 @@ struct arc_buffer_s *ps_search_link(ps_search_t *from, ps_search_t *to,
 char const *ps_search_hyp(ps_search_t *search, int32 *out_score);
 
 /**
+ * Splice hypotheses from multiple searches.
+ */
+char const *ps_search_splice(ps_search_t **searches, int nsearches,
+                             int32 *out_score);
+
+/**
  * Get the backpointer table, if any, from a search.
  */
 bptbl_t *ps_search_bptbl(ps_search_t *search);
