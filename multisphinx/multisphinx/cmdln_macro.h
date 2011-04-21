@@ -44,20 +44,20 @@
 #include <sphinxbase/feat.h>
 #include <sphinxbase/fe.h>
 
-/** Minimal set of command-line options for PocketSphinx. */
-#define POCKETSPHINX_OPTIONS \
+/** Minimal set of command-line options for MultiSphinx. */
+#define MULTISPHINX_OPTIONS \
     waveform_to_cepstral_command_line_macro(), \
     cepstral_to_feature_command_line_macro(), \
-    POCKETSPHINX_ACMOD_OPTIONS, \
-        POCKETSPHINX_BEAM_OPTIONS,   \
-        POCKETSPHINX_SEARCH_OPTIONS, \
-        POCKETSPHINX_DICT_OPTIONS, \
-        POCKETSPHINX_NGRAM_OPTIONS, \
-        POCKETSPHINX_FSG_OPTIONS, \
-        POCKETSPHINX_DEBUG_OPTIONS
+    ACMOD_OPTIONS, \
+        BEAM_OPTIONS,   \
+        SEARCH_OPTIONS, \
+        DICT_OPTIONS, \
+        NGRAM_OPTIONS, \
+        FSG_OPTIONS, \
+        DEBUG_OPTIONS
 
 /** Options for debugging and logging. */
-#define POCKETSPHINX_DEBUG_OPTIONS                      \
+#define DEBUG_OPTIONS                      \
     { "-logfn",                                         \
             ARG_STRING,                                 \
             NULL,                                       \
@@ -89,7 +89,7 @@
              }
 
 /** Options defining beam width parameters for tuning the search. */
-#define POCKETSPHINX_BEAM_OPTIONS                                       \
+#define BEAM_OPTIONS                                       \
 { "-beam",                                                              \
       ARG_FLOAT64,                                                      \
       "1e-48",                                                          \
@@ -132,7 +132,7 @@
       "Beam width applied to phone loop transitions for lookahead" }
 
 /** Options defining other parameters for tuning the search. */
-#define POCKETSPHINX_SEARCH_OPTIONS \
+#define SEARCH_OPTIONS \
 { "-compallsen",                                                                                \
       ARG_BOOLEAN,                                                                              \
       "no",                                                                                     \
@@ -179,7 +179,7 @@
       "Window of frames in lattice to search for successor words in fwdflat search " }
 
 /** Command-line options for finite state grammars. */
-#define POCKETSPHINX_FSG_OPTIONS \
+#define FSG_OPTIONS \
     { "-fsg",                                                   \
             ARG_STRING,                                         \
             NULL,                                               \
@@ -202,7 +202,7 @@
         "Insert filler words at each state."}
 
 /** Command-line options for statistical language models. */
-#define POCKETSPHINX_NGRAM_OPTIONS                                      \
+#define NGRAM_OPTIONS                                      \
     { "-lm",                                                            \
             ARG_STRING,                                                 \
             NULL,                                                       \
@@ -273,7 +273,7 @@
         "Whether to dump the lextree structure to stderr (for debugging), 1 for Ravi's format, 2 for Dot format, Larger than 2 will be treated as Ravi's format" }
 
 /** Command-line options for dictionaries. */
-#define POCKETSPHINX_DICT_OPTIONS \
+#define DICT_OPTIONS \
     { "-dict",							\
       REQARG_STRING,						\
       NULL,							\
@@ -296,7 +296,7 @@
       "Use within-word phones only" }
 
 /** Command-line options for acoustic modeling */
-#define POCKETSPHINX_ACMOD_OPTIONS \
+#define ACMOD_OPTIONS \
 { "-hmm",                                                                       \
       ARG_STRING,                                                               \
       NULL,                                                                     \

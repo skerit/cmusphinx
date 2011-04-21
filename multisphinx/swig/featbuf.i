@@ -3,12 +3,6 @@ typedef struct featbuf_s {
 } FeatBuf;
 
 %extend FeatBuf {
-	FeatBuf(Config *c) {
-		return featbuf_init(c);
-	}
-	~FeatBuf() {
-		featbuf_free($self);
-	}
 	void producer_start_utt(char *uttid) {
 		/* FIXME: Need to copy uttid or something. */
 		/* FIXME: Also, exceptions, etc. */

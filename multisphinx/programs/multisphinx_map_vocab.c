@@ -59,7 +59,7 @@
 #include <multisphinx/cmdln_macro.h>
 
 static const arg_t ps_args_def[] = {
-    POCKETSPHINX_OPTIONS,
+    MULTISPHINX_OPTIONS,
     { "-lsn",
       ARG_STRING,
       NULL,

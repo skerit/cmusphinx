@@ -1,10 +1,17 @@
+%{
+#include <multisphinx/cmdln_macro.h>
+static arg_t const dict_args[] = {
+	DICT_OPTIONS,
+	CMDLN_EMPTY_OPTION
+};
+%}
 
 typedef struct {
 } Dict;
 
 %extend Dict {
 	Dict(Mdef *mdef, char const *dictfile=NULL, char const *fdictfile=NULL) {
-		Config *config = cmd_ln_init(NULL, ps_args(), FALSE, NULL);
+		cmd_ln_t *config = cmd_ln_init(NULL, dict_args, FALSE, NULL);
 		Dict *d;
 		if (dictfile) cmd_ln_set_str_r(config, "-dict", dictfile);
 		if (fdictfile) cmd_ln_set_str_r(config, "-fdict", fdictfile);

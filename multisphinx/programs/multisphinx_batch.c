@@ -71,7 +71,7 @@ typedef struct batch_decoder_s
  * Command-line argument definitions for batch processing.
  */
 static const arg_t ms_args_def[] =
-{ POCKETSPHINX_OPTIONS,
+{ MULTISPHINX_OPTIONS,
 /* Various options specific to batch-mode processing. */
 /* Control file. */
 { "-ctl",

@@ -40,7 +40,7 @@ struct search_factory_s
 };
 
 static const arg_t ms_args_def[] =
-{ POCKETSPHINX_OPTIONS, CMDLN_EMPTY_OPTION };
+{ MULTISPHINX_OPTIONS, CMDLN_EMPTY_OPTION };
 
 /* Feature and front-end parameters that may be in feat.params */
 static const arg_t feat_defn[] =
