@@ -53,8 +53,6 @@
 #include <multisphinx/search.h>
 
 searchfuncs_t const *state_align_search_query(void);
-search_t *state_align_search_init(cmd_ln_t *config, acmod_t *acmod,
-        dict2pid_t *d2p);
 int state_align_search_set_alignment(search_t *base, alignment_t *al);
 
 #endif /* __STATE_ALIGN_SEARCH_H__ */

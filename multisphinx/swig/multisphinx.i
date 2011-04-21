@@ -19,6 +19,8 @@
 #include <multisphinx/bptbl.h>
 #include <multisphinx/arc_buffer.h>
 #include <multisphinx/vocab_map.h>
+#include <multisphinx/state_align_search.h>
+#include <multisphinx/alignment.h>
 
 /* Definitions for C's benefit. */
 typedef struct logmath_s LogMath;
@@ -38,6 +40,9 @@ typedef dict_t Dict;
 typedef dict2pid_t DictToPid;
 typedef struct ngram_trie_s NGramTrie;
 typedef xwdssid_t xwdssid;
+typedef struct alignment_s Alignment;
+typedef struct alignment_iter_s AlignmentIter;
+typedef struct alignment_entry_s AlignmentEntry;
 
 %}
 
@@ -56,3 +61,4 @@ typedef xwdssid_t xwdssid;
 %include "bptbl.i"
 %include "arc_buffer.i"
 %include "vocab_map.i"
+%include "state_align.i"

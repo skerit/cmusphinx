@@ -9,7 +9,7 @@ multisphinx = Extension("_multisphinx",
                                    "common.i", "dict.i", "dict2pid.i", "featbuf.i",
                                    "includes_python.i", "logmath.i", "mdef.i",
                                    "ngram_model.i", "ngram_trie.i", "search_factory.i",
-                                   "search.i", "vocab_map.i"])
+                                   "search.i", "vocab_map.i", "state_align.i"])
 
 setup(name = "multisphinx",
       version = "0.2",

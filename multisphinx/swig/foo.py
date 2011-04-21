@@ -22,4 +22,6 @@ while True:
 fb.producer_end_utt()
 print ft.hyp()
 print ff.hyp()
+for foo in ff.seg_iter():
+    print foo
 fb.producer_shutdown()

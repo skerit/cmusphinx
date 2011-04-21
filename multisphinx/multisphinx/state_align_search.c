@@ -429,6 +429,11 @@ state_align_search_seg_iter(search_t *base, int32 *out_score)
     return &itor->base;
 }
 
+static search_t *state_align_search_init(search_t *other,
+                        cmd_ln_t *config,
+                        acmod_t *acmod,
+                        dict2pid_t *d2p);
+
 static searchfuncs_t state_align_search_funcs = {
     /* name: */   "state_align",
     /* init: */   state_align_search_init,
@@ -467,8 +472,9 @@ state_align_search_set_alignment(search_t *base, alignment_t *al)
     return 0;
 }
 
-search_t *
-state_align_search_init(cmd_ln_t *config,
+static search_t *
+state_align_search_init(search_t *other,
+                        cmd_ln_t *config,
                         acmod_t *acmod,
                         dict2pid_t *d2p)
 {

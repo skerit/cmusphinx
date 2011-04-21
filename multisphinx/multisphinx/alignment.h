@@ -110,7 +110,7 @@ int alignment_free(alignment_t *al);
  * @param duration Duration of the word (or zero if no explicit duration given).
  */
 int alignment_add_word(alignment_t *al,
-                          int32 wid, int duration);
+                       int32 wid, int duration);
 
 /**
  * Append a sequence of words to the alignment using its internal dictionary.

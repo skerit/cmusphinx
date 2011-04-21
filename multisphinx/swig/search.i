@@ -8,7 +8,8 @@ typedef struct seg_iter_s {
 	~SegIter() {
 		seg_iter_free($self);
 	}
-	SegIter *next() {
+	/* next() is special in Python, Java, etc. */
+	SegIter *_next() {
 		return seg_iter_next($self);
 	}
 	char *word() {
@@ -19,6 +20,25 @@ typedef struct seg_iter_s {
 		seg_iter_times($self, &sf, OUTPUT);
 		return sf;
 	}
+%pythoncode %{
+def __iter__(self):
+	self.starting = True
+	self.done = False
+	return self
+
+def next(self):
+	if self.starting == True:
+		self.starting = False
+		return (self.word(),) + tuple(self.times())
+	if self.done == True:
+		spam = None
+	else:
+		spam = self._next()
+	if spam == None:
+	    self.done = True
+        raise StopIteration
+	return (self.word(),) + tuple(self.times())
+%}
 }
 
 typedef struct search_s {
