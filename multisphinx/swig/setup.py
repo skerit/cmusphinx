@@ -11,4 +11,3 @@ setup(name = "multisphinx",
       version = "0.1",
       ext_modules = [multisphinx],
       py_modules = ["multisphinx"])
-

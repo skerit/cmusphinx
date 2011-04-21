@@ -3,6 +3,7 @@
 %include "pocketsphinx_java.i"
 #endif
 #ifdef SWIGPYTHON
+%include "argcargv.i"
 %include "pocketsphinx_python.i"
 #endif
 %include "common.i"
@@ -19,6 +20,8 @@
 typedef struct logmath_s LogMath;
 typedef struct cmd_ln_s Config;
 typedef struct bin_mdef_s Mdef;
+typedef struct ngram_model_s NGramModel;
+typedef struct ngram_iter_s NGramIterator;
 typedef dict_t Dict;
 typedef dict2pid_t DictToPid;
 typedef struct ngram_trie_s NGramTrie;
@@ -28,6 +31,18 @@ typedef xwdssid_t xwdssid;
 
 
 /* Now define them again for SWIG. */
+%feature("docstring", "
+    Log-space math class.
+    
+    This class provides fast logarithmic math functions in base
+    1.000+epsilon, useful for fixed point speech recognition.
+
+    @param base: The base B in which computation is to be done.
+    @type base: float
+    @param shift: Log values are shifted right by this many bits.
+    @type shift: int
+    @param use_table Whether to use an add table or not
+    @type use_table: bool") LogMath;
 typedef struct logmath_s {
 } LogMath;
 
@@ -38,39 +53,113 @@ typedef struct logmath_s {
 	~LogMath() {
 		logmath_free($self);
 	}
+	%feature("docstring","
+        Get the log base.
+
+        @return: Logarithmic base used in this object.
+        @rtype: float
+") get_base;
 	double get_base() {
 		return logmath_get_base($self);
 	}
+	%feature("docstring","
+        Get the log-zero value.
+
+        @return: Smallest number representable by this object.
+        @rtype: int
+") get_zero;
 	int get_zero() {
 		return logmath_get_zero($self);
 	}
-	int get_width() {
-		return logmath_get_width($self);
-	}
-	int get_shift() {
-		return logmath_get_shift($self);
-	}
+	%feature("docstring","
+        Add two numbers in log-space without using an add-table.
+
+        @param a: Logarithm A.
+        @type a: int
+        @param b: Logarithm B.
+        @type b: int
+        @return: log(exp(a)+exp(b))
+        @rtype: int
+") add;
 	int add_exact(int p, int q) {
 		return logmath_add_exact($self, p, q);
 	}
+	%feature("docstring","
+        Add two numbers in log-space.
+
+        @param a: Logarithm A.
+        @type a: int
+        @param b: Logarithm B.
+        @type b: int
+        @return: log(exp(a)+exp(b))
+        @rtype: int
+") add;
 	int add(int p, int q) {
 		return logmath_add($self, p, q);
 	}
+	%feature("docstring","
+        Return log-value of a number.
+
+        @param x: Number (in linear space)
+        @type x: float
+        @return: Log-value of x.
+        @rtype: int
+") log;
 	int log(double p) {
 		return logmath_log($self, p);
 	}
+	%feature("docstring", "
+        Return linear of a log-value
+
+        @param x: Logarithm X (in this object's base)
+        @type x: int
+        @return: Exponent (linear value) of X.
+        @rtype: float
+") exp;
 	double exp(int logb_p) {
 		return logmath_exp($self, logb_p);
 	}
+	%feature("docstring", "
+        Return log-value of a natural logarithm.
+
+        @param x: Logarithm X (in base e)
+        @type x: float
+        @return: Log-value equivalent of x.
+        @rtype: int
+") ln_to_log;
 	int ln_to_log(double log_p) {
 		return logmath_ln_to_log($self, log_p);
 	}
+	%feature("docstring", "
+        Return natural logarithm of a log-value.
+
+        @param x: Logarithm X (in this object's base)
+        @type x: int
+        @return: Natural log equivalent of x.
+        @rtype: float
+") log_to_ln;
 	double log_to_ln(int logb_p) {
 		return logmath_log_to_ln($self, logb_p);
 	}
+	%feature("docstring","
+        Return log-value of a base 10 logarithm.
+
+        @param x: Logarithm X (in base 10)
+        @type x: float
+        @return: Log-value equivalent of x.
+        @rtype: int
+") log10_to_log;
 	int log10_to_log(double log_p) {
 		return logmath_log10_to_log($self, log_p);
 	}
+	%feature("docstring","
+        Return logarithm in base 10 of a log-value.
+
+        @param x: Logarithm X (in this object's base)
+        @type x: int
+        @return: log10 equivalent of x.
+        @rtype: float
+") log_to_log10;
 	double log_to_log10(int logb_p) {
 		return logmath_log_to_log10($self, logb_p);
 	}
@@ -86,6 +175,10 @@ typedef struct cmd_ln_s {
 	}
 	Config(char const *file) {
 		Config *c = cmd_ln_parse_file_r(NULL, ps_args(), file, FALSE);
+		return c;
+	}
+	Config(int ARGC, char **ARGV) {
+		Config *c = cmd_ln_parse_r(NULL, ps_args(), ARGC, ARGV, FALSE);
 		return c;
 	}
 	~Config() {
@@ -117,6 +210,65 @@ typedef struct cmd_ln_s {
 	}
 	char const *getString(char const *key) {
 		return cmd_ln_str_r($self, key);
+	}
+};
+
+%feature("docstring","
+    N-Gram language model class.
+
+    This class provides access to N-Gram language models stored on
+    disk.  These can be in ARPABO text format or Sphinx DMP format.
+    Methods are provided for scoring N-Grams based on the model
+    and looking up words in the model.
+
+    @param file: Path to an N-Gram model file.
+    @type file: string
+    @param lw: Language weight to apply to model probabilities.
+    @type lw: float
+    @param wip: Word insertion penalty to add to model probabilities
+    @type wip: float
+    @param uw: Weight to give unigrams when interpolating with uniform distribution.
+    @type uw: float
+") NGramModel;
+typedef struct ngram_model_s {
+} NGramModel;
+
+%extend NGramModel {
+	NGramModel(char const *file, float lw=1.0, float wip=1.0,
+		   float uw=1.0) {
+		NGramModel *lm;
+		logmath_t *lmath = logmath_init(1.0001, 0, 0);
+
+		lm = ngram_model_read(NULL, file, NGRAM_AUTO, lmath);
+		logmath_free(lmath);
+		if (lw != 1.0 || wip != 1.0 || uw != 1.0)
+			ngram_model_apply_weights(lm, lw, wip, uw);
+		return lm;
+	}
+	~NGramModel() {
+		ngram_model_free($self);
+	}
+	%feature("docstring","
+        Change the language model weights applied in L{score}.
+        
+        @param lw: Language weight to apply to model probabilities.
+        @type lw: float
+        @param wip: Word insertion penalty to add to model probabilities
+        @type wip: float
+        @param uw: Weight to give unigrams when interpolating with uniform distribution.
+        @type uw: float
+") apply_weights;
+	void apply_weights(float lw=1.0, float wip=1.0, float uw=1.0) {
+		ngram_model_apply_weights($self, lw, wip, uw);
+	}
+	%feature("docstring","
+        Get the order of this model (i.e. the 'N' in 'N-gram')
+
+        @return: Order of this model
+        @rtype: int
+") get_size;
+	int get_size() {
+		return ngram_model_get_size($self);
 	}
 };
 
