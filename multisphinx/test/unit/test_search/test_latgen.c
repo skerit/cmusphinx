@@ -30,8 +30,8 @@ main(int argc, char *argv[])
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
-			     "-lm", TESTDATADIR "/bcb05cnp.arpa",
-			     "-dict", TESTDATADIR "/bcb05cnp.dic",
+			     "-lm", TESTDATADIR "/bn10000.3g.homos.arpa",
+			     "-dict", TESTDATADIR "/bn10000.homos.dic",
 			     "-arcdumpdir", ".",
 			     "-maxwpf", "50",
 			     "-latsize", "512",
@@ -49,11 +49,10 @@ main(int argc, char *argv[])
 	d2p = dict2pid_build(mdef, dict);
 	fwdtree = fwdtree_search_init(config, acmod, dict, d2p);
 	fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-				      ps_search_output_arcs(fwdtree),
-				      fwdtree_search_lmset(fwdtree));
-	latgen = latgen_init(config, d2p, 
-			     fwdtree_search_lmset(fwdtree),
-			     ps_search_output_arcs(fwdflat));
+				      ps_search_lmset(fwdtree));
+	latgen = latgen_init(config, d2p, ps_search_lmset(fwdtree));
+	ps_search_link(fwdtree, fwdflat, "fwdtree", FALSE);
+	ps_search_link(fwdflat, latgen, "fwdflat", TRUE);
 
 	/* Launch search threads. */
 	ps_search_run(fwdtree);

@@ -5,8 +5,9 @@
 #include <sphinxbase/strfuncs.h>
 #include <sphinxbase/sbthread.h>
 
-#include "pocketsphinx_internal.h"
-#include "bptbl.h"
+#include <multisphinx/bptbl.h>
+#include <multisphinx/ps_search.h>
+
 #include "test_macros.h"
 
 int
@@ -26,8 +27,8 @@ main(int argc, char *argv[])
 	/* Get the API to initialize a bunch of stuff for us (but not the search). */
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
-			     "-lm", TESTDATADIR "/hub4.5000.DMP",
-			     "-dict", TESTDATADIR "/hub4.5000.dic",
+			     "-lm", TESTDATADIR "/bn10000.3g.arpa",
+			     "-dict", TESTDATADIR "/bn10000.dic",
 			     NULL);
 	ps_init_defaults(config);
 	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));

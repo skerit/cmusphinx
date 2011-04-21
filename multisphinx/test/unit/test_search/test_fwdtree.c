@@ -5,8 +5,11 @@
 
 #include <sphinxbase/feat.h>
 
-#include "pocketsphinx_internal.h"
-#include "fwdtree_search.h"
+#include <multisphinx/fwdtree_search.h>
+#include <multisphinx/acmod.h>
+#include <multisphinx/ps_search.h>
+#include <multisphinx/featbuf.h>
+
 #include "test_macros.h"
 
 int
@@ -27,8 +30,9 @@ main(int argc, char *argv[])
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
-			     "-lm", TESTDATADIR "/hub4.5000.DMP",
-			     "-dict", TESTDATADIR "/hub4.5000.dic",
+			     "-lm", TESTDATADIR "/bn10000.3g.arpa",
+			     "-dict", TESTDATADIR "/bn10000.dic",
+			     "-samprate", "11025",
 			     NULL);
 	ps_init_defaults(config);
 	fb = featbuf_init(config);

@@ -12,6 +12,6 @@ SUBDIRS= test_alloc				\
 	test_util				\
 	test_thread				\
 	test_acmod				\
-	test_search				\
 	test_vocab_map				\
-	test_lattice
+	test_lattice				\
+	test_search

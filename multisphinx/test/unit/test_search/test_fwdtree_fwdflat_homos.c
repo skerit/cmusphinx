@@ -5,10 +5,13 @@
 
 #include <sphinxbase/feat.h>
 
+
 #include <multisphinx/fwdtree_search.h>
 #include <multisphinx/fwdflat_search.h>
+#include <multisphinx/acmod.h>
+#include <multisphinx/ps_search.h>
+#include <multisphinx/featbuf.h>
 
-#include "pocketsphinx_internal.h"
 #include "test_macros.h"
 
 int
@@ -33,6 +36,7 @@ main(int argc, char *argv[])
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
 			     "-lm", TESTDATADIR "/bn10000.3g.homos.arpa",
 			     "-dict", TESTDATADIR "/bn10000.homos.dic",
+			     "-samprate", "11025",
 			     "-maxwpf", "50",
 			     "-latsize", "512",
 			     NULL);
@@ -49,9 +53,8 @@ main(int argc, char *argv[])
 	d2p = dict2pid_build(mdef, dict);
 	fwdtree = fwdtree_search_init(config, acmod, dict, d2p);
 	cmd_ln_set_str_r(config, "-lm", TESTDATADIR "/bn10000.3g.arpa");
-	fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
-				      ps_search_output_arcs(fwdtree),
-				      NULL);
+	fwdflat = fwdflat_search_init(config, acmod2, dict, d2p, NULL);
+	ps_search_link(fwdtree, fwdflat, "fwdtree", FALSE);
 	vm = vocab_map_init(dict);
 	rawfh = fopen(TESTDATADIR "/bn10000.homos", "r");
 	vocab_map_read(vm, rawfh);
@@ -63,11 +66,11 @@ main(int argc, char *argv[])
 	ps_search_run(fwdflat);
 
 	/* Feed them a bunch of data. */
-	if ((rawfh = fopen(TESTDATADIR "/i960711p.raw", "rb")) == NULL) {
+	if ((rawfh = fopen(TESTDATADIR "/chan3.raw", "rb")) == NULL) {
 		E_FATAL_SYSTEM("Failed to open "TESTDATADIR"/i960711p.raw");
 		return 1;
 	}
-	featbuf_producer_start_utt(fb, "i960711p");
+	featbuf_producer_start_utt(fb, "chan3");
 	while ((nsamp = fread(buf, 2, 2048, rawfh)) > 0)
 		featbuf_producer_process_raw(fb, buf, nsamp, FALSE);
 	fclose(rawfh);
@@ -88,6 +91,7 @@ main(int argc, char *argv[])
 	ps_search_wait(fwdflat);
 	E_INFO("Done reaping\n");
 	ps_search_free(fwdflat);
+	ps_search_free(fwdtree);
 	acmod_free(acmod);
 	featbuf_free(fb);
 

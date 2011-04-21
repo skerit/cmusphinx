@@ -336,9 +336,9 @@ arc_buffer_producer_sweep(arc_buffer_t *fab, int release)
     arc_buffer_lock(fab);
     next_sf = bptbl_active_sf(fab->input_bptbl);
     if (arc_buffer_extend(fab, next_sf) > 0) {
-        E_INFO("%s adding arcs to frame %d idx %d:%d\n",
-               fab->name, next_sf, fab->next_idx,
-               bptbl_retired_idx(fab->input_bptbl));
+        E_DEBUG(2,("%s adding arcs to frame %d idx %d:%d\n",
+                   fab->name, next_sf, fab->next_idx,
+                   bptbl_retired_idx(fab->input_bptbl)));
         fab->next_idx = arc_buffer_add_bps(fab, fab->input_bptbl,
                                            fab->next_idx,
                                            bptbl_retired_idx(fab->input_bptbl));
