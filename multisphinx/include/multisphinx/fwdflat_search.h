@@ -45,22 +45,17 @@
 /* SphinxBase headers. */
 #include <sphinxbase/garray.h>
 
-/* Local headers. */
-#include "bptbl.h"
-#include "arc_buffer.h"
-#include "vocab_map.h"
+#include <multisphinx/ps_search.h>
+#include <multisphinx/vocab_map.h>
 
 /**
  * Initialize fwdflat search.
  */
 ps_search_t *fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
                                  dict_t *dict, dict2pid_t *d2p,
-                                 arc_buffer_t *input_arcs,
                                  ngram_model_t *lmset);
 
 vocab_map_t *fwdflat_search_set_vocab_map(ps_search_t *search,
                                           vocab_map_t *vm);
-
-ngram_model_t *fwdflat_search_lmset(ps_search_t *base);
 
 #endif /* __FWDFLAT_SEARCH_H__ */

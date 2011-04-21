@@ -52,8 +52,7 @@
 #include <sphinxbase/sbthread.h>
 #include <sphinxbase/profile.h>
 
-/* Local headers. */
-#include "ps_search.h"
+#include <multisphinx/dict2pid.h>
 
 #define NO_BP		-1
 
@@ -123,17 +122,6 @@ typedef struct bptbl_s {
     bitvec_t *valid_fr;  /**< Set of accessible frames (used in gc) */
 } bptbl_t;
 
-
-/**
- * Segmentation "iterator" for backpointer table results.
- */
-typedef struct bptbl_seg_s {
-    ps_seg_t base;  /**< Base structure. */
-    bptbl_t *bptbl; /**< Backpointer table. */
-    int32 *bpidx;   /**< Sequence of backpointer IDs. */
-    int16 n_bpidx;  /**< Number of backpointer IDs. */
-    int16 cur;      /**< Current position in bpidx. */
-} bptbl_seg_t;
 
 /**
  * Data type used to score right-context score deltas.
@@ -313,6 +301,6 @@ char *bptbl_hyp(bptbl_t *bptbl, int32 *out_score, int32 finish_wid);
  * regardless of word ID)
  * @return New segmentation iterator.
  */
-ps_seg_t *bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid);
+struct ps_seg_s *bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid);
 
 #endif /* __BPTBL_H__ */

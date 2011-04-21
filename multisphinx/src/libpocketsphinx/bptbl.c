@@ -48,8 +48,9 @@
 #include <sphinxbase/listelem_alloc.h>
 #include <sphinxbase/err.h>
 
-/* Local headers. */
-#include "bptbl.h"
+#include <multisphinx/bptbl.h>
+#include <multisphinx/ps_search.h>
+
 #include "hmm.h"
 
 /* FIXME: These are no longer necessary. */
@@ -1233,6 +1234,18 @@ bptbl_hyp(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
 
     return hyp_str;
 }
+
+
+/**
+ * Segmentation "iterator" for backpointer table results.
+ */
+typedef struct bptbl_seg_s {
+    struct ps_seg_s base;  /**< Base structure. */
+    bptbl_t *bptbl; /**< Backpointer table. */
+    int32 *bpidx;   /**< Sequence of backpointer IDs. */
+    int16 n_bpidx;  /**< Number of backpointer IDs. */
+    int16 cur;      /**< Current position in bpidx. */
+} bptbl_seg_t;
 
 static void
 bptbl_bp2itor(ps_seg_t *seg, int bp)

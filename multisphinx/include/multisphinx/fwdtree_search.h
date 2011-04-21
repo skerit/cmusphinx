@@ -45,18 +45,12 @@
 /* SphinxBase headers. */
 #include <sphinxbase/profile.h>
 
-/* Local headers. */
-#include "bptbl.h"
+#include <multisphinx/ps_search.h>
 
 /**
  * Initialize fwdtree search.
  */
 ps_search_t *fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
                                  dict_t *dict, dict2pid_t *d2p);
-
-/**
- * Get the language model set.
- */
-ngram_model_t *fwdtree_search_lmset(ps_search_t *base);
 
 #endif /* __FWDTREE_SEARCH_H__ */

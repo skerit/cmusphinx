@@ -49,14 +49,12 @@
 #include <sphinxbase/sbthread.h>
 #include <sphinxbase/profile.h>
 
-/* Local headers. */
-#include "pocketsphinx.h"
-#include "acmod.h"
-#include "dict.h"
-#include "dict2pid.h"
-
-/* Can't actually do this because of header loops or some such evil */
-/* #include "arc_buffer.h" */
+#include <multisphinx/acmod.h>
+#include <multisphinx/bptbl.h>
+#include <multisphinx/arc_buffer.h>
+#include <multisphinx/dict.h>
+#include <multisphinx/dict2pid.h>
+#include <pocketsphinx.h>
 
 /**
  * Search algorithm structure.
@@ -75,6 +73,9 @@ typedef struct ps_searchfuncs_s {
     char const *(*hyp)(ps_search_t *search, int32 *out_score);
     int32 (*prob)(ps_search_t *search);
     ps_seg_t *(*seg_iter)(ps_search_t *search, int32 *out_score);
+
+    bptbl_t *(*bptbl)(ps_search_t *search);
+    ngram_model_t *(*lmset)(ps_search_t *search);
 } ps_searchfuncs_t;
 
 struct arc_buffer_s;
@@ -99,8 +100,8 @@ struct ps_search_s {
                               be less than in the dictionary) */
     char *uttid;
 
-    struct arc_buffer_s *output_arcs; /**< Arc buffer, used to forward search
-                                       * results to next pass of search. */
+    struct arc_buffer_s *input_arcs;  
+    struct arc_buffer_s *output_arcs;
 
     /* Magical word IDs that must exist in the dictionary: */
     int32 start_wid;       /**< Start word ID. */
@@ -116,6 +117,7 @@ struct ps_search_s {
 #define ps_search_dict(s) ps_search_base(s)->dict
 #define ps_search_dict2pid(s) ps_search_base(s)->d2p
 #define ps_search_post(s) ps_search_base(s)->post
+#define ps_search_input_arcs(s) ps_search_base(s)->input_arcs
 #define ps_search_output_arcs(s) ps_search_base(s)->output_arcs
 #define ps_search_n_words(s) ps_search_base(s)->n_words
 #define ps_search_silence_wid(s) ps_search_base(s)->silence_wid
@@ -150,11 +152,27 @@ int ps_search_wait(ps_search_t *search);
 int ps_search_free(ps_search_t *search);
 
 /**
+ * Link one search structure to another via an arc buffer.
+ */
+struct arc_buffer_s *ps_search_link(ps_search_t *from, ps_search_t *to,
+                                    char const *name, int keep_scores);
+
+/**
  * Get the latest hypothesis from a search.
  *
  * FIXME: This will probably go away due to hypothesis splicing
  */
 char const *ps_search_hyp(ps_search_t *search, int32 *out_score);
+
+/**
+ * Get the backpointer table, if any, from a search.
+ */
+bptbl_t *ps_search_bptbl(ps_search_t *search);
+
+/**
+ * Get the N-Gram language model set, if any, from a search.
+ */
+ngram_model_t *ps_search_lmset(ps_search_t *search);
 
 /**
  * V-table for segmentation iterators.
@@ -191,6 +209,6 @@ struct ps_seg_s {
  *
  * FIXME: This will probably go away due to hypothesis splicing
  */
-ps_seg_t *ps_search_seg_iter(ps_search_t *search, int32 *out_score);
+struct ps_seg_s *ps_search_seg_iter(ps_search_t *search, int32 *out_score);
 
 #endif /* __PS_SEARCH_H__ */

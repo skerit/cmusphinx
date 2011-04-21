@@ -341,6 +341,8 @@ static int fwdtree_search_free(ps_search_t *base);
 static char const *fwdtree_search_hyp(ps_search_t *base, int32 *out_score);
 static int32 fwdtree_search_prob(ps_search_t *base);
 static ps_seg_t *fwdtree_search_seg_iter(ps_search_t *base, int32 *out_score);
+static bptbl_t *fwdtree_search_bptbl(ps_search_t *base);
+static ngram_model_t *fwdtree_search_lmset(ps_search_t *base);
 
 static ps_searchfuncs_t fwdtree_funcs = {
     /* name: */   "fwdtree",
@@ -349,6 +351,8 @@ static ps_searchfuncs_t fwdtree_funcs = {
     /* hyp: */      fwdtree_search_hyp,
     /* prob: */     fwdtree_search_prob,
     /* seg_iter: */ fwdtree_search_seg_iter,
+    /* bptbl: */  fwdtree_search_bptbl,
+    /* lmset: */ fwdtree_search_lmset
 };
 
 static void fwdtree_search_free_all_rc(fwdtree_search_t *fts, int32 w);
@@ -458,10 +462,6 @@ fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
         E_ERROR("Language model/set does not contain </s>, recognition will fail\n");
         goto error_out;
     }
-
-    /* Create output arc buffer. */
-    ps_search_output_arcs(fts) = arc_buffer_init("fwdtree", fts->bptbl,
-                                                 fts->lmset, TRUE);
 
     /* Create word mappifts. */
     fwdtree_search_update_widmap(fts);
@@ -941,8 +941,9 @@ fwdtree_search_start(ps_search_t *base)
     fts->oldest_bp = NO_BP;
 
     /* Reset output arc buffer. */
-    arc_buffer_producer_start_utt(ps_search_output_arcs(fts),
-                                  base->uttid);
+    if (ps_search_output_arcs(fts))
+        arc_buffer_producer_start_utt(ps_search_output_arcs(fts),
+                                      base->uttid);
 
     /* Reset word lattice. */
     for (i = 0; i < n_words; ++i)
@@ -2012,7 +2013,10 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     assert(fi == frame_idx);
 
     /* Forward retired backpointers to the arc buffer. */
-    arc_buffer_producer_sweep(ps_search_output_arcs(fts), FALSE);
+    if (ps_search_output_arcs(fts))
+        arc_buffer_producer_sweep(ps_search_output_arcs(fts),
+                                  /* FIXME: should be configurable */
+                                  FALSE);
 
     /* If the best score is equal to or worse than WORST_SCORE,
      * recognition has failed, don't bother to keep trying. */
@@ -2065,7 +2069,8 @@ fwdtree_search_finish(ps_search_t *base)
     bptbl_finalize(fts->bptbl);
 
     /* Finalize the output arc buffer. */
-    arc_buffer_producer_end_utt(ps_search_output_arcs(fts), FALSE);
+    if (ps_search_output_arcs(fts))
+        arc_buffer_producer_end_utt(ps_search_output_arcs(fts), FALSE);
 
     /* Deactivate channels lined up for the next frame */
     /* First, root channels of HMM tree */
@@ -2139,7 +2144,8 @@ fwdtree_search_decode(ps_search_t *base)
     int nfr, k;
 
     if (acmod_consumer_start_utt(base->acmod, -1) < 0) {
-        arc_buffer_producer_shutdown(base->output_arcs);
+        if (base->output_arcs)
+            arc_buffer_producer_shutdown(base->output_arcs);
         return -1;
     }
     base->uttid = base->acmod->uttid;
@@ -2151,7 +2157,8 @@ fwdtree_search_decode(ps_search_t *base)
 
     /* Abnormal termination (cancellation, error) */
     if (k < 0) {
-        arc_buffer_producer_shutdown(base->output_arcs);
+        if (base->output_arcs)
+            arc_buffer_producer_shutdown(base->output_arcs);
         return k;
     }
 
@@ -2304,7 +2311,14 @@ fwdtree_search_seg_iter(ps_search_t *base, int32 *out_score)
     return bptbl_seg_iter(fts->bptbl, out_score, ps_search_finish_wid(fts));
 }
 
-ngram_model_t *
+static bptbl_t *
+fwdtree_search_bptbl(ps_search_t *base)
+{
+    fwdtree_search_t *fts = (fwdtree_search_t *)base;
+    return fts->bptbl;
+}
+
+static ngram_model_t *
 fwdtree_search_lmset(ps_search_t *base)
 {
     fwdtree_search_t *fts = (fwdtree_search_t *)base;

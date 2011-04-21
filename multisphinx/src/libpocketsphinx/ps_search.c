@@ -86,6 +86,7 @@ ps_search_free(ps_search_t *search)
     /* Call the search free function. */
     (*search->vt->free)(search);
     /* Clean up common stuff. */
+    arc_buffer_free(search->input_arcs);
     arc_buffer_free(search->output_arcs);
     cmd_ln_free_r(search->config);
     acmod_free(search->acmod);
@@ -96,6 +97,22 @@ ps_search_free(ps_search_t *search)
     sbmtx_free(search->mtx);
     ckd_free(search);
     return 0;
+}
+
+arc_buffer_t *
+ps_search_link(ps_search_t *from, ps_search_t *to,
+               char const *name, int keep_scores)
+{
+    arc_buffer_t *ab;
+
+    if (ps_search_bptbl(from) == NULL)
+        return NULL;
+    ab = arc_buffer_init(name, ps_search_bptbl(from),
+                         ps_search_lmset(from), keep_scores);
+    ps_search_output_arcs(from) = ab;
+    ps_search_input_arcs(to) = arc_buffer_retain(ab);
+
+    return ab;
 }
 
 static int
@@ -137,4 +154,20 @@ ps_seg_t *
 ps_search_seg_iter(ps_search_t *search, int32 *out_score)
 {
     return (*search->vt->seg_iter)(search, out_score);
+}
+
+bptbl_t *
+ps_search_bptbl(ps_search_t *search)
+{
+    if (search->vt->bptbl == NULL)
+        return NULL;
+    return (*search->vt->bptbl)(search);
+}
+
+ngram_model_t *
+ps_search_lmset(ps_search_t *search)
+{
+    if (search->vt->lmset == NULL)
+        return NULL;
+    return (*search->vt->lmset)(search);
 }

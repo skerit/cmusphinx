@@ -64,6 +64,8 @@ static ps_searchfuncs_t latgen_funcs = {
     /* hyp: */      latgen_search_hyp,
     /* prob: */     latgen_search_prob,
     /* seg_iter: */ latgen_search_seg_iter,
+    /* bptbl: */  NULL,
+    /* lmset: */ NULL
 };
 
 typedef struct latgen_search_s {
