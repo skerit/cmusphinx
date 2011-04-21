@@ -51,7 +51,7 @@
 #include <multisphinx/dict.h>
 
 /* PocketSphinx headers. */
-#include <pocketsphinx.h>
+#include <multisphinx/pocketsphinx.h>
 
 static const arg_t ps_args_def[] = {
     POCKETSPHINX_OPTIONS,

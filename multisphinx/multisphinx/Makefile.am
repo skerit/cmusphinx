@@ -1,9 +1,6 @@
-lib_LTLIBRARIES = libpocketsphinx.la
-
-# Confusing libtool version info
-libpocketsphinx_la_LDFLAGS = -version-info 3:0:0
-
-libpocketsphinx_la_SOURCES =			\
+noinst_LTLIBRARIES = libmultisphinx.la
+libmultisphinx_la_LDFLAGS = -version-info 3:0:0
+libmultisphinx_la_SOURCES =			\
 	acmod.c					\
 	arc_buffer.c				\
 	bin_mdef.c				\
@@ -49,8 +46,5 @@ noinst_HEADERS =				\
 	tmat.h					\
 	vector.h
 
-INCLUDES = -I$(top_srcdir)/include \
-	   -I$(top_srcdir)/include/multisphinx \
-           -I$(top_builddir)/include \
-	   -DMODELDIR=\"${prefix}/share/pocketsphinx/model\"
-
+# Need this to avoid pulling in system includes by accident
+INCLUDES = -I$(top_srcdir)

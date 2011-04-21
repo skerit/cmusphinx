@@ -53,13 +53,10 @@
 #include <sphinxbase/ngram_model.h>
 #include <sphinxbase/cmd_ln.h>
 
-/* PocketSphinx headers. */
-#include <pocketsphinx.h>
-
 /* S3kr3t headerz. */
-#include "pocketsphinx_internal.h"
-#include "fwdflat_search.h"
-#include "s2_semi_mgau.h"
+#include <multisphinx/pocketsphinx_internal.h>
+#include <multisphinx/fwdflat_search.h>
+#include <multisphinx/s2_semi_mgau.h>
 
 static const arg_t ps_args_def[] = {
     POCKETSPHINX_OPTIONS,

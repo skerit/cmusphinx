@@ -1,4 +1,4 @@
-SUBDIRS = util lm feat fe multisphinx
+SUBDIRS = sphinxbase multisphinx programs
 	  swig include test
 
 EXTRA_DIST = autogen.sh							\
@@ -9,3 +9,11 @@ pkgconfig_DATA = multisphinx.pc
 CLEANFILES = multisphinx.pc
 
 ACLOCAL_AMFLAGS = -I m4
+
+lib_LTLIBRARIES = libmultisphinx.la
+
+libmultisphinx_la_SOURCES =
+libmultisphinx_la_LDFLAGS = -version-info 0:0:0
+libmultisphinx_la_LIBADD = $(LTLIBICONV) \
+	sphinxbase/libsphinxbase.la \
+	multisphinx/libmultisphinx.la

@@ -56,8 +56,8 @@ extern "C" {
 #include <sphinxbase/ngram_model.h>
 
 /* PocketSphinx headers (not many of them!) */
-#include <pocketsphinx_export.h>
-#include <cmdln_macro.h>
+#include <multisphinx/pocketsphinx_export.h>
+#include <multisphinx/cmdln_macro.h>
 
 /**
  * PocketSphinx speech recognizer object.

@@ -47,7 +47,6 @@
 #include <sphinxbase/garray.h>
 #include <sphinxbase/ckd_alloc.h>
 #include <sphinxbase/err.h>
-#include <pocketsphinx.h>
 
 #include "sync_array.h"
 

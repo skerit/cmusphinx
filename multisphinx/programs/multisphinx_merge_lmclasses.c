@@ -54,13 +54,10 @@
 #include <sphinxbase/garray.h>
 #include <sphinxbase/cmd_ln.h>
 
-/* PocketSphinx headers. */
-#include <pocketsphinx.h>
-
-/* S3kr3t headerz. */
-#include "pocketsphinx_internal.h"
-#include "vocab_map.h"
-#include "ngram_trie.h"
+/* MultiSphinx headers. */
+#include <multisphinx/pocketsphinx_internal.h>
+#include <multisphinx/vocab_map.h>
+#include <multisphinx/ngram_trie.h>
 
 static const arg_t args_def[] = {
     { "-lm",

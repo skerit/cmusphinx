@@ -54,7 +54,7 @@
 #include <multisphinx/arc_buffer.h>
 #include <multisphinx/dict.h>
 #include <multisphinx/dict2pid.h>
-#include <pocketsphinx.h>
+#include <multisphinx/pocketsphinx.h>
 
 /**
  * Search algorithm structure.

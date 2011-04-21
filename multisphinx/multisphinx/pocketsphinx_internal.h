@@ -57,7 +57,7 @@
 #include <multisphinx/acmod.h>
 #include <multisphinx/dict.h>
 #include <multisphinx/dict2pid.h>
-#include <pocketsphinx.h>
+#include <multisphinx/pocketsphinx.h>
 
 /**
  * Decoder object - implements the user-visible API.
