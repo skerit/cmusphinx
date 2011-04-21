@@ -51,6 +51,8 @@
 
 /* Local headers. */
 #include "fwdflat_search.h"
+#include "tmat.h"
+#include "hmm.h"
 
 /* Turn this on to dump channels for debugging */
 #define __CHAN_DUMP__		0

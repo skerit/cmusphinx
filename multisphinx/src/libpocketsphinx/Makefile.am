@@ -45,7 +45,6 @@ noinst_HEADERS =				\
 	ms_mgau.h				\
 	ms_senone.h				\
 	nodeid_map.h				\
-	ps_search.h				\
 	posixwin32.h				\
 	ptm_mgau.h				\
 	sendump.h				\

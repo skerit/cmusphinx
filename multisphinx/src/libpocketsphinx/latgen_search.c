@@ -49,8 +49,9 @@
 #include "arc_buffer.h"
 #include "nodeid_map.h"
 #include "ms_lattice.h"
+#include "hmm.h"
 
-static int latgen_search_decode(ps_search_t *base, char const *uttid);
+static int latgen_search_decode(ps_search_t *base);
 static int latgen_search_free(ps_search_t *base);
 static char const *latgen_search_hyp(ps_search_t *base, int32 *out_score);
 static int32 latgen_search_prob(ps_search_t *base);
@@ -77,6 +78,8 @@ typedef struct latgen_search_s {
     char const *outlatdir;
     /** Output directory for arc buffer contents. */
     char const *outarcdir;
+    int ctr;
+
     /** Storage for language model state components. */
     int32 *lmhist;
     /** Allocation size of @a lmhist. */
@@ -623,24 +626,42 @@ create_outgoing_links(latgen_search_t *latgen,
 
 static int
 latgen_search_process_arcs(latgen_search_t *latgen,
-                           sarc_t *itor, int32 frame_idx)
+                           sarc_t *itor, int32 frame_idx, FILE *arcfh)
 {
     int n_arc;
 
     /* Get source nodes for these arcs. */
+#if 0
     if (get_frame_active_nodes(latgen->output_lattice,
                                latgen->active_nodes, frame_idx) == 0)
         return 0;
+#endif
 
+    if (arcfh)
+        fprintf(arcfh, "FRAME %d\n", frame_idx);
     /* Iterate over all arcs exiting in this frame */
     for (n_arc = 0; itor; itor = (sarc_t *)arc_buffer_iter_next
              (latgen->input_arcs, &itor->arc)) {
         /* See note in arc_buffer.h... */
         if (itor->arc.src != frame_idx)
             break;
+        if (arcfh) {
+            rcdelta_t const *deltas, *d;
+            int i;
+            fprintf(arcfh, "%d %d %d %d %d %d",
+                    itor->arc.wid, itor->arc.src, itor->arc.dest,
+                    itor->score, itor->lscr, itor->rc_idx);
+            d = deltas = arc_buffer_get_rcdeltas(latgen->input_arcs, itor);
+            for (i = 0; i < arc_buffer_max_n_rc(latgen->input_arcs); ++i) {
+                if (bitvec_is_set(itor->rc_bits, i))
+                    fprintf(arcfh, " %d:%u", i, *d++);
+            }
+            fprintf(arcfh, "\n");
+        }
 
         /* Create new outgoing links for each source node. */
-        n_arc += create_outgoing_links(latgen, itor);
+        /* n_arc += create_outgoing_links(latgen, itor); */
+        ++n_arc;
     }
 
     return n_arc;
@@ -690,10 +711,11 @@ latgen_search_cleanup_frame(latgen_search_t *latgen, int32 frame_idx)
 }
 
 static int
-latgen_search_decode(ps_search_t *base, char const *uttid)
+latgen_search_decode(ps_search_t *base)
 {
     latgen_search_t *latgen = (latgen_search_t *)base;
     int frame_idx;
+    FILE *arcfh;
 
     frame_idx = 0;
     E_INFO("waiting for arc buffer start\n");
@@ -712,13 +734,12 @@ latgen_search_decode(ps_search_t *base, char const *uttid)
 
     /* Start logging arcs. */
     if (latgen->outarcdir) {
-        char *uttpath = ckd_salloc(uttid);
-        char *dirname;
-        path2dirname(uttid, uttpath);
-        dirname = string_join(latgen->outarcdir, "/", uttpath, NULL);
-        build_directory(dirname);
-        ckd_free(dirname);
-        ckd_free(uttpath);
+        char uttno[16];
+        char *outfile;
+        sprintf(uttno, "%08d", latgen->ctr++);
+        outfile = string_join(latgen->outarcdir, "/", uttno, ".arc", NULL);
+        arcfh = fopen(outfile, "w");
+        ckd_free(outfile);
     }
 
     /* Process frames full of arcs. */
@@ -735,8 +756,7 @@ latgen_search_decode(ps_search_t *base, char const *uttid)
                 arc_buffer_unlock(latgen->input_arcs);
                 break;
             }
-            n_arc = latgen_search_process_arcs(latgen, (sarc_t *)itor, frame_idx);
-            E_INFO("Added %d links leaving frame %d\n", n_arc, frame_idx);
+            n_arc = latgen_search_process_arcs(latgen, (sarc_t *)itor, frame_idx, arcfh);
             arc_buffer_unlock(latgen->input_arcs);
 
             /* Release arcs, we don't need them anymore. */
@@ -749,9 +769,11 @@ latgen_search_decode(ps_search_t *base, char const *uttid)
         if (arc_buffer_eou(latgen->input_arcs)) {
             E_INFO("latgen: got EOU\n");
             arc_buffer_consumer_end_utt(latgen->input_arcs);
+            if (arcfh) fclose(arcfh);
             return frame_idx;
         }
     }
+    if (arcfh) fclose(arcfh);
     return -1;
 }
 

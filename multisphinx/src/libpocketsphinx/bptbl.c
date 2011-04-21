@@ -50,6 +50,7 @@
 
 /* Local headers. */
 #include "bptbl.h"
+#include "hmm.h"
 
 /* FIXME: These are no longer necessary. */
 /* Special unlocked versions of some utility functions. */
@@ -984,6 +985,26 @@ bptbl_get_rcscores(bptbl_t *bptbl, bpidx_t bpidx, int32 *out_rcscores)
             else
                 out_rcscores[i] = bpe->score - delta;
         }
+        return rcsize;
+    }
+}
+
+int
+bptbl_get_rcdeltas(bptbl_t *bptbl, bpidx_t bpidx, rcdelta_t *out_rcdeltas)
+{
+    bp_t *bpe;
+    int rcsize;
+
+    bpe = bptbl_ent_internal(bptbl, bpidx);
+    rcsize = bptbl_rcsize(bptbl, bpe);
+    if (rcsize == 0) {
+        out_rcdeltas[0] = 0;
+        return 1;
+    }
+    else {
+        memcpy(out_rcdeltas,
+               garray_ptr(bptbl->rc, rcdelta_t, bpe->s_idx),
+               rcsize * sizeof(rcdelta_t));
         return rcsize;
     }
 }

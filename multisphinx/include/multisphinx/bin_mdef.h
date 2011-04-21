@@ -56,8 +56,6 @@ extern "C" {
 #include <sphinxbase/mmio.h>
 #include <sphinxbase/cmd_ln.h>
 
-#include "mdef.h"
-
 #define BIN_MDEF_FORMAT_VERSION 1
 /* Little-endian machines will write "BMDF" to disk, big-endian ones "FDMB". */
 #define BIN_MDEF_NATIVE_ENDIAN 0x46444d42 /* 'BMDF' in little-endian order */
@@ -67,6 +65,21 @@ extern "C" {
 #else
 #define ATTRIBUTE_PACKED
 #endif
+
+/** \enum word_posn_t
+ * \brief Union of different type of word position
+ */
+
+typedef enum {
+    WORD_POSN_INTERNAL = 0,	/**< Internal phone of word */
+    WORD_POSN_BEGIN = 1,	/**< Beginning phone of word */
+    WORD_POSN_END = 2,		/**< Ending phone of word */
+    WORD_POSN_SINGLE = 3,	/**< Single phone word (i.e. begin & end) */
+    WORD_POSN_UNDEFINED = 4	/**< Undefined value, used for initial conditions, etc */
+} word_posn_t;
+#define N_WORD_POSN	4	/**< total # of word positions (excluding undefined) */
+#define WPOS_NAME	"ibesu"	/**< Printable code for each word position above */
+#define S3_SILENCE_CIPHONE "SIL" /**< Hard-coded silence CI phone name */
 
 /**
  * Phone entry (on-disk, 12 bytes)

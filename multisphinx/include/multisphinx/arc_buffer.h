@@ -75,7 +75,7 @@ typedef struct sarc_s {
      * unique language model state.
      */
     int16 lscr;
-    /** Right context index corresponding to best path score. */
+    /** Index into an internal right context delta array, not for public use. */
     int16 rc_idx;
     /** Bitvector indicating active right contexts for this arc. */
     bitvec_t rc_bits[0];
@@ -174,6 +174,11 @@ arc_t *arc_buffer_iter_next(arc_buffer_t *fab, arc_t *ab);
  * Get the score corresponding to a right context entry for an arc.
  */
 int32 arc_buffer_get_rcscore(arc_buffer_t *fab, sarc_t *ab, int rc);
+
+/**
+ * Get the delta scores for an arc.
+ */
+rcdelta_t const *arc_buffer_get_rcdeltas(arc_buffer_t *fab, sarc_t *ab);
 
 /**
  * Get the maximum number of right context entries for any arc.

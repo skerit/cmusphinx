@@ -13,6 +13,7 @@ multisphinxinclude_HEADERS =			\
 	latgen_search.h				\
 	ngram_trie.h				\
 	ps_alignment.h				\
+	ps_search.h				\
 	s3types.h				\
 	state_align_search.h			\
 	vocab_map.h

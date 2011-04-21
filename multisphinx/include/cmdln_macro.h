@@ -68,6 +68,11 @@
             NULL,                                       \
             "Verbosity level for debugging messages"    \
      },                                                 \
+     { "-arcdumpdir",                                   \
+             ARG_STRING,                                \
+             NULL,                                      \
+             "Directory to log arc buffers to"          \
+             },                                         \
      { "-mfclogdir",                                    \
              ARG_STRING,                                \
              NULL,                                      \

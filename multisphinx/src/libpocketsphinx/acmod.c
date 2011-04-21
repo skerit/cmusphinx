@@ -60,6 +60,8 @@
 #include "s2_semi_mgau.h"
 #include "ptm_mgau.h"
 #include "ms_mgau.h"
+#include "hmm.h"
+#include "tmat.h"
 
 #ifndef WORDS_BIGENDIAN
 #define WORDS_BIGENDIAN 1

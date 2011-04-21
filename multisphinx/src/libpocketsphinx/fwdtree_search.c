@@ -49,6 +49,8 @@
 #include <sphinxbase/err.h>
 
 /* Local headers. */
+#include "tmat.h"
+#include "hmm.h"
 #include "fwdtree_search.h"
 #include "arc_buffer.h"
 
@@ -390,7 +392,8 @@ fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
     fts = ckd_calloc(1, sizeof(*fts));
     ps_search_init(&fts->base, &fwdtree_funcs, config, acmod, dict, d2p);
     fts->hmmctx = hmm_context_init(bin_mdef_n_emit_state(acmod->mdef),
-                                   acmod->tmat->tp, NULL, acmod->mdef->sseq);
+                                   acmod->tmat->tp,
+                                   NULL, acmod->mdef->sseq);
     if (fts->hmmctx == NULL) {
         ps_search_free(ps_search_base(fts));
         return NULL;

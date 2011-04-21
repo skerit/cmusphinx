@@ -49,6 +49,7 @@
 /* SphinxBase headers. */
 #include <sphinxbase/cmd_ln.h>
 #include <sphinxbase/logmath.h>
+#include <sphinxbase/glist.h>
 #include <sphinxbase/fe.h>
 #include <sphinxbase/feat.h>
 #include <sphinxbase/bitvec.h>
@@ -57,8 +58,9 @@
 /* Local headers. */
 #include "featbuf.h"
 #include "bin_mdef.h"
-#include "tmat.h"
-#include "hmm.h"
+
+struct tmat_s;
+struct hmm_s;
 
 /**
  * Dummy senone score value for unintentionally active states.
@@ -122,7 +124,7 @@ struct acmod_s {
 
     /* Model parameters: */
     bin_mdef_t *mdef;          /**< Model definition. */
-    tmat_t *tmat;              /**< Transition matrices. */
+    struct tmat_s *tmat;              /**< Transition matrices. */
     ps_mgau_t *mgau;           /**< Model parameters. */
 
     /* Senone scoring: */
@@ -265,7 +267,7 @@ void acmod_clear_active(acmod_t *acmod);
 /**
  * Activate senones associated with an HMM.
  */
-void acmod_activate_hmm(acmod_t *acmod, hmm_t *hmm);
+void acmod_activate_hmm(acmod_t *acmod, struct hmm_s *hmm);
 
 /**
  * Activate a single senone.

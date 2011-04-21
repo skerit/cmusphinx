@@ -277,6 +277,13 @@ void bptbl_set_rcscore(bptbl_t *bptbl, bpidx_t bpidx, int rc, int32 score);
 int bptbl_get_rcscores(bptbl_t *bptbl, bpidx_t bpidx, int32 *out_rcscores);
 
 /**
+ * Get the array of right context deltasfor a backpointer entry.
+ *
+ * @return Number of right context scores.
+ */
+int bptbl_get_rcdeltas(bptbl_t *bptbl, bpidx_t bpidx, rcdelta_t *out_rcdeltas);
+
+/**
  * Update language model state for a backpointer table entry.
  *
  * This is called "fake" language model state since backpointers don't

@@ -61,7 +61,7 @@ struct arc_buffer_s {
     garray_t *rc_deltas;
     bptbl_t *input_bptbl;
     ngram_model_t *lm;
-    int32 *tmp_rcscores;
+    rcdelta_t *tmp_rcdeltas;
     int max_n_rc;
     int state;
     int scores;
@@ -99,7 +99,7 @@ arc_buffer_init(char const *name, bptbl_t *input_bptbl,
         fab->max_n_rc = bin_mdef_n_ciphone(input_bptbl->d2p->mdef);
         fab->arc_size = sizeof(sarc_t) + sizeof(bitvec_t) * bitvec_size(fab->max_n_rc);
         fab->arcs = garray_init(0, fab->arc_size);
-        fab->tmp_rcscores = ckd_calloc(fab->max_n_rc, sizeof(*fab->tmp_rcscores));
+        fab->tmp_rcdeltas = ckd_calloc(fab->max_n_rc, sizeof(*fab->tmp_rcdeltas));
     }
     else {
         fab->arcs = garray_init(0, sizeof(arc_t));
@@ -135,7 +135,7 @@ arc_buffer_free(arc_buffer_t *fab)
     sbmtx_free(fab->mtx);
     bptbl_free(fab->input_bptbl);
     ngram_model_free(fab->lm);
-    ckd_free(fab->tmp_rcscores);
+    ckd_free(fab->tmp_rcdeltas);
     ckd_free(fab->name);
     ckd_free(fab);
     return 0;
@@ -247,10 +247,8 @@ arc_buffer_add_bps(arc_buffer_t *fab,
                        dict_wordstr(bptbl->d2p->dict, sarc.arc.wid),
                        sarc.arc.src, sarc.arc.dest + 1));
             if (fab->scores) {
-                /* Compress and add right context deltas.  FIXME: We
-                 * can do this more efficiently using the guts of
-                 * bptbl_t now that there are no thread issues. */
-                int i, rcsize = bptbl_get_rcscores(bptbl, idx, fab->tmp_rcscores);
+                /* Compress and add right context deltas. */
+                int i, rcsize = bptbl_get_rcdeltas(bptbl, idx, fab->tmp_rcdeltas);
                 int n_used;
 
                 sp->score = ent.score;
@@ -259,14 +257,9 @@ arc_buffer_add_bps(arc_buffer_t *fab,
                 sp->rc_idx = garray_next_idx(fab->rc_deltas);
                 bitvec_clear_all(sp->rc_bits, fab->max_n_rc);
                 for (i = 0; i < rcsize; ++i) {
-                    if (fab->tmp_rcscores[i] != NO_RC) {
-                        rcdelta_t delta;
-                        assert(fab->tmp_rcscores[i] <= ent.score);
+                    if (fab->tmp_rcdeltas[i] != NO_RC) {
                         bitvec_set(sp->rc_bits, i);
-                        /* FIXME: Yeah, this is real dumb, since bptbl
-                         * has the deltas we need anyway. */
-                        delta = ent.score - fab->tmp_rcscores[i];
-                        garray_append(fab->rc_deltas, &delta);
+                        garray_append(fab->rc_deltas, &fab->tmp_rcdeltas[i]);
                     }
                 }
             }
@@ -292,7 +285,14 @@ arc_buffer_add_bps(arc_buffer_t *fab,
 int32
 arc_buffer_get_rcscore(arc_buffer_t *fab, sarc_t *ab, int rc)
 {
+    /* FIXME: THIS IS WRONG!!! */
     return ab->score - garray_ent(fab->rc_deltas, rcdelta_t, ab->rc_idx + rc);
+}
+
+rcdelta_t const *
+arc_buffer_get_rcdeltas(arc_buffer_t *fab, sarc_t *ab)
+{
+    return garray_ptr(fab->rc_deltas, rcdelta_t, ab->rc_idx);
 }
 
 int

@@ -32,6 +32,7 @@ main(int argc, char *argv[])
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
 			     "-lm", TESTDATADIR "/bcb05cnp.arpa",
 			     "-dict", TESTDATADIR "/bcb05cnp.dic",
+			     "-arcdumpdir", ".",
 			     "-maxwpf", "50",
 			     "-latsize", "512",
 			     NULL);

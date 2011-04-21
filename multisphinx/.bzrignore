@@ -146,3 +146,5 @@ test/unit/test_lattice/test_htk_lattice.dot
 test/unit/test_lattice/test_build_lattice.dot
 test/unit/test_util/test_gq
 test/unit/test_lattice/expanded.dot
+edu
+test/unit/test_search/00000000.arc
