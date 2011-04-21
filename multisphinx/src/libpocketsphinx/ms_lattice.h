@@ -301,4 +301,14 @@ int32 ms_lattice_forward(ms_lattice_t *l, int32 inv_aw);
  */
 int32 ms_lattice_backward(ms_lattice_t *l, int32 inv_aw);
 
+/**
+ * Print a description of a lattice node.
+ */
+int ms_latnode_print(FILE *fh, ms_lattice_t *l, ms_latnode_t *n);
+
+/**
+ * Print a description of a lattice link.
+ */
+int ms_latlink_print(FILE *fh, ms_lattice_t *l, ms_latlink_t *vx);
+
 #endif /* __MS_LATTICE_H__ */

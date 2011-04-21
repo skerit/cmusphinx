@@ -903,9 +903,7 @@ ms_lattice_traverse_frame(ms_lattice_t *l, int frame_idx)
     itor = ckd_calloc(1, sizeof(*itor));
     itor->l = l;
     itor->start = -1;
-    /* FIXME: Might want to tighten this up in an aux array if this
-     * gets slow. */
-    itor->end = ms_lattice_get_idx_node(l, ms_lattice_get_end(l));
+    itor->end = garray_next_idx(l->node_list);
     itor->frame_idx = frame_idx;
     itor->cur = start;
     itor->q = NULL;
@@ -1605,4 +1603,32 @@ ms_lattice_backward(ms_lattice_t *l, int32 inv_aw)
         }
     }
     return l->norm;
+}
+
+int
+ms_latnode_print(FILE *fh, ms_lattice_t *l, ms_latnode_t *n)
+{
+    if (n->id.lmstate == 0xdeadbeef)
+        return fprintf(fh, "0xdeadbeef");
+    if (n->id.lmstate != -1) {
+        int32 wid, i, n_hist;
+        n_hist = ms_lattice_get_lmstate_wids
+            (l, n->id.lmstate, &wid, l->lmhist);
+        fprintf(fh, "%s", dict_wordstr(l->dict, wid));
+        for (i = 0; i < n_hist; ++i)
+            fprintf(fh, ",%s", dict_wordstr(l->dict, l->lmhist[i]));
+        return fprintf(fh, "/%d", n->id.sf);
+    }
+    else
+        return fprintf(fh, "&epsilon;/%d", n->id.sf);
+}
+
+int
+ms_latlink_print(FILE *fh, ms_lattice_t *l, ms_latlink_t *vx)
+{
+    return fprintf
+        (fh, "<Link: %s %d -> %d>",
+         dict_basestr(l->dict, vx->wid),
+         ms_lattice_get_node_idx(l, vx->src)->id.sf,
+         ms_lattice_get_node_idx(l, vx->dest)->id.sf);
 }
