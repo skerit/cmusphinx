@@ -287,23 +287,6 @@ arc_buffer_add_bps(arc_buffer_t *fab,
                         garray_append(fab->rc_deltas, &fab->tmp_rcdeltas[i]);
                     }
                 }
-                {
-                    sarc_t *arc = sp;
-                    rcdelta_t const *d = arc_buffer_get_rcdeltas(fab, arc);
-                    int i;
-                    E_INFO_NOFN("%s %d %d %d %d %d",
-                                dict_wordstr(bptbl->d2p->dict, arc->arc.wid),
-                                arc->arc.src, arc->arc.dest,
-                                arc->score, arc->lscr, rcsize);
-                    for (i = 0; i < fab->max_n_rc; ++i) {
-                        if (bitvec_is_set(arc->rc_bits, i)) {
-                            E_INFOCONT(" %d:%u:%u", i, *d, fab->tmp_rcdeltas[i]);
-                            assert(*d == fab->tmp_rcdeltas[i]);
-                            ++d;
-                        }
-                    }
-                    E_INFOCONT("\n");
-                }
             }
             /* Increment the frame counter for its start frame. */
             ++garray_ent(fab->sf_idx, int, sarc.arc.src);
