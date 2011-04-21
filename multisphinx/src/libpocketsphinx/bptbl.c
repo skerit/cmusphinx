@@ -955,6 +955,9 @@ bptbl_set_rcscore(bptbl_t *bptbl, bpidx_t bpidx, int rc, int32 score)
     int delta;
 
     bpe = bptbl_ent_internal(bptbl, bpidx);
+    /* No rc scores to set! */
+    if (dict_is_single_phone(bptbl->d2p->dict, bpe->wid))
+        return;
     assert(score <= bpe->score);
     delta = bpe->score - score;
     if (score == WORST_SCORE || delta >= NO_RC)
@@ -1140,8 +1143,8 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
 }
 
 void
-bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp,
-                   bpidx_t new_prev, int32 new_score)
+bptbl_update_bp(bptbl_t *bptbl, int32 bp, int rc,
+                bpidx_t new_prev, int32 new_score)
 {
     bp_t *ent;
     int rcsize;
@@ -1149,25 +1152,29 @@ bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp,
     assert(bp != NO_BP);
     ent = bptbl_ent_internal(bptbl, bp);
     assert(new_score > ent->score);
-    ent->bp = new_prev;
-    ent->score = new_score;
     rcsize = bptbl_rcsize(bptbl, ent);
     if (rcsize != 0) {
         int i, delta;
         assert(ent->s_idx < garray_next_idx(bptbl->rc));
         delta = new_score - ent->score;
-        for (i = 0; i < rcsize; ++i) {
-            int cur_score = garray_ent(bptbl->rc, rcdelta_t, ent->s_idx + i);
-            if (cur_score == NO_RC)
-                continue;
-            else if (cur_score + delta >= NO_RC) {
-                E_WARN("rc score overflow in bp %d rc %d\n", bp, i);
-                garray_ent(bptbl->rc, rcdelta_t, ent->s_idx + i) = NO_RC;
+        if (delta > 0) {
+            for (i = 0; i < rcsize; ++i) {
+                int cur_score = garray_ent(bptbl->rc, rcdelta_t, ent->s_idx + i);
+                if (cur_score == NO_RC)
+                    continue;
+                else if (cur_score + delta >= NO_RC) {
+                    E_WARN("rc score overflow in bp %d rc %d: %d + %d\n",
+                           bp, i, cur_score, delta);
+                    garray_ent(bptbl->rc, rcdelta_t, ent->s_idx + i) = NO_RC;
+                }
+                else
+                    garray_ent(bptbl->rc, rcdelta_t, ent->s_idx + i) += delta;
             }
-            else
-                garray_ent(bptbl->rc, rcdelta_t, ent->s_idx + i) += delta;
         }
+        garray_ent(bptbl->rc, rcdelta_t, ent->s_idx + rc) = 0;
     }
+    ent->bp = new_prev;
+    ent->score = new_score;
     bptbl_fake_lmstate_internal(bptbl, ent);
 }
 

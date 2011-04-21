@@ -75,8 +75,10 @@ typedef struct sarc_s {
      * unique language model state.
      */
     int16 lscr;
-    /** Index into an internal right context delta array, not for public use. */
-    int16 rc_idx;
+    /** Index into an internal right context delta array, not for
+     * public use.  (FIXME: suboptimal, it could be 16 bits if we
+     * gc'ed the rcdelta array properly) */
+    int32 rc_idx;
     /** Bitvector indicating active right contexts for this arc. */
     bitvec_t rc_bits[0];
 } sarc_t;

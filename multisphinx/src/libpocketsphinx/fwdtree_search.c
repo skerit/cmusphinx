@@ -2266,12 +2266,14 @@ fwdtree_search_save_bp(fwdtree_search_t *fts, int frame_idx,
          * there would be more than one exit for a word is due to
          * multiple right contexts for its end phone) */
         if (bpe.score WORSE_THAN score) {
-            bptbl_fake_lmstate(fts->bptbl, bp, path, score);
+            bptbl_update_bp(fts->bptbl, bp, rc, path, score);
         }
-        /* But do keep track of scores for all right contexts, since
-         * we need them to determine the starting path scores for any
-         * successors of this word exit. */
-        bptbl_set_rcscore(fts->bptbl, bp, rc, score);
+        else {
+            /* But do keep track of scores for all right contexts, since
+             * we need them to determine the starting path scores for any
+             * successors of this word exit. */
+            bptbl_set_rcscore(fts->bptbl, bp, rc, score);
+        }
     }
     else {
         bpidx_t bpidx = bptbl_enter(fts->bptbl, w, path, score, rc);

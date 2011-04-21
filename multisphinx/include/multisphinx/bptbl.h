@@ -138,7 +138,7 @@ typedef struct bptbl_seg_s {
 /**
  * Data type used to score right-context score deltas.
  */
-typedef uint8 rcdelta_t;
+typedef uint16 rcdelta_t;
 
 /**
  * Indicates no such right-context exists.
@@ -284,14 +284,10 @@ int bptbl_get_rcscores(bptbl_t *bptbl, bpidx_t bpidx, int32 *out_rcscores);
 int bptbl_get_rcdeltas(bptbl_t *bptbl, bpidx_t bpidx, rcdelta_t *out_rcdeltas);
 
 /**
- * Update language model state for a backpointer table entry.
- *
- * This is called "fake" language model state since backpointers don't
- * actually have unique LM states.  In other words this is "poor man's
- * trigram" search.
+ * Update best score and language model state for a backpointer table entry.
  */
-void bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp,
-                        bpidx_t new_path, int32 new_score);
+void bptbl_update_bp(bptbl_t *bptbl, int32 bp, int rc,
+                     bpidx_t new_path, int32 new_score);
 
 /**
  * Calculate approximate language model score for an entry.
