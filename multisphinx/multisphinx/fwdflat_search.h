@@ -45,7 +45,7 @@
 /* SphinxBase headers. */
 #include <sphinxbase/garray.h>
 
-#include <multisphinx/ps_search.h>
+#include <multisphinx/search.h>
 #include <multisphinx/vocab_map.h>
 
 /**

@@ -45,7 +45,7 @@
 #include <sphinxbase/strfuncs.h>
 #include <sphinxbase/pio.h>
 
-#include <multisphinx/ps_search.h>
+#include <multisphinx/search.h>
 #include <multisphinx/latgen_search.h>
 #include <multisphinx/arc_buffer.h>
 #include "ms_lattice.h"

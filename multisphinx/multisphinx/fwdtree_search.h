@@ -45,7 +45,7 @@
 /* SphinxBase headers. */
 #include <sphinxbase/profile.h>
 
-#include <multisphinx/ps_search.h>
+#include <multisphinx/search.h>
 
 /**
  * Initialize fwdtree search.

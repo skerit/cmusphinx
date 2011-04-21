@@ -40,8 +40,8 @@
  * @author David Huggins-Daines <dhuggins@cs.cmu.edu>
  */
 
-#include "ps_search.h"
-#include "arc_buffer.h"
+#include <multisphinx/search.h>
+#include <multisphinx/arc_buffer.h>
 
 void
 ps_search_init(ps_search_t *search, ps_searchfuncs_t *vt,

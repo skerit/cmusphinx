@@ -46,8 +46,8 @@
 #include <sphinxbase/profile.h>
 
 /* Local headers. */
- #include "arc_buffer.h"
-#include "ps_search.h"
+#include <multisphinx/arc_buffer.h>
+#include <multisphinx/search.h>
 
 /**
  * Create a new lattice generator.

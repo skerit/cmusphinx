@@ -52,7 +52,7 @@
 #include <sphinxbase/profile.h>
 
 /* Other headers. */
-#include <multisphinx/ps_search.h>
+#include <multisphinx/search.h>
 #include <multisphinx/featbuf.h>
 #include <multisphinx/acmod.h>
 #include <multisphinx/dict.h>

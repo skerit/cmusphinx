@@ -1,11 +1,14 @@
-#include "pocketsphinx_internal.h"
-#include "fwdflat_search.h"
+#include <multisphinx/arc_buffer.h>
+#include <multisphinx/fwdflat_search.h>
+
 #include "test_macros.h"
 
+static logmath_t *lmath;
 static bin_mdef_t *mdef;
 static dict2pid_t *d2p;
 static dict_t *dict;
 static cmd_ln_t *config;
+static ngram_model_t *lm;
 
 static void
 test_arcbuf(arc_buffer_t *arcs)
@@ -16,7 +19,7 @@ test_arcbuf(arc_buffer_t *arcs)
 	bpidx_t bp;
 	bp_t bpe;
 
-	bptbl = arcs->input_bptbl;
+	bptbl = arc_buffer_input_bptbl(arcs);
 
 	/* Enter a bunch of initial bps (like silence) */
 	fi = bptbl_push_frame(bptbl, NO_BP);
@@ -90,7 +93,6 @@ test_arcbuf(arc_buffer_t *arcs)
 	E_INFO("a was %p, is now %p (%d bytes) arcs[4] = %p\n",
 	       aa, a, (char *)a - (char *)aa,
 	       arc_buffer_iter(arcs, 4));
-	TEST_ASSERT(((char *)a - (char *)aa) == arcs->arc_size * 2);
 	/* There should be two arcs exiting frame 2 and none in frame 3. */
 	TEST_ASSERT(a == arc_buffer_iter(arcs, 4));
 
@@ -129,15 +131,17 @@ main(int argc, char *argv[])
 	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));
 	dict = dict_init(config, mdef);
 	d2p = dict2pid_build(mdef, dict);
+	lmath = logmath_init(1.0001, 0, FALSE);
+	lm = ngram_model_read(config, TESTDATADIR "/hub4.5000.DMP", NGRAM_AUTO, lmath);
 
 	bptbl = bptbl_init("test", d2p, 10, 10);
-	arcs = arc_buffer_init("noscore", bptbl, FALSE);
+	arcs = arc_buffer_init("noscore", bptbl, lm, FALSE);
 	test_arcbuf(arcs);
 	arc_buffer_free(arcs);
 	bptbl_free(bptbl);
 
 	bptbl = bptbl_init("test", d2p, 10, 10);
-	arcs = arc_buffer_init("score", bptbl, TRUE);
+	arcs = arc_buffer_init("score", bptbl, lm, TRUE);
 	test_arcbuf(arcs);
 	arc_buffer_free(arcs);
 	bptbl_free(bptbl);

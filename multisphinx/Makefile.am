@@ -1,7 +1,6 @@
-SUBDIRS = sphinxbase multisphinx programs
-	  swig include test
+SUBDIRS = sphinxbase multisphinx programs swig test
 
-EXTRA_DIST = autogen.sh							\
+EXTRA_DIST = autogen.sh \
 	m4/pkg.m4
 
 pkgconfigdir = $(libdir)/pkgconfig

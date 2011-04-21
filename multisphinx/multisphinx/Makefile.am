@@ -20,7 +20,7 @@ libmultisphinx_la_SOURCES =			\
 	nodeid_map.c				\
 	ngram_trie.c				\
 	ps_alignment.c				\
-	ps_search.c				\
+	search.c				\
 	ptm_mgau.c				\
 	sendump.c				\
 	s2_semi_mgau.c				\
@@ -55,7 +55,7 @@ pkginclude_HEADERS = \
 	posixwin32.h				\
 	ps_alignment.h				\
 	ps_lattice_internal.h			\
-	ps_search.h				\
+	search.h				\
 	ptm_mgau.h				\
 	s2_semi_mgau.h				\
 	s3types.h				\

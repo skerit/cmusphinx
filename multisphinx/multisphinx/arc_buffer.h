@@ -104,6 +104,16 @@ arc_buffer_t *arc_buffer_retain(arc_buffer_t *fab);
 int arc_buffer_free(arc_buffer_t *fab);
 
 /**
+ * Get backpointer talbe from an arc buffer.
+ */
+bptbl_t *arc_buffer_input_bptbl(arc_buffer_t *fab);
+
+/**
+ * Get language model from an arc buffer.
+ */
+ngram_model_t *arc_buffer_lm(arc_buffer_t *fab);
+
+/**
  * Dump contents of arc buffer for debugging.
  */
 void arc_buffer_dump(arc_buffer_t *fab, dict_t *dict);
