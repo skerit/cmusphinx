@@ -67,11 +67,25 @@ typedef struct latgen_search_s {
     logmath_t *lmath;
     arc_buffer_t *input_arcs;
     ms_lattice_t *output_lattice;
+    /** Storage for language model state components. */
     int32 *lmhist;
+    /** Allocation size of @a lmhist. */
     int max_n_hist;
+    /** List of active node IDs at current frame. */
     garray_t *active_nodes;
+    /** Right context ID for all links in current lattice. */
     garray_t *link_rcid;
+    /**
+     * Original word ID corresponding to each link.
+     *
+     * We need to maintain this for building the lattice, because
+     * links contain base word IDs (or rather language model word IDs)
+     * but we need the correct word ID in order to find the correct
+     * right context mapping.
+     */
     garray_t *link_altwid;
+    /** Raw path score for all links in current lattice. */
+    garray_t *link_score;
 } latgen_search_t;
 
 ps_search_t *
@@ -90,20 +104,13 @@ latgen_init(cmd_ln_t *config,
     latgen->lmath = logmath_retain(ngram_model_get_lmath(lm));
     latgen->lm = ngram_model_retain(lm);
 
-    /* Storage for language model state components. */
     latgen->max_n_hist = ngram_model_get_size(lm) - 1;
     latgen->lmhist = ckd_calloc(latgen->max_n_hist,
                                 sizeof(*latgen->lmhist));
-    /* List of active nodes for a given frame. */
     latgen->active_nodes = garray_init(0, sizeof(int32));
-    /* Right context ID corresponding to each link. */
     latgen->link_rcid = garray_init(0, sizeof(uint8));
-    /* Original word ID corresponding to each arc - we need to
-     * maintain this for building the lattice, because links contain
-     * base word IDs (or rather language model word IDs) but we need
-     * the correct word ID in order to find the correct right context
-     * mapping. */
     latgen->link_altwid = garray_init(0, sizeof(int32));
+    latgen->link_score = garray_init(0, sizeof(int32));
 	
     return &latgen->base;
 }
@@ -173,6 +180,42 @@ get_backoff_lmstate(ms_lattice_t *l, ngram_model_t *lm,
 }
 
 /**
+ * Create a new link in the output lattice.
+ */
+static ms_latlink_t *
+create_new_link(latgen_search_t *latgen, ms_latnode_t *src,
+                ms_latnode_t *dest, ms_latlink_t *incoming_link,
+                int32 wid, int32 altwid, int32 score, int32 rc)
+{
+    ms_latlink_t *link;
+    int32 linkid, ascr;
+
+    /* Calculate the acoustic score for this link. */
+    /* FIXME: Need lscr too (should be in arc buffer) */
+    linkid = ms_lattice_get_idx_link(latgen->output_lattice,
+                                     incoming_link);
+    ascr = score - garray_ent(latgen->link_score, int32, linkid);
+
+    /* Create the new link. */
+    /* FIXME: A matching link may already exist (with a different
+     * alternate word ID) in which case we should just take the best
+     * ascr. */
+    link = ms_lattice_link(latgen->output_lattice,
+                           src, dest, wid, ascr);
+
+    /* Record useful facts about this link for its successors. */
+    linkid = ms_lattice_get_idx_link(latgen->output_lattice, link);
+    garray_expand(latgen->link_rcid, linkid + 1);
+    garray_ent(latgen->link_rcid, uint8, linkid) = rc;
+    garray_expand(latgen->link_altwid, linkid + 1);
+    garray_ent(latgen->link_altwid, int32, linkid) = altwid;
+    garray_expand(latgen->link_score, linkid + 1);
+    garray_ent(latgen->link_score, int32, linkid) = score;
+
+    return link;
+}
+
+/**
  * Create lattice links for a given node and arc.
  *
  * 1) Find the incoming arc corresponding to the initial phone of
@@ -214,7 +257,6 @@ create_outgoing_links_one(latgen_search_t *latgen,
         /* Try to match ciphone against the right context ID. */
         else {
             int32 linkwid = garray_ent(latgen->link_altwid, int32, linkid);
-            /* NOTE: single phone words always have rcid = -1. */
             rssid = dict2pid_rssid
                 (latgen->d2p,
                  dict_last_phone(latgen->d2p->dict, linkwid),
@@ -246,6 +288,18 @@ create_outgoing_links_one(latgen_search_t *latgen,
          latgen->lm, headwid, latgen->lmhist,
          n_hist, &lscr, &bowt);
 
+    /* FIXME: Not exactly sure where/how to apply backoff weights,
+     * hopefully it'll come to me.  Actually the way we are creating
+     * nodes is a bit wrong - we still need to do the duplication of
+     * nodes and creation of backoff nodes like standalone expansion
+     * does.  Basically the function above needs to create a backoff
+     * node if it can't find a language model state for the arc under
+     * consideration.  Then we duplicate all incoming arcs and add the
+     * backoff weight to them - actually though since we are doing
+     * this incrementally all we need to do is look for a backoff node
+     * and add the backoff weight to each incoming arc as we copy it -
+     * this has the side effect of only preserving relevant arcs. */
+
     /* Get or create a node for that lmstate/frame. */
     if ((dest = ms_lattice_get_node_id
          /* NOTE: bptbl indices are inclusive, ours are not. */
@@ -257,41 +311,21 @@ create_outgoing_links_one(latgen_search_t *latgen,
     /* For all right contexts create a link to dest. */
     if (dict_pronlen(latgen->d2p->dict, arc->arc.wid) == 1) {
         ms_latlink_t *link;
-        int32 linkid;
-        /* FIXME: Actually calculate ascr here, that's why we found
-         * incoming_link in the first place!  */
-        /* FIXME: Also, a matching link may already exist (with a
-         * different alternate word ID) in which case we should just
-         * take the best ascr. */
-        link = ms_lattice_link(latgen->output_lattice,
-                               node, dest, headwid,
-                               arc->score);
-        linkid = ms_lattice_get_idx_link (latgen->output_lattice, link);
-        garray_expand(latgen->link_rcid, linkid + 1);
-        garray_ent(latgen->link_rcid, uint8, linkid) = NO_RC;
-        garray_expand(latgen->link_altwid, linkid + 1);
-        garray_ent(latgen->link_altwid, int32, linkid) = arc->arc.wid;
+        link = create_new_link(latgen, node, dest, incoming_link,
+                               headwid, arc->arc.wid, arc->score,
+                               NO_RC);
+        link->lscr = lscr; /* FIXME: See above re. bowt */
         ++n_links;
     }
     else {
         for (i = 0; i < arc_buffer_max_n_rc(latgen->input_arcs); ++i) {
             if (bitvec_is_set(arc->rc_bits, i)) {
                 ms_latlink_t *link;
-                int32 linkid;
-                /* FIXME: Actually calculate ascr here, that's why we found
-                 * incoming_link in the first place!  */
-                /* FIXME: Also, a matching link may already exist (with a
-                 * different alternate word ID) in which case we should just
-                 * take the best ascr. */
-                link = ms_lattice_link
-                    (latgen->output_lattice,
-                     node, dest, headwid,
-                     arc_buffer_get_rcscore(latgen->input_arcs, arc, i));
-                linkid = ms_lattice_get_idx_link (latgen->output_lattice, link);
-                garray_expand(latgen->link_rcid, linkid + 1);
-                garray_ent(latgen->link_rcid, uint8, linkid) = i;
-                garray_expand(latgen->link_altwid, linkid + 1);
-                garray_ent(latgen->link_altwid, int32, linkid) = arc->arc.wid;
+                link = create_new_link
+                    (latgen, node, dest, incoming_link,
+                     headwid, arc->arc.wid, 
+                     arc_buffer_get_rcscore(latgen->input_arcs, arc, i), i);
+                link->lscr = lscr; /* FIXME: See above re. bowt */
                 ++n_links;
             }
         }
@@ -396,6 +430,11 @@ latgen_search_decode(ps_search_t *base)
     epsilon = ms_lattice_lmstate_init(latgen->output_lattice, -1,
                                       NULL, 0);
     ms_lattice_node_init(latgen->output_lattice, 0, epsilon);
+
+    /* Reset some internal arrays. */
+    garray_reset(latgen->link_rcid);
+    garray_reset(latgen->link_altwid);
+    garray_reset(latgen->link_score);
 
     /* Process frames full of arcs. */
     while (arc_buffer_consumer_wait(latgen->input_arcs, -1) >= 0) {

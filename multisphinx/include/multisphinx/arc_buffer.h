@@ -50,16 +50,34 @@
 /* Local headers. */
 #include "bptbl.h"
 
+/**
+ * Basic (unscored) arc.
+ */
 typedef struct arc_s {
     int32 wid;
     int32 src;
     int32 dest;
 } arc_t;
 
+/**
+ * Arc with scoring information.
+ */
 typedef struct sarc_s {
+    /** Base arc structure. */
     arc_t arc;
+    /** Best path score for this arc. */
     int32 score;
-    int32 rc_idx;
+    /**
+     * Language model score component of score for this arc.
+     *
+     * This is the approximate language model score for this arc that
+     * was used in decoding.  It is approximate because arcs have no
+     * unique language model state.
+     */
+    int16 lscr;
+    /** Right context index corresponding to best path score. */
+    int16 rc_idx;
+    /** Bitvector indicating active right contexts for this arc. */
     bitvec_t rc_bits[0];
 } sarc_t;
 
@@ -69,7 +87,9 @@ typedef struct arc_buffer_s arc_buffer_t;
  * Create a new arc buffer.
  */
 arc_buffer_t *arc_buffer_init(char const *name,
-                              bptbl_t *input_bptbl, int keep_scores);
+                              bptbl_t *input_bptbl,
+                              ngram_model_t *lm,
+                              int keep_scores);
 
 /**
  * Retain a pointer to an arc buffer.

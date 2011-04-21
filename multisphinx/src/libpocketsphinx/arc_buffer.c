@@ -60,6 +60,7 @@ struct arc_buffer_s {
     garray_t *sf_idx;
     garray_t *rc_deltas;
     bptbl_t *input_bptbl;
+    ngram_model_t *lm;
     int32 *tmp_rcscores;
     int max_n_rc;
     int state;
@@ -76,7 +77,8 @@ static int arc_buffer_extend(arc_buffer_t *fab, int next_sf);
 static int arc_buffer_commit(arc_buffer_t *fab);
 
 arc_buffer_t *
-arc_buffer_init(char const *name, bptbl_t *input_bptbl, int keep_scores)
+arc_buffer_init(char const *name, bptbl_t *input_bptbl,
+                ngram_model_t *lm, int keep_scores)
 {
     arc_buffer_t *fab;
 
@@ -89,6 +91,8 @@ arc_buffer_init(char const *name, bptbl_t *input_bptbl, int keep_scores)
     fab->evt = sbevent_init(FALSE);
     fab->mtx = sbmtx_init();
     fab->input_bptbl = bptbl_retain(input_bptbl);
+    if (lm)
+        fab->lm = ngram_model_retain(lm);
     fab->scores = keep_scores;
     if (keep_scores) {
         fab->rc_deltas = garray_init(0, sizeof(rcdelta_t));
@@ -130,6 +134,7 @@ arc_buffer_free(arc_buffer_t *fab)
     sbevent_free(fab->evt);
     sbmtx_free(fab->mtx);
     bptbl_free(fab->input_bptbl);
+    ngram_model_free(fab->lm);
     ckd_free(fab->tmp_rcscores);
     ckd_free(fab->name);
     ckd_free(fab);
@@ -246,7 +251,11 @@ arc_buffer_add_bps(arc_buffer_t *fab,
                  * can do this more efficiently using the guts of
                  * bptbl_t now that there are no thread issues. */
                 int i, rcsize = bptbl_get_rcscores(bptbl, idx, fab->tmp_rcscores);
+                int n_used;
+
                 sp->score = ent.score;
+                if (fab->lm)
+                    sp->lscr = bptbl_fake_lmscore(bptbl, fab->lm, idx, &n_used);
                 sp->rc_idx = garray_next_idx(fab->rc_deltas);
                 bitvec_clear_all(sp->rc_bits, fab->max_n_rc);
                 for (i = 0; i < rcsize; ++i) {

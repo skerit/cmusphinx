@@ -287,6 +287,12 @@ void bptbl_fake_lmstate(bptbl_t *bptbl, int32 bp,
                         bpidx_t new_path, int32 new_score);
 
 /**
+ * Calculate approximate language model score for an entry.
+ */
+int32 bptbl_fake_lmscore(bptbl_t *bptbl, ngram_model_t *lm,
+                         bpidx_t bp, int *out_n_used);
+
+/**
  * Construct a hypothesis string from the best path in bptbl.
  *
  * @param out_score Output: Score of hypothesis.

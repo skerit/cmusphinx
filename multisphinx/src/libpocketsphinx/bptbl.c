@@ -1038,6 +1038,26 @@ bptbl_fake_lmstate_internal(bptbl_t *bptbl, bp_t *ent)
     }
 }
 
+int32
+bptbl_fake_lmscore(bptbl_t *bptbl, ngram_model_t *lm,
+                   bpidx_t bp, int *out_n_used)
+{
+    bp_t *prev, *ent;
+
+    ent = bptbl_ent_internal(bptbl, bp);
+    assert(ent != NULL);
+    prev = bptbl_ent_internal(bptbl, ent->bp);
+
+    /* Start word has lscr = 0 */
+    if (prev == NULL)
+        return 0;
+
+    return ngram_tg_score(lm, ent->real_wid,
+                          prev->real_wid,
+                          prev->prev_real_wid,
+                          out_n_used)>>SENSCR_SHIFT;
+}
+
 bpidx_t
 bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
 {

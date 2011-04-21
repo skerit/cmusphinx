@@ -413,7 +413,6 @@ fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
     fts->bptbl = bptbl_init("fwdtree",
                             d2p, cmd_ln_int32_r(config, "-latsize"), 256);
     fts->word_idx = ckd_calloc(dict_size(dict), sizeof(*fts->word_idx));
-    ps_search_output_arcs(fts) = arc_buffer_init("fwdtree", fts->bptbl, FALSE);
 
     /* Allocate active word list array */
     fts->active_word_list = ckd_calloc_2d(2, dict_size(dict),
@@ -456,6 +455,10 @@ fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
         E_ERROR("Language model/set does not contain </s>, recognition will fail\n");
         goto error_out;
     }
+
+    /* Create output arc buffer. */
+    ps_search_output_arcs(fts) = arc_buffer_init("fwdtree", fts->bptbl,
+                                                 fts->lmset, FALSE);
 
     /* Create word mappifts. */
     fwdtree_search_update_widmap(fts);

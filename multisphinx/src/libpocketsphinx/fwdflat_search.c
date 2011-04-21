@@ -293,7 +293,6 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
                                       sizeof(*ffs->expand_word_list));
     ffs->input_arcs = arc_buffer_retain(input_arcs);
     ffs->bptbl = bptbl_init("fwdflat", d2p, cmd_ln_int32_r(config, "-latsize"), 256);
-    ps_search_output_arcs(ffs) = arc_buffer_init("fwdflat", ffs->bptbl, TRUE);
 
     /* Allocate active word list array */
     ffs->active_word_list = ckd_calloc_2d(2, ps_search_n_words(ffs),
@@ -345,6 +344,10 @@ fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
                       / cmd_ln_float32_r(config, "-lw") * 32768);
     E_INFO("Second pass language weight %f => %d\n",
            (float)ffs->lw / 32768, ffs->lw);
+
+    /* Create output arc buffer. */
+    ps_search_output_arcs(ffs) = arc_buffer_init("fwdtree", ffs->bptbl,
+                                                 ffs->lmset, TRUE /* FIXME */);
 
     /* Load a vocabulary map if needed. */
     if ((path = cmd_ln_str_r(config, "-vm"))) {
