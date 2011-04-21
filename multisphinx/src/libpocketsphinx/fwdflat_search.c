@@ -1274,6 +1274,8 @@ fwdflat_search_finish(ps_search_t *base)
                garray_next_idx(ffs->word_list));
     }
 
+    bptbl_dump(ffs->bptbl);
+
     /* Reset the utterance vocabulary. */
     destroy_fwdflat_chan(ffs);
 

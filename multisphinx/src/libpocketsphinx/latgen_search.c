@@ -87,7 +87,7 @@ latgen_init(cmd_ln_t *config,
 
 static int
 latgen_search_process_arcs(latgen_search_t *latgen,
-                           arc_t *itor, int32 frame_idx)
+                           sarc_t *itor, int32 frame_idx)
 {
     ms_latnode_t *src_incomplete;
     int n_arc;
@@ -102,16 +102,23 @@ latgen_search_process_arcs(latgen_search_t *latgen,
         return 0;
 
     for (n_arc = 0; itor; ++n_arc, 
-             itor = arc_buffer_iter_next(latgen->input_arcs, itor)) {
+             itor = (sarc_t *)arc_buffer_iter_next
+             (latgen->input_arcs, &itor->arc)) {
         ms_latnode_t *src, *dest;
-        int32 lmstate, wid;
+        int32 lmstate;
 
-        /* Create or find a language model state. */
+        if (itor->arc.src != frame_idx) /* FIXME: iterators don't work like they should */
+            continue;
+        /* Create or find a "language model state" (actually not a
+         * language model state, just a node identifier). */
         if ((lmstate = ms_lattice_get_lmstate_idx
-             (latgen->output_lattice, itor->wid, NULL, 0)) == -1)
+             (latgen->output_lattice, itor->arc.wid, NULL, 0)) == -1)
             lmstate = ms_lattice_lmstate_init
-                (latgen->output_lattice, itor->wid, NULL, 0);
+                (latgen->output_lattice, itor->arc.wid, NULL, 0);
 
+        E_INFO("Input arc %s / %d -> %d / %d\n",
+               dict_wordstr(ps_search_dict(latgen), itor->arc.wid),
+               itor->arc.src, itor->arc.dest + 1, itor->score);
         /* Look for a node to extend with this arc. */
         if ((src = ms_lattice_get_node_id
              (latgen->output_lattice, frame_idx, lmstate)) != NULL) {
@@ -128,9 +135,11 @@ latgen_search_process_arcs(latgen_search_t *latgen,
          * frame.  Note that the arc buffer stores *inclusive* end
          * frame indices, since they are derived from backpointers. */
         if ((dest = ms_lattice_get_node_id
-             (latgen->output_lattice, itor->dest + 1, latgen->incomplete)) == NULL) {
+             (latgen->output_lattice, itor->arc.dest + 1, latgen->incomplete)) == NULL) {
             dest = ms_lattice_node_init
-                (latgen->output_lattice, itor->dest + 1, latgen->incomplete);
+                (latgen->output_lattice, itor->arc.dest + 1, latgen->incomplete);
+
+            int32 wid;
             ms_lattice_get_lmstate_wids(latgen->output_lattice,
                                         dest->id.lmstate, &wid, NULL);
             E_INFO("Created destination node %s/%d\n",
@@ -183,7 +192,7 @@ latgen_search_decode(ps_search_t *base)
                 arc_buffer_unlock(latgen->input_arcs);
                 break;
             }
-            n_arc = latgen_search_process_arcs(latgen, itor, frame_idx);
+            n_arc = latgen_search_process_arcs(latgen, (sarc_t *)itor, frame_idx);
             E_INFO("Added %d arcs leaving frame %d\n", n_arc, frame_idx);
             arc_buffer_unlock(latgen->input_arcs);
             ++frame_idx;

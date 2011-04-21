@@ -30,8 +30,8 @@ main(int argc, char *argv[])
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
-			     "-lm", TESTDATADIR "/bn10000.3g.arpa",
-			     "-dict", TESTDATADIR "/bn10000.dic",
+			     "-lm", TESTDATADIR "/bcb05cnp.arpa",
+			     "-dict", TESTDATADIR "/bcb05cnp.dic",
 			     "-maxwpf", "50",
 			     "-latsize", "512",
 			     NULL);
@@ -86,8 +86,11 @@ main(int argc, char *argv[])
 	ps_search_wait(fwdflat);
 	ps_search_wait(latgen);
 	E_INFO("Done reaping\n");
+	ps_search_free(fwdtree);
 	ps_search_free(fwdflat);
+	ps_search_free(latgen);
 	acmod_free(acmod);
+	acmod_free(acmod2);
 	featbuf_free(fb);
 
 	/* Clean everything else up. */

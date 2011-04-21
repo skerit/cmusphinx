@@ -238,6 +238,9 @@ arc_buffer_add_bps(arc_buffer_t *fab,
              * length array rc_bits. */
             sarc_t *sp = garray_append(fab->arcs, &sarc);
 
+            E_INFO("Added arc %s %d -> %d\n",
+                   dict_wordstr(bptbl->d2p->dict, sarc.arc.wid),
+                   sarc.arc.src, sarc.arc.dest + 1);
             if (fab->scores) {
                 /* Compress and add right context deltas.  FIXME: We
                  * can do this more efficiently using the guts of
@@ -283,8 +286,8 @@ arc_buffer_producer_sweep(arc_buffer_t *fab, int release)
     arc_buffer_lock(fab);
     next_sf = bptbl_active_sf(fab->input_bptbl);
     if (arc_buffer_extend(fab, next_sf) > 0) {
-        E_DEBUG(2,("Adding arcs to frame %d idx %d:%d\n",
-                   next_sf, fab->next_idx, bptbl_retired_idx(fab->input_bptbl)));
+        E_INFO("Adding arcs to frame %d idx %d:%d\n",
+               next_sf, fab->next_idx, bptbl_retired_idx(fab->input_bptbl));
         fab->next_idx = arc_buffer_add_bps(fab, fab->input_bptbl,
                                            fab->next_idx,
                                            bptbl_retired_idx(fab->input_bptbl));
