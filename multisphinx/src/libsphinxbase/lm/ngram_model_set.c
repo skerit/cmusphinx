@@ -697,6 +697,41 @@ ngram_model_set_apply_weights(ngram_model_t *base, float32 lw,
     return 0;
 }
 
+static ngram_iter_t *
+ngram_model_set_ng_iter(ngram_model_t *base, int32 wid,
+                        int32 *history, int32 n_hist)
+{
+    ngram_model_set_t *set = (ngram_model_set_t *)base;
+
+    /* Truncate the history. */
+    if (n_hist > base->n - 1)
+        n_hist = base->n - 1;
+
+    /* Just forward this to the current language model. */
+    if (set->cur == -1)
+        return NULL;
+    else if (set->lms[set->cur]->funcs->iter == NULL)
+        return NULL;
+    else {
+        ngram_iter_t *ni;
+        int32 mapwid, j;
+        /* Map word and history IDs (FIXME: do this in a function?) */
+        sbmtx_lock(set->mtx);
+        mapwid = set->widmap[wid][set->cur];
+        for (j = 0; j < n_hist; ++j) {
+            if (history[j] == NGRAM_INVALID_WID)
+                set->maphist[j] = NGRAM_INVALID_WID;
+            else
+                set->maphist[j] = set->widmap[history[j]][set->cur];
+        }
+        ni = (*set->lms[set->cur]->funcs->iter)
+            (set->lms[set->cur], mapwid, set->maphist, n_hist);
+        sbmtx_unlock(set->mtx);
+
+        return ni;
+    }
+}
+
 static int32
 ngram_model_set_score(ngram_model_t *base, int32 wid,
                       int32 *history, int32 n_hist,
@@ -889,5 +924,6 @@ static ngram_funcs_t ngram_model_set_funcs = {
     ngram_model_set_score,         /* score */
     ngram_model_set_raw_score,     /* raw_score */
     ngram_model_set_add_ug,        /* add_ug */
-    ngram_model_set_flush          /* flush */
+    ngram_model_set_flush,         /* flush */
+    ngram_model_set_ng_iter	   /* iter */
 };
