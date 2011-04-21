@@ -40,6 +40,8 @@
  */
 
 #include <sphinxbase/garray.h>
+#include <sphinxbase/err.h>
+
 #include "ps_search.h"
 #include "arc_buffer.h"
 #include "nodeid_map.h"
@@ -129,86 +131,62 @@ get_frame_active_nodes(ms_lattice_t *l, garray_t *out_active_nodes,
          node_itor = ms_latnode_iter_next(node_itor)) {
         int32 node_idx = ms_latnode_iter_get_idx(node_itor);
         garray_append(out_active_nodes, &node_idx);
+        E_INFO("Frame %d added node ", frame_idx);
+        ms_latnode_print(err_get_logfp(), l,
+                         ms_lattice_get_node_idx(l, node_idx));
+        E_INFOCONT("\n");
     }
     return garray_size(out_active_nodes);
 }
 
-/**
- * Create the appropriate (backed-off) language model state for a node.
- *
- * FIXME: Duplicates code in ms_lattice.c, should be refactored -
- * unfortunately there is the issue of word ID mapping there which
- * does not exist here.
- */
-static int32
-get_backoff_lmstate(ms_lattice_t *l, ngram_model_t *lm,
-                    int32 headwid, int32 *lmhist, int n_hist,
-                    int32 *out_lscr, int32 *out_bowt)
+static int
+print_lmstate(FILE *fh, ngram_model_t *lm, int32 headwid, int32 *lmhist,
+              int n_hist)
 {
-    int32 lmstate;
+    int i;
 
-    lmstate = -1;
-    *out_lscr = *out_bowt = 0;
-    while (n_hist > 0) {
-        ngram_iter_t *ni;
-        if ((ni = ngram_ng_iter(lm, headwid,
-                                lmhist, n_hist)) != NULL) {
-            /* Create or find the relevant lmstate. */
-            if ((lmstate = ms_lattice_get_lmstate_idx
-                 (l, lmhist[0], lmhist + 1, n_hist - 1)) == -1)
-                lmstate = ms_lattice_lmstate_init
-                    (l, lmhist[0], lmhist + 1, n_hist - 1);
-            ngram_iter_get(ni, out_lscr, NULL);
-            ngram_iter_free(ni);
-            break;
-        }
-        else {
-            /* Back off and update the backoff weight. */
-            assert(n_hist > 0);
-            if ((ni = ngram_ng_iter
-                 (lm, lmhist[0], lmhist + 1, n_hist - 1)) != NULL) {
-                ngram_iter_get(ni, NULL, out_bowt);
-                ngram_iter_free(ni);
-            }
-            else
-                *out_bowt = 0;
-            if (--n_hist == 0)
-                lmstate = -1; /* epsilon, which is okay. */
-        }
-    }
-    return lmstate;
+    if (fprintf(fh, "%s", ngram_word(lm, headwid)) < 0)
+        return -1;
+    for (i = 0; i < n_hist; ++i)
+        if (fprintf(fh, ", %s", ngram_word(lm, lmhist[i])) < 0)
+            return -1;
+    return 0;
 }
 
 /**
  * Create a new link in the output lattice.
  */
 static ms_latlink_t *
-create_new_link(latgen_search_t *latgen, ms_latnode_t *src,
-                ms_latnode_t *dest, ms_latlink_t *incoming_link,
-                int32 wid, int32 altwid, int32 score, int32 rc)
+create_new_link(latgen_search_t *latgen,
+                int32 srcidx, int32 destidx,
+                int32 incoming_linkid,
+                sarc_t *arc, int32 headwid, int32 score, int32 rc)
 {
+    ms_latnode_t *src, *dest;
     ms_latlink_t *link;
     int32 linkid, ascr;
 
     /* Calculate the acoustic score for this link. */
-    /* FIXME: Need lscr too (should be in arc buffer) */
-    linkid = ms_lattice_get_idx_link(latgen->output_lattice,
-                                     incoming_link);
-    ascr = score - garray_ent(latgen->link_score, int32, linkid);
+    ascr = score - arc->lscr;
+    if (incoming_linkid != -1)
+        ascr -= garray_ent(latgen->link_score, int32,
+                           incoming_linkid);
 
     /* Create the new link. */
     /* FIXME: A matching link may already exist (with a different
      * alternate word ID) in which case we should just take the best
      * ascr. */
+    src = ms_lattice_get_node_idx(latgen->output_lattice, srcidx);
+    dest = ms_lattice_get_node_idx(latgen->output_lattice, destidx);
     link = ms_lattice_link(latgen->output_lattice,
-                           src, dest, wid, ascr);
+                           src, dest, headwid, ascr);
 
     /* Record useful facts about this link for its successors. */
     linkid = ms_lattice_get_idx_link(latgen->output_lattice, link);
     garray_expand(latgen->link_rcid, linkid + 1);
     garray_ent(latgen->link_rcid, uint8, linkid) = rc;
     garray_expand(latgen->link_altwid, linkid + 1);
-    garray_ent(latgen->link_altwid, int32, linkid) = altwid;
+    garray_ent(latgen->link_altwid, int32, linkid) = arc->arc.wid;
     garray_expand(latgen->link_score, linkid + 1);
     garray_ent(latgen->link_score, int32, linkid) = score;
 
@@ -228,31 +206,35 @@ create_new_link(latgen_search_t *latgen, ms_latnode_t *src,
 
 static int
 create_outgoing_links_one(latgen_search_t *latgen,
-                          ms_latnode_t *node,
+                          int32 nodeidx,
                           bitvec_t *active_incoming_links,
                           sarc_t *arc)
 {
-    ms_latlink_t *incoming_link;
-    ms_latnode_t *dest;
-    int32 lmstate, headwid, lscr, bowt;
+    ms_latnode_t *node;
+    int32 srcidx, destidx;
+    int32 incoming_score, incoming_linkid;
+    int32 lmstate, bo_lmstate, headwid, lscr, bowt;
     int ciphone, n_hist, i;
     xwdssid_t *rssid;
     int n_links = 0;
 
-    /* Find incoming link (to get starting path score) */
-    /* FIXME: Actually there are probably multiple incoming links, and
-     * we want to take the best scoring one. */
+    /* Find best incoming link (to get starting path score) */
     ciphone = dict_first_phone(latgen->d2p->dict, arc->arc.wid);
-    incoming_link = NULL;
+    incoming_linkid = -1;
+    incoming_score = WORST_SCORE;
+    node = ms_lattice_get_node_idx(latgen->output_lattice, nodeidx);
     for (i = 0; i < ms_latnode_n_entries(node); ++i) {
         int32 linkid = ms_latnode_get_entry_idx
             (latgen->output_lattice, node, i);
         int rcid = garray_ent(latgen->link_rcid, uint8, linkid);
+        int32 score = garray_ent(latgen->link_score, int32, linkid);
+
         /* No multiple right contexts: everything matches. */
         if (rcid == NO_RC) {
-            incoming_link = ms_lattice_get_link_idx
-                (latgen->output_lattice, linkid);
-            break;
+            if (score BETTER_THAN incoming_score) {
+                incoming_linkid = linkid;
+                incoming_score = score;
+            }
         }
         /* Try to match ciphone against the right context ID. */
         else {
@@ -262,60 +244,133 @@ create_outgoing_links_one(latgen_search_t *latgen,
                  dict_last_phone(latgen->d2p->dict, linkwid),
                  dict_second_last_phone(latgen->d2p->dict, linkwid));
             if (rssid->cimap[ciphone] == rcid) {
-                incoming_link = ms_lattice_get_link_idx
-                    (latgen->output_lattice, linkid);
-                break;
+                if (score BETTER_THAN incoming_score) {
+                    incoming_linkid = linkid;
+                    incoming_score = score;
+                }
             }
         }
     }
-    /* FIXME: This is almost certainly going to fail.  Fuck. */
-    assert(node->id.sf == 0 || incoming_link != NULL);
+    /* Start node has no incoming link (duh) */
+    assert(node->id.sf == 0 || incoming_linkid != -1);
     /* Now mark this incoming link as active. */
     if (i < ms_latnode_n_entries(node))
         bitvec_set(active_incoming_links, i);
 
-    /* Create new language model state */
+    /* Create new language model state.  This is the language model
+     * state of the source node plus the arc's base word ID.  */
     n_hist =
         ms_lattice_get_lmstate_wids(latgen->output_lattice,
                                     node->id.lmstate,
                                     &headwid, latgen->lmhist);
+    /* First rotate the previous head word into the history. */
     rotate_lmstate(headwid, latgen->lmhist, n_hist,
                    latgen->max_n_hist);
     /* headwid + latgen->lmhist are now the raw lmstate. */
     headwid = dict_basewid(latgen->d2p->dict, arc->arc.wid);
-    /* Get the appropriate backed-off lmstate. */
-    lmstate = get_backoff_lmstate
-        (latgen->output_lattice,
-         latgen->lm, headwid, latgen->lmhist,
-         n_hist, &lscr, &bowt);
+    E_INFO("Raw language model state ");
+    print_lmstate(err_get_logfp(), latgen->lm, headwid, latgen->lmhist, n_hist);
+    E_INFOCONT("\n");
 
-    /* FIXME: Not exactly sure where/how to apply backoff weights,
-     * hopefully it'll come to me.  Actually the way we are creating
-     * nodes is a bit wrong - we still need to do the duplication of
-     * nodes and creation of backoff nodes like standalone expansion
-     * does.  Basically the function above needs to create a backoff
-     * node if it can't find a language model state for the arc under
-     * consideration.  Then we duplicate all incoming arcs and add the
-     * backoff weight to them - actually though since we are doing
-     * this incrementally all we need to do is look for a backoff node
-     * and add the backoff weight to each incoming arc as we copy it -
-     * this has the side effect of only preserving relevant arcs. */
+    /* Create or find a destination node with the above language model
+     * state.  If none exists, back off until one is found.  (FIXME: Do
+     * we have to create backoff nodes for each stage of backoff or
+     * just the last one?)
+     */
+    lmstate = bo_lmstate = -1;
+    lscr = bowt = 0;
+    while (n_hist >= 0) {
+        ngram_iter_t *ni = NULL;
+        /* <s> is not an N-gram but it is an acceptable LM state. */
+        if (headwid == dict_startwid(latgen->d2p->dict)
+            || (ni = ngram_ng_iter(latgen->lm, headwid,
+                                    latgen->lmhist, n_hist)) != NULL) {
+            /* Create or find the relevant lmstate. */
+            if ((lmstate = ms_lattice_get_lmstate_idx
+                 (latgen->output_lattice, headwid,
+                  latgen->lmhist, n_hist)) == -1)
+                lmstate = ms_lattice_lmstate_init
+                    (latgen->output_lattice, headwid,
+                     latgen->lmhist, n_hist);
+            if (ni) {
+                ngram_iter_get(ni, &lscr, NULL);
+                ngram_iter_free(ni);
+            }
+            break;
+        }
+        else {
+            assert(n_hist > 0);
+            /* Get the backoff weight. */
+            if ((ni = ngram_ng_iter
+                 (latgen->lm, latgen->lmhist[0],
+                  latgen->lmhist + 1, n_hist - 1)) != NULL) {
+                ngram_iter_get(ni, NULL, &bowt);
+                ngram_iter_free(ni);
+            }
+            else
+                bowt = 0;
+            --n_hist;
+        }
+    }
+    /* Epsilon is not appropriate for the destination node. */
+    assert(lmstate != -1);
+    E_INFO("Final language model state ");
+    print_lmstate(err_get_logfp(), latgen->lm, headwid, latgen->lmhist, n_hist);
+    E_INFOCONT("\n");
+    /* Find or create a source node for the backoff language model
+     * state.  If we create a source node copy incoming arcs, adding
+     * the backoff weight to their lscr.  (FIXME: Verify that this is
+     * the correct thing to do) */
+    if (n_hist == 0) {
+        E_INFO("Backoff language model state &epsilon bowt %d\n", bowt);
+        if ((node = ms_lattice_get_node_id
+             (latgen->output_lattice, node->id.sf, -1)) == NULL) {
+            node = ms_lattice_node_init
+                (latgen->output_lattice, node->id.sf, -1);
+        }
+    }
+    else {
+        E_INFO("Backoff language model state ");
+        print_lmstate(err_get_logfp(), latgen->lm, latgen->lmhist[0],
+                      latgen->lmhist + 1, n_hist - 1);
+        E_INFOCONT("bowt %d\n", bowt);
+        if ((node = ms_lattice_get_node_id
+             (latgen->output_lattice, node->id.sf, bo_lmstate)) == NULL) {
+            node = ms_lattice_node_init
+                (latgen->output_lattice, node->id.sf, bo_lmstate);
+        }
+    }
+    srcidx = ms_lattice_get_idx_node(latgen->output_lattice, node);
+    assert(srcidx >= 0);
+    if (srcidx != nodeidx) {
+        E_INFO("New source node:");
+        ms_latnode_print(err_get_logfp(), latgen->output_lattice, node);
+        E_INFOCONT("\n");
+    }
 
-    /* Get or create a node for that lmstate/frame. */
-    if ((dest = ms_lattice_get_node_id
+    /* Find or create a destination node. */
+    if ((node = ms_lattice_get_node_id
          /* NOTE: bptbl indices are inclusive, ours are not. */
-         (latgen->output_lattice, lmstate, arc->arc.dest + 1)) == NULL) {
-        dest = ms_lattice_node_init
+         (latgen->output_lattice, arc->arc.dest + 1, lmstate)) == NULL) {
+        node = ms_lattice_node_init
             (latgen->output_lattice, arc->arc.dest + 1, lmstate);
     }
+    destidx = ms_lattice_get_idx_node(latgen->output_lattice, node);
+    assert(destidx >= 0);
+    E_INFO("Destination node ");
+    ms_latnode_print(err_get_logfp(), latgen->output_lattice, node);
+    E_INFOCONT("\n");
 
     /* For all right contexts create a link to dest. */
     if (dict_pronlen(latgen->d2p->dict, arc->arc.wid) == 1) {
         ms_latlink_t *link;
-        link = create_new_link(latgen, node, dest, incoming_link,
-                               headwid, arc->arc.wid, arc->score,
-                               NO_RC);
+        link = create_new_link(latgen, srcidx, destidx, incoming_linkid,
+                               arc, headwid, arc->score, NO_RC);
         link->lscr = lscr; /* FIXME: See above re. bowt */
+        E_INFO("Created non-rc link ");
+        ms_latlink_print(err_get_logfp(),
+                         latgen->output_lattice, link);
+        E_INFOCONT("\n");
         ++n_links;
     }
     else {
@@ -323,10 +378,14 @@ create_outgoing_links_one(latgen_search_t *latgen,
             if (bitvec_is_set(arc->rc_bits, i)) {
                 ms_latlink_t *link;
                 link = create_new_link
-                    (latgen, node, dest, incoming_link,
-                     headwid, arc->arc.wid, 
+                    (latgen, srcidx, destidx, incoming_linkid,
+                     arc, headwid,
                      arc_buffer_get_rcscore(latgen->input_arcs, arc, i), i);
                 link->lscr = lscr; /* FIXME: See above re. bowt */
+                E_INFO("Created rc %d link ", i);
+                ms_latlink_print(err_get_logfp(),
+                                 latgen->output_lattice, link);
+                E_INFOCONT("\n");
                 ++n_links;
             }
         }
@@ -354,7 +413,7 @@ create_outgoing_links(latgen_search_t *latgen,
 
         /* FIXME: Should allocate this in latgen and grow as needed. */
         active_links = bitvec_alloc(ms_latnode_n_entries(node));
-        node_n_links = create_outgoing_links_one(latgen, node,
+        node_n_links = create_outgoing_links_one(latgen, nodeidx,
                                                  active_links, arc);
         if (node_n_links == 0) {
             /* This node is a goner, prune it. */
@@ -370,6 +429,9 @@ create_outgoing_links(latgen_search_t *latgen,
             int j;
 
             deadlinks = NULL;
+            /* Re-up this pointer as it may have changed (!@#$#) */
+            node = ms_lattice_get_node_idx
+                (latgen->output_lattice, nodeidx);
             for (j = 0; j < ms_latnode_n_entries(node); ++j) {
                 if (bitvec_is_set(active_links, j))
                     continue;

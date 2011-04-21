@@ -256,7 +256,7 @@ ms_lattice_get_lmstate_wids(ms_lattice_t *l, int32 idx,
         /* An index of -1 should result in a word ID of -1.  This is
          * used for epsilon states (FIXME: arguably, abused). */
         if (idx == -1) *out_w = -1;
-        return -1;
+        return 0;
     }
     ng = garray_ent(l->lms, ngram_trie_node_t *, idx);
     if (out_w) *out_w = ngram_trie_node_word(l->lmsids, ng);
