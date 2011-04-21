@@ -155,3 +155,5 @@ swig/multisphinx.py
 swig/pocketsphinx.py
 src/programs/multisphinx_map_vocab
 src/programs/multisphinx_merge_lmclasses
+test/unit/test_ngram/test_ngram_trie_iteration
+test/unit/test_search/050c0103.arc
