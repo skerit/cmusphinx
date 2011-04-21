@@ -155,7 +155,7 @@ int search_free(search_t *search);
  * Link one search structure to another via an arc buffer.
  */
 struct arc_buffer_s *search_link(search_t *from, search_t *to,
-                                    char const *name, int keep_scores);
+                                 char const *name, int keep_scores);
 
 /**
  * Get the latest hypothesis from a search.

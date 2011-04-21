@@ -46,12 +46,16 @@
 #include <sphinxbase/filename.h>
 #include <sphinxbase/byteorder.h>
 #include <sphinxbase/ckd_alloc.h>
+#include <sphinxbase/feat.h>
 
 /* MultiSphinx headers. */
-#include <multisphinx/dict.h>
+#include <multisphinx/cmdln_macro.h>
 #include <multisphinx/dict.h>
 
-static const arg_t ps_args_def[] = {
+/**
+ * Command-line argument definitions for batch processing. */
+ */
+static const arg_t ms_args_def[] = {
     POCKETSPHINX_OPTIONS,
     /* Various options specific to batch-mode processing. */
     /* Argument file. */
@@ -95,91 +99,14 @@ static const arg_t ps_args_def[] = {
       ".mfc",
       "Input files extension (suffixed to filespecs in control file)" },
 
-    /* Output files. */
-    { "-hyp",
-      ARG_STRING,
-      NULL,
-      "Recognition output file name" },
-    { "-hypseg",
-      ARG_STRING,
-      NULL,
-      "Recognition output with segmentation file name" },
-    { "-outlatdir",
-      ARG_STRING,
-      NULL,
-      "Directory for dumping word lattices" },
-    { "-outlatfmt",
-      ARG_STRING,
-      "s3",
-      "Format for dumping word lattices (s3 or htk)" },
-    { "-outlatext",
-      ARG_STRING,
-      ".lat",
-      "Filename extension for dumping word lattices" },
-    { "-outlatbeam",
-      ARG_FLOAT64,
-      "1e-5",
-      "Minimum posterior probability for output lattice nodes" },
-    { "-build_outdirs",
-      ARG_BOOLEAN,
-      "yes",
-      "Create missing subdirectories in output directory" },
-
+    /* Terminator */
     CMDLN_EMPTY_OPTION
 };
 
-static mfcc_t **
-read_mfc_file(FILE *infh, int sf, int ef, int *out_nfr, int ceplen)
-{
-    long flen;
-    int32 nmfc, nfr;
-    float32 *floats;
-    mfcc_t **mfcs;
-    int swap, i;
-
-    fseek(infh, 0, SEEK_END);
-    flen = ftell(infh);
-    fseek(infh, 0, SEEK_SET);
-    if (fread(&nmfc, 4, 1, infh) != 1) {
-        E_ERROR_SYSTEM("Failed to read 4 bytes from MFCC file");
-        fclose(infh);
-        return NULL;
-    }
-    swap = 0;
-    if (nmfc != flen / 4 - 1) {
-        SWAP_INT32(&nmfc);
-        swap = 1;
-        if (nmfc != flen / 4 - 1) {
-            E_ERROR("File length mismatch: 0x%x != 0x%x\n",
-                    nmfc, flen / 4 - 1);
-            fclose(infh);
-            return NULL;
-        }
-    }
-
-    fseek(infh, sf * 4 * ceplen, SEEK_CUR);
-    if (ef == -1)
-        ef = nmfc / ceplen;
-    nfr = ef - sf;
-    mfcs = ckd_calloc_2d(nfr, ceplen, sizeof(**mfcs));
-    floats = (float32 *)mfcs[0];
-    if (fread(floats, 4, nfr * ceplen, infh) != nfr * ceplen) {
-        E_ERROR_SYSTEM("Failed to read %d items from mfcfile");
-        fclose(infh);
-        ckd_free_2d(mfcs);
-        return NULL;
-    }
-    if (swap) {
-        for (i = 0; i < nfr * ceplen; ++i)
-            SWAP_FLOAT32(&floats[i]);
-    }
-#ifdef FIXED_POINT
-    for (i = 0; i < nfr * ceplen; ++i)
-        mfcs[0][i] = FLOAT2MFCC(floats[i]);
-#endif
-    *out_nfr = nfr;
-    return mfcs;
-}
+/**
+ * Master configuration object for decoders.
+ */
+static cmd_ln_t *config;
 
 static int
 build_outdir_one(cmd_ln_t *config, char const *arg, char const *uttpath)
@@ -210,8 +137,7 @@ build_outdirs(cmd_ln_t *config, char const *uttid)
 }
 
 static int
-process_ctl_line(ps_decoder_t *ps, cmd_ln_t *config,
-                 char const *file, char const *uttid, int32 sf, int32 ef)
+process_ctl_line(char const *file, char const *uttid, int32 sf, int32 ef)
 {
     FILE *infh;
     char const *cepdir, *cepext;
@@ -275,41 +201,8 @@ process_ctl_line(ps_decoder_t *ps, cmd_ln_t *config,
     return 0;
 }
 
-static int
-write_hypseg(FILE *fh, ps_decoder_t *ps, char const *uttid)
-{
-    int32 score, lscr, sf, ef;
-    ps_seg_t *itor = ps_seg_iter(ps, &score);
-
-    /* Accumulate language model scores. */
-    lscr = 0;
-    while (itor) {
-        int32 ascr, wlscr;
-        ps_seg_prob(itor, &ascr, &wlscr, NULL);
-        lscr += wlscr;
-        itor = ps_seg_next(itor);
-    }
-    fprintf(fh, "%s S %d T %d A %d L %d", uttid,
-            0, /* "scaling factor" which is mostly useless anyway */
-            score, score - lscr, lscr);
-    /* Now print out words. */
-    itor = ps_seg_iter(ps, &score);
-    while (itor) {
-        char const *w = ps_seg_word(itor);
-        int32 ascr, wlscr;
-
-        ps_seg_prob(itor, &ascr, &wlscr, NULL);
-        ps_seg_frames(itor, &sf, &ef);
-        fprintf(fh, " %d %d %d %s", sf, ascr, wlscr, w);
-        itor = ps_seg_next(itor);
-    }
-    fprintf(fh, " %d\n", ef);
-
-    return 0;
-}
-
 static void
-process_ctl(ps_decoder_t *ps, cmd_ln_t *config, FILE *ctlfh)
+process_ctl(FILE *ctlfh)
 {
     int32 ctloffset, ctlcount, ctlincr;
     int32 i;
@@ -418,8 +311,6 @@ done:
 int
 main(int32 argc, char *argv[])
 {
-    ps_decoder_t *ps;
-    cmd_ln_t *config;
     char const *ctl;
     FILE *ctlfh;
 
@@ -432,7 +323,7 @@ main(int32 argc, char *argv[])
     }
     /* Handle argument file as -argfile. */
     if (config && (ctl = cmd_ln_str_r(config, "-argfile")) != NULL) {
-        config = cmd_ln_parse_file_r(config, ps_args_def, ctl, FALSE);
+        config = cmd_ln_parse_file_r(config, ms_args_def, ctl, FALSE);
     }
     if (config == NULL) {
         /* This probably just means that we got no arguments. */
@@ -444,13 +335,7 @@ main(int32 argc, char *argv[])
     if ((ctlfh = fopen(ctl, "r")) == NULL) {
         E_FATAL_SYSTEM("Failed to open control file '%s'", ctl);
     }
-    ps = ps_init(config);
-    if (ps == NULL) {
-        E_FATAL("PocketSphinx decoder init failed\n");
-    }
-
-    process_ctl(ps, config, ctlfh);
-
+    process_ctl(ctlfh);
     fclose(ctlfh);
     ps_free(ps);
     return 0;

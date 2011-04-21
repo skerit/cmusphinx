@@ -268,6 +268,12 @@ SPHINXBASE_EXPORT
 void subvecs_free(int32 **subvecs);
 
 /**
+ * Read Sphinx-II format mfc file from a filehandle.
+ */
+SPHINXBASE_EXPORT
+mfcc_t **read_mfc_file(FILE *infh, int sf, int ef, int *out_nfr, int ceplen);
+
+/**
  * Read Sphinx-II format mfc file (s2mfc = Sphinx-II format MFC data).
  *
  * @return # frames read (plus padding) if successful, -1 if
