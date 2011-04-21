@@ -1140,7 +1140,7 @@ rotate_lmstate(int32 wid, int32 *hist, int n_hist, int max_n_hist)
     if (wid == -1)
         return 0;
     if (n_hist > 0)
-        memmove(hist + 1, hist, max_n_hist - 1);
+        memmove(hist + 1, hist, (max_n_hist - 1) * sizeof(*hist));
     hist[0] = wid;
     if (n_hist == max_n_hist)
         return max_n_hist;
@@ -1163,7 +1163,6 @@ merge_exits(ms_lattice_t *l, ms_latnode_t *new,
      * language model state, but this causes problems because it
      * causes nodes with alternate pronunciations (or rather, their
      * exit arcs) to be prematurely pruned. */
-    assert(new != old);
     for (y = 0; y < ms_latnode_n_exits(old); ++y) {
         ms_latlink_t *ylink = ms_latnode_get_exit(l, old, y);
         ms_latnode_t *ysrc = ms_lattice_get_node_idx(l, ylink->src);
@@ -1310,17 +1309,26 @@ build_lmstate(ms_lattice_t *l, ngram_model_t *lm,
     n_hist = ms_lattice_get_lmstate_wids(l, src->id.lmstate,
                                          &src_latwid, l->lathist);
     src_lmwid = map_lmwid(l->dict, lm, src_latwid);
-    for (i = 0; i < n_hist; ++i)
+    for (i = 0; i < n_hist; ++i) {
         l->lmhist[i] = map_lmwid(l->dict, lm, l->lathist[i]);
+        E_INFO("%d %s %d -> %d\n", i,
+               dict_wordstr(l->dict, l->lathist[i]),
+               l->lathist[i], l->lmhist[i]);
+    }
+
     /* Build language model state. */
     rotate_lmstate(src_latwid, l->lathist, n_hist, l->max_n_hist);
     n_hist = rotate_lmstate(src_lmwid, l->lmhist, n_hist, l->max_n_hist);
+    for (i = 0; i < n_hist; ++i)
+        assert(l->lmhist[i] >= 0);
     /* Map link word ID to base ID and lm ID. */
     entry_latwid = dict_basewid(l->dict, entry->wid);
     entry_lmwid = map_lmwid(l->dict, lm, entry->wid);
     /* Rotate in incoming arc word. */
     rotate_lmstate(entry_latwid, l->lathist, n_hist, l->max_n_hist);
     n_hist = rotate_lmstate(entry_lmwid, l->lmhist, n_hist, l->max_n_hist);
+    for (i = 0; i < n_hist; ++i)
+        assert(l->lmhist[i] >= 0);
     /* Set up pointers for language model state iteration. */
     lmstate = -1;
     *out_lscr = *out_bowt = 0;

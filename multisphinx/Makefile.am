@@ -1,11 +1,9 @@
 SUBDIRS = src \
+	  swig \
 	  include \
 	  test
 
 EXTRA_DIST = autogen.sh							\
-	swig/Makefile							\
-	swig/Android.mk							\
-	swig/pocketsphinx.i						\
 	m4/pkg.m4
 
 pkgconfigdir = $(libdir)/pkgconfig

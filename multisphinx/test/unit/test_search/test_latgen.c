@@ -66,7 +66,7 @@ main(int argc, char *argv[])
 		return 1;
 	}
 	fread(buf, 4, 1, mfcfh);
-	featbuf_producer_start_utt(fb);
+	featbuf_producer_start_utt(fb, "050c0103");
 	while ((nsamp = fread(buf, 4, 13, mfcfh)) > 0)  {
 		mfcc_t *bptr = buf;
 		featbuf_producer_process_cep(fb, &bptr, 1, FALSE);

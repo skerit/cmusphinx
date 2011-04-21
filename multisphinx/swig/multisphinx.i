@@ -1,10 +1,10 @@
 %module multisphinx
 #ifdef SWIGJAVA
-%include "pocketsphinx_java.i"
+%include "includes_java.i"
 #endif
 #ifdef SWIGPYTHON
 %include "argcargv.i"
-%include "pocketsphinx_python.i"
+%include "includes_python.i"
 #endif
 %include "common.i"
 %include "carrays.i"

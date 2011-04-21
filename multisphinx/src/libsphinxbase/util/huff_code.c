@@ -332,10 +332,8 @@ huff_code_read(FILE *infh)
     for (i = 1; i <= hc->maxbits; ++i) {
         if (fread(&hc->firstcode[i], sizeof(*hc->firstcode), 1, infh) != 1)
             goto error_out;
-        SWAP_BE_64(&hc->firstcode[i]);
         if (fread(&hc->numl[i], sizeof(*hc->numl), 1, infh) != 1)
             goto error_out;
-        SWAP_BE_32(&hc->numl[i]);
         hc->syms[i] = ckd_calloc(hc->numl[i], sizeof(**hc->syms));
         for (j = 0; j < hc->numl[i]; ++j) {
             huff_codeword_t *cw = &hc->syms[i][j];
@@ -344,7 +342,6 @@ huff_code_read(FILE *infh)
             if (hc->type == HUFF_CODE_INT) {
                 if (fread(&cw->r.ival, 4, 1, infh) != 1)
                     goto error_out;
-                SWAP_BE_32(&cw->r.ival);
                 hash_table_enter_bkey(hc->codewords,
                                       (char const *)&cw->r.ival,
                                       sizeof(cw->r.ival),
@@ -384,18 +381,14 @@ huff_code_write(huff_code_t *hc, FILE *outfh)
 
         /* Starting code, number of codes. */
         val = hc->firstcode[i];
-        /* Canonically big-endian (like the data itself) */
-        SWAP_BE_64(&val);
         fwrite(&val, sizeof(val), 1, outfh);
         val32 = hc->numl[i];
-        SWAP_BE_32(&val32);
-        fwrite(&val, sizeof(val32), 1, outfh);
+        fwrite(&val32, sizeof(val32), 1, outfh);
 
         /* Symbols for each code (FIXME: Should compress these too) */
         for (j = 0; j < hc->numl[i]; ++j) {
             if (hc->type == HUFF_CODE_INT) {
                 int32 val = hc->syms[i][j].r.ival;
-                SWAP_BE_32(&val);
                 fwrite(&val, 4, 1, outfh);
             }
             else {
@@ -435,7 +428,7 @@ huff_code_dump(huff_code_t *hc, FILE *dumpfh)
                 fprintf(dumpfh, "%-30d", hc->syms[i][j].r.ival);
             huff_code_dump_codebits(dumpfh, hc->syms[i][j].nbits,
                                     hc->syms[i][j].codeword);
-            fprintf(dumpfh, "\n");
+            fprintf(dumpfh, "(%d)\n", j);
         }
     }
     return 0;

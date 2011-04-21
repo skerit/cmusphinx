@@ -89,8 +89,7 @@ Makefile
 include/Makefile
 include/multisphinx/Makefile
 include/sphinxbase/Makefile
-python/Makefile
-python/setup.py
+swig/Makefile
 src/Makefile
 src/libsphinxbase/Makefile
 src/libsphinxbase/util/Makefile

@@ -67,7 +67,7 @@ main(int argc, char *argv[])
 		E_FATAL_SYSTEM("Failed to open "TESTDATADIR"/i960711p.raw");
 		return 1;
 	}
-	featbuf_producer_start_utt(fb);
+	featbuf_producer_start_utt(fb, "i960711p");
 	while ((nsamp = fread(buf, 2, 2048, rawfh)) > 0)
 		featbuf_producer_process_raw(fb, buf, nsamp, FALSE);
 	fclose(rawfh);

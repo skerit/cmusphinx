@@ -16,7 +16,7 @@ main(int argc, char *argv[])
 	FILE *fh;
 
 	lmath = logmath_init(1.0001, 0, FALSE);
-	TEST_ASSERT(lm = ngram_model_read(NULL, TESTDATADIR "/bcb05cnp.arpa",
+	TEST_ASSERT(lm = ngram_model_read(NULL, TESTDATADIR "/bn10000.3g.arpa",
 					  NGRAM_ARPA, lmath));
 	TEST_ASSERT(l = ms_lattice_init(lmath, NULL));
 

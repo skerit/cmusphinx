@@ -21,8 +21,6 @@ check_bowts(ngram_trie_t *lm)
 
             ngram_trie_node_params(lm, node, NULL, &log_bowt);
             new_bowt = ngram_trie_calc_bowt(lm, node);
-	    ngram_trie_node_print(lm, node, stdout);
-	    printf(": %d %d\n", log_bowt, new_bowt);
 	    if (new_bowt != 0 && new_bowt != ngram_trie_zero(lm))
 		    TEST_ASSERT(abs(log_bowt - new_bowt) < 1000);
         }
@@ -41,8 +39,6 @@ validate(ngram_trie_t *lm)
              ng = ngram_trie_iter_next(ng)) {
             ngram_trie_node_t *node = ngram_trie_iter_get(ng);
             int32 logsum = ngram_trie_node_validate(lm, node);
-	    ngram_trie_node_print(lm, node, stdout);
-	    printf(": %d\n", logsum);
 	    TEST_ASSERT(logsum > -100);
         }
     }
@@ -132,20 +128,10 @@ main(int argc, char *argv[])
 	mdef = bin_mdef_read(config, cmd_ln_str_r(config, "-mdef"));
 	dict = dict_init(config, mdef);
 
-#if 0 /* Test memory consumption with reasonably sized LMs - still needs some work. */
-	t = ngram_trie_init(NULL, lmath);
-	arpafh = popen("bzip2 -dc '"TESTDATADIR "/bn.40000.arpa.bz2'", "r");
-	ngram_trie_read_arpa(t, arpafh);
-	fclose(arpafh);
-	ngram_trie_free(t);
-#endif
-
 	t = ngram_trie_init(dict, lmath);
 	arpafh = fopen(TESTDATADIR "/bn10000.3g.arpa", "r");
 	ngram_trie_read_arpa(t, arpafh);
 	fclose(arpafh);
-
-	test_validation(t);
 
 	/* Test 1, 2, 3-gram probs without backoff. */
 	test_lookups(t, lmath);

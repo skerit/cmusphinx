@@ -4,8 +4,9 @@
 
 #include <pocketsphinx.h>
 
+#include <multisphinx/acmod.h>
+
 #include "pocketsphinx_internal.h"
-#include "acmod.h"
 #include "test_macros.h"
 
 static int
@@ -15,8 +16,8 @@ consumer(sbthread_t *th)
 	int frame_idx;
 
 	printf("Consumer %p started\n", acmod);
-	acmod_start_utt(acmod, -1);
-	while ((frame_idx = acmod_wait(acmod, -1)) >= 0) {
+	acmod_consumer_start_utt(acmod, -1);
+	while ((frame_idx = acmod_consumer_wait(acmod, -1)) >= 0) {
 		int senid, score;
 		/* Score a frame. */
 		acmod_score(acmod, frame_idx);
@@ -24,10 +25,10 @@ consumer(sbthread_t *th)
 		printf("Consumer %p scored frame %d best %d score %d\n",
 		       acmod, frame_idx, senid, score);
 		/* Release it. */
-		acmod_release(acmod, frame_idx);
+		acmod_consumer_release(acmod, frame_idx);
 	}
 	TEST_ASSERT(acmod_eou(acmod));
-	acmod_end_utt(acmod);
+	acmod_consumer_end_utt(acmod);
 	printf("Consumer %p exiting\n", acmod);
 	return 0;
 }
@@ -47,8 +48,8 @@ main(int argc, char *argv[])
 
 	config = cmd_ln_init(NULL, ps_args(), TRUE,
 			     "-hmm", TESTDATADIR "/hub4wsj_sc_8k",
-			     "-lm", TESTDATADIR "/hub4.5000.DMP",
-			     "-dict", TESTDATADIR "/hub4.5000.dic",
+			     "-lm", TESTDATADIR "/bn10000.3g.arpa",
+			     "-dict", TESTDATADIR "/bn10000.dic",
 			     "-compallsen", "yes",
 			     NULL);
 	ps_init_defaults(config);
@@ -68,16 +69,16 @@ main(int argc, char *argv[])
 
 	/* Feed them some data. */
 	raw = fopen(TESTDATADIR "/chan3.raw", "rb");
-	featbuf_start_utt(fb);
+	featbuf_producer_start_utt(fb, "chan3");
 	while ((nsamp = fread(buf, 2, 2048, raw)) > 0) {
 		int rv;
-		rv = featbuf_process_raw(fb, buf, nsamp, FALSE);
+		rv = featbuf_producer_process_raw(fb, buf, nsamp, FALSE);
 		printf("Producer processed %d samples\n", nsamp);
 		TEST_ASSERT(rv == 0);
 	}
 	fclose(raw);
 	printf("Waiting for consumers\n");
-	featbuf_end_utt(fb, -1);
+	featbuf_producer_end_utt(fb, -1);
 	printf("Finished waiting\n");
 
 	/* Reap those threads. */

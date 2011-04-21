@@ -45,4 +45,4 @@ EXTRA_DIST = 100.arpa.gz \
 	turtle.lm \
 	turtle.lm.DMP
 
-CLEANFILES = 100.tmp.arpa 100.tmp.DMP
+CLEANFILES = 100.tmp.arpa 100.tmp.DMP tmp.*

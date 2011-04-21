@@ -51,13 +51,13 @@
 #include <sphinxbase/feat.h>
 #include <sphinxbase/profile.h>
 
-/* Local headers. */
-#include "pocketsphinx.h"
-#include "ps_search.h"
-#include "featbuf.h"
-#include "acmod.h"
-#include "dict.h"
-#include "dict2pid.h"
+/* Other headers. */
+#include <multisphinx/ps_search.h>
+#include <multisphinx/featbuf.h>
+#include <multisphinx/acmod.h>
+#include <multisphinx/dict.h>
+#include <multisphinx/dict2pid.h>
+#include <pocketsphinx.h>
 
 /**
  * Decoder object - implements the user-visible API.

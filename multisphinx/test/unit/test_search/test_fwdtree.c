@@ -52,7 +52,7 @@ main(int argc, char *argv[])
 	if ((nfr = feat_s2mfc2feat(acmod->fcb, "chan3", TESTDATADIR,
 				   ".mfc", 0, -1, feat, -1)) < 0)
 		E_FATAL("Failed to read mfc file\n");
-	featbuf_producer_start_utt(fb);
+	featbuf_producer_start_utt(fb, "chan3");
 	for (i = 0; i < nfr; ++i)
 		featbuf_producer_process_feat(fb, feat[i]);
 

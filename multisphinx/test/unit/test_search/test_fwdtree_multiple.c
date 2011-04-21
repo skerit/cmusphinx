@@ -84,7 +84,7 @@ main(int argc, char *argv[])
 	}
 	ptmr_init(&total);
 	ptmr_start(&total);
-	featbuf_producer_start_utt(fb);
+	featbuf_producer_start_utt(fb, "i960711p");
 	tsamp = 0;
 	while ((nsamp = fread(buf, 2, 2048, rawfh)) > 0) {
 		tsamp += nsamp;
