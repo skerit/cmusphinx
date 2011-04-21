@@ -107,7 +107,8 @@ latgen_search_process_arcs(latgen_search_t *latgen,
         ms_latnode_t *src, *dest;
         int32 lmstate;
 
-        if (itor->arc.src != frame_idx) /* FIXME: iterators don't work like they should */
+        if (itor->arc.src != frame_idx) /* FIXME: iterators don't work
+                                           like they should */
             continue;
         /* Create or find a "language model state" (actually not a
          * language model state, just a node identifier). */
@@ -121,21 +122,36 @@ latgen_search_process_arcs(latgen_search_t *latgen,
                itor->arc.src, itor->arc.dest + 1, itor->score);
         /* Look for a node to extend with this arc. */
         if ((src = ms_lattice_get_node_id
-             (latgen->output_lattice, frame_idx, lmstate)) != NULL) {
-            /* Extend said node with this arc, copying relevant input
-             * arcs from the incomplete source node. */
+             (latgen->output_lattice, frame_idx, lmstate)) == NULL) {
+            int i;
+            /* Copy the incomplete node and all its input arcs.
+             * Calculate acoustic scores for the arcs based on the
+             * first phone of this word. */
+            src = ms_lattice_node_init(latgen->output_lattice,
+                                       frame_idx, lmstate);
+            for (i = 0; i < ms_latnode_n_entries(src_incomplete); ++i) {
+                ms_latlink_t *link =
+                    ms_latnode_get_entry(latgen->output_lattice,
+                                         src_incomplete, i);
+                ms_latnode_t *prev =
+                    ms_lattice_get_node_idx(latgen->output_lattice,
+                                            link->src);
+                /* Calculate acoustic score based on first phone of
+                 * this word.  FIXME: arc_buffer_t needs to calculate
+                 * this for us. */
+                ms_lattice_link(latgen->output_lattice, prev, src,
+                                link->wid, link->ascr
+                                 /* add in delta here. */ );
+            }
         }
-        else {
-            /* Copy the incomplete node and all its input arcs,
-             * generating appropriate acoustic scores for all of them
-             * based on the initial phone of this outgoing arc. */
-        }
+
 
         /* Get or create the incomplete node for the destination
          * frame.  Note that the arc buffer stores *inclusive* end
          * frame indices, since they are derived from backpointers. */
         if ((dest = ms_lattice_get_node_id
-             (latgen->output_lattice, itor->arc.dest + 1, latgen->incomplete)) == NULL) {
+             (latgen->output_lattice, itor->arc.dest + 1,
+              latgen->incomplete)) == NULL) {
             dest = ms_lattice_node_init
                 (latgen->output_lattice, itor->arc.dest + 1, latgen->incomplete);
 
@@ -146,8 +162,7 @@ latgen_search_process_arcs(latgen_search_t *latgen,
                    dict_wordstr(ps_search_dict(latgen), wid),
                    dest->id.sf);
         }
-        else {
-        }
+        /* Create arc to destination node. */
     }
     return n_arc;
 }

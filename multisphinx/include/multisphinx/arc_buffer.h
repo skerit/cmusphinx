@@ -144,6 +144,9 @@ arc_t *arc_buffer_iter(arc_buffer_t *fab, int sf);
 
 /**
  * Move the arc pointer forward.
+ *
+ * Note, this will continue to move the arc pointer forward until
+ * there are no more arcs available.
  */
 arc_t *arc_buffer_iter_next(arc_buffer_t *fab, arc_t *ab);
 

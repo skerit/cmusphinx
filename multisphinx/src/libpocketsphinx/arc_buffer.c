@@ -238,9 +238,9 @@ arc_buffer_add_bps(arc_buffer_t *fab,
              * length array rc_bits. */
             sarc_t *sp = garray_append(fab->arcs, &sarc);
 
-            E_INFO("Added arc %s %d -> %d\n",
-                   dict_wordstr(bptbl->d2p->dict, sarc.arc.wid),
-                   sarc.arc.src, sarc.arc.dest + 1);
+            E_DEBUG(3,("Added arc %s %d -> %d\n",
+                       dict_wordstr(bptbl->d2p->dict, sarc.arc.wid),
+                       sarc.arc.src, sarc.arc.dest + 1));
             if (fab->scores) {
                 /* Compress and add right context deltas.  FIXME: We
                  * can do this more efficiently using the guts of
