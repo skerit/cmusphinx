@@ -47,8 +47,8 @@
 #include <sphinxbase/sbthread.h>
 #include <sphinxbase/bitvec.h>
 
-/* Local headers. */
-#include "bptbl.h"
+/* MultiSphinx headers. */
+#include <multisphinx/bptbl.h>
 
 /**
  * Basic (unscored) arc.

@@ -56,7 +56,7 @@ extern "C" {
 #include <sphinxbase/ngram_model.h>
 
 /* PocketSphinx headers (not many of them!) */
-#include <multisphinx/pocketsphinx_export.h>
+#include <multisphinx/win32_export.h>
 #include <multisphinx/cmdln_macro.h>
 
 /**

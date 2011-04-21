@@ -22,7 +22,7 @@ main(int argc, char *argv[])
 	cmd_ln_t *config;
 	acmod_t *acmod, *acmod2;
 	featbuf_t *fb;
-	ps_search_t *fwdtree, *fwdflat, *latgen;
+	search_t *fwdtree, *fwdflat, *latgen;
 	FILE *mfcfh;
 	size_t nsamp;
 	char const *hyp;

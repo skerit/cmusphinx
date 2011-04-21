@@ -154,6 +154,19 @@ arc_buffer_unlock(arc_buffer_t *fab)
     sbmtx_unlock(fab->mtx);
 }
 
+bptbl_t *
+arc_buffer_input_bptbl(arc_buffer_t *fab)
+{
+    return fab->input_bptbl;
+}
+
+ngram_model_t *
+arc_buffer_lm(arc_buffer_t *fab)
+{
+    return fab->lm;
+}
+
+
 void
 arc_buffer_dump(arc_buffer_t *fab, dict_t *dict)
 {

@@ -1,0 +1,18 @@
+All of the remaining programming work revolves around multisphinx_batch
+and getting it in shape to do the experiments that I still need to do:
+
+* search_factory - test case, assume most of what ps_decoder did
+  - registry of searches (in search_factory.c)
+  - common constructors for searches
+* rewrite test cases to use search_factory
+* add API for getting segmented results (or use old one)
+
+* need to think a bit about how much i want to do with this though
+  - this search_factory thing is necessary i think to make the code more understandable
+  - but a real rigorous API maybe not?
+
+* latency measurement
+  - add timers and stuff to multisphinx_batch
+  - main function of multisphinx_batch will be to measure latency etc
+  - add ability to dump multiple results at different stages of processing
+  	* e.g. first complete result, after N msec or N% of utterance length

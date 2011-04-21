@@ -26,7 +26,8 @@ libmultisphinx_la_SOURCES =			\
 	s2_semi_mgau.c				\
 	tmat.c					\
 	vector.c				\
-	vocab_map.c
+	vocab_map.c				\
+	search_factory.c
 
 pkginclude_HEADERS = \
 	acmod.h					\
@@ -48,7 +49,7 @@ pkginclude_HEADERS = \
 	ms_senone.h				\
 	ngram_trie.h				\
 	nodeid_map.h				\
-	pocketsphinx_export.h			\
+	win32_export.h			\
 	posixwin32.h				\
 	alignment.h				\
 	search.h				\
@@ -61,7 +62,8 @@ pkginclude_HEADERS = \
 	tied_mgau_common.h			\
 	tmat.h					\
 	vector.h				\
-	vocab_map.h
+	vocab_map.h				\
+	search_factory.h
 
 # Need this to avoid pulling in system includes by accident
 INCLUDES = -I$(top_srcdir)

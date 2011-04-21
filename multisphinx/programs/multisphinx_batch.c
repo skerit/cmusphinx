@@ -51,6 +51,7 @@
 /* MultiSphinx headers. */
 #include <multisphinx/cmdln_macro.h>
 #include <multisphinx/dict.h>
+#include <multisphinx/search.h>
 
 /**
  * Command-line argument definitions for batch processing.
@@ -111,6 +112,9 @@ static cmd_ln_t *config;
 /**
  * Decoders.
  */
+static search_t *fwdtree;
+static search_t *fwdflat;
+
 
 static int
 build_outdir_one(cmd_ln_t *config, char const *arg, char const *uttpath)
@@ -183,7 +187,7 @@ process_ctl_line(char const *file, char const *uttid, int32 sf, int32 ef)
                      * (cmd_ln_float32_r(config, "-samprate")
                         / cmd_ln_int32_r(config, "-frate")));
         fseek(infh, cmd_ln_int32_r(config, "-adchdr") + sf * sizeof(int16), SEEK_SET);
-        ps_decode_raw(ps, infh, uttid, ef);
+        //ps_decode_raw(ps, infh, uttid, ef);
     }
     else {
         mfcc_t **mfcs;
@@ -195,13 +199,14 @@ process_ctl_line(char const *file, char const *uttid, int32 sf, int32 ef)
             ckd_free(infile);
             return -1;
         }
-        ps_start_utt(ps, uttid);
-        ps_process_cep(ps, mfcs, nfr, FALSE, TRUE);
-        ps_end_utt(ps);
+        //ps_start_utt(ps, uttid);
+        //ps_process_cep(ps, mfcs, nfr, FALSE, TRUE);
+        //ps_end_utt(ps);
         ckd_free_2d(mfcs);
     }
     fclose(infh);
     ckd_free(infile);
+
     return 0;
 }
 
@@ -276,7 +281,7 @@ process_ctl(FILE *ctlfh)
             if (nf > 3)
                 uttid = wptr[3];
             /* Do actual decoding. */
-            process_ctl_line(ps, config, file, uttid, sf, ef);
+            process_ctl_line(file, uttid, sf, ef);
             hyp = ps_get_hyp(ps, &score, &uttid);
             
             /* Write out results and such. */
@@ -312,6 +317,16 @@ done:
         fclose(hypsegfh);
 }
 
+static void
+init_searches(cmd_ln_t *config)
+{
+}
+
+static void
+fini_searches(void)
+{
+}
+
 int
 main(int32 argc, char *argv[])
 {
@@ -320,10 +335,10 @@ main(int32 argc, char *argv[])
 
     /* Handle argument file as only argument. */
     if (argc == 2) {
-        config = cmd_ln_parse_file_r(NULL, ps_args_def, argv[1], TRUE);
+        config = cmd_ln_parse_file_r(NULL, ms_args_def, argv[1], TRUE);
     }
     else {
-        config = cmd_ln_parse_r(NULL, ps_args_def, argc, argv, TRUE);
+        config = cmd_ln_parse_r(NULL, ms_args_def, argc, argv, TRUE);
     }
     /* Handle argument file as -argfile. */
     if (config && (ctl = cmd_ln_str_r(config, "-argfile")) != NULL) {

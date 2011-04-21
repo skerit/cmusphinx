@@ -46,6 +46,7 @@
 #include <sphinxbase/profile.h>
 
 #include <multisphinx/search.h>
+#include <multisphinx/acmod.h>
 
 /**
  * Initialize fwdtree search.

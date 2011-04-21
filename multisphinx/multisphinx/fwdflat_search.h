@@ -47,6 +47,7 @@
 
 #include <multisphinx/search.h>
 #include <multisphinx/vocab_map.h>
+#include <multisphinx/acmod.h>
 
 /**
  * Initialize fwdflat search.

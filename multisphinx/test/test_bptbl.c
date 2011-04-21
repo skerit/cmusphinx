@@ -6,7 +6,7 @@
 #include <sphinxbase/sbthread.h>
 
 #include <multisphinx/bptbl.h>
-#include <multisphinx/ps_search.h>
+#include <multisphinx/search.h>
 
 #include "test_macros.h"
 

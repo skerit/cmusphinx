@@ -7,7 +7,7 @@
 #include <multisphinx/pocketsphinx.h>
 #include <multisphinx/fwdtree_search.h>
 #include <multisphinx/acmod.h>
-#include <multisphinx/ps_search.h>
+#include <multisphinx/search.h>
 #include <multisphinx/featbuf.h>
 
 #include "test_macros.h"
