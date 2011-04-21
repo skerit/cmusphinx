@@ -8,6 +8,7 @@
 #endif
 %include "common.i"
 %include "carrays.i"
+%include "cdata.i"
 
 %{
 #include <multisphinx/dict.h>
@@ -16,6 +17,8 @@
 #include <multisphinx/featbuf.h>
 #include <multisphinx/bptbl.h>
 #include <multisphinx/arc_buffer.h>
+#include <multisphinx/fwdtree_search.h>
+#include <multisphinx/fwdflat_search.h>
 
 #include <pocketsphinx.h>
 
@@ -27,8 +30,10 @@ typedef struct ngram_model_s NGramModel;
 typedef struct ngram_iter_s NGramIterator;
 typedef struct featbuf_s FeatBuf;
 typedef struct ps_search_s Search;
+typedef struct acmod_s Acmod;
 typedef struct bptbl_s Bptbl;
 typedef struct arc_buffer_s ArcBuffer;
+typedef struct vocab_map_s VocabMap;
 typedef dict_t Dict;
 typedef dict2pid_t DictToPid;
 typedef struct ngram_trie_s NGramTrie;
@@ -170,7 +175,7 @@ typedef struct logmath_s {
 	double log_to_log10(int logb_p) {
 		return logmath_log_to_log10($self, logb_p);
 	}
-}
+};
 
 typedef struct cmd_ln_s {
 } Config;
@@ -190,6 +195,9 @@ typedef struct cmd_ln_s {
 	}
 	~Config() {
 		cmd_ln_free_r($self);
+	}
+	void initDefaults() {
+		ps_init_defaults($self);
 	}
 	void setBoolean(char const *key, bool val) {
 		cmd_ln_set_boolean_r($self, key, val);
@@ -319,7 +327,7 @@ typedef struct bin_mdef_s {
 	int silphone() {
 		return bin_mdef_silphone($self);
 	}
-}
+};
 
 typedef struct {
 } Dict;
@@ -389,7 +397,7 @@ typedef struct {
 	int pron(int wid, int pos) {
 		return dict_pron($self, wid, pos);
 	}
-}
+};
 
 typedef int s3ssid_t;
 typedef int s3cipid_t;
@@ -422,7 +430,7 @@ typedef struct {
 	xwdssid *rssid(int ci, int lc) {
 		return dict2pid_rssid($self, ci, lc);
 	}
-}
+};
 
 typedef struct ngram_trie_s {
 } NGramTrie;
@@ -434,7 +442,7 @@ typedef struct ngram_trie_s {
 	~NGramTrie() {
 		ngram_trie_free($self);
 	}
-}
+};
 
 typedef struct featbuf_s {
 } FeatBuf;
@@ -446,20 +454,82 @@ typedef struct featbuf_s {
 	~FeatBuf() {
 		featbuf_free($self);
 	}
+	void producer_start_utt(char *uttid) {
+		/* FIXME: Need to copy uttid or something. */
+		/* FIXME: Also, exceptions, etc. */
+		featbuf_producer_start_utt($self, uttid);
+	}
+	void producer_end_utt(int timeout=-1) {
+		/* FIXME: exceptions, etc. */
+		featbuf_producer_end_utt($self, timeout);
+	}
+	void shutdown() {
+		featbuf_producer_shutdown($self);
+	}
+	int producer_process_raw(void *indata, int inlen, bool full_utt=false) {
+		return featbuf_producer_process_raw($self, indata,
+						    inlen / sizeof(int16),
+						    full_utt);
+	}
+%pythoncode %{
+def producer_process_audio(self, audio, full_utt=False):
+    return self.producer_process_raw(audio.astype("int16").tostring(), full_utt)
+%}
+	int producer_process_cep(void *indata, int inlen, bool full_utt=false) {
+		int ceplen = feat_cepsize(featbuf_get_fcb($self));
+		return featbuf_producer_process_cep($self, indata,
+						    inlen / (ceplen * sizeof(mfcc_t)),
+						    full_utt);
+	}
+%pythoncode %{
+def producer_process_mfcc(self, mfcc, full_utt=False):
+    return self.producer_process_raw(mfcc.ravel().astype("float32").tostring(),
+				     full_utt)
+%}
+};
+
+typedef struct acmod_s {
+} Acmod;
+
+%extend Acmod {
+	Acmod(Config *c, LogMath *lmath, FeatBuf *fb) {
+		return acmod_init(c, lmath, fb);
+	}
+	~Acmod() {
+		acmod_free($self);
+	}
 };
 
 typedef struct ps_search_s {
 } Search;
 
 %extend Search {
-	/* Something like an abstract base class... */
 	Search() {
 		return NULL;
 	}
 	~Search() {
 		ps_search_free($self);
 	}
-}
+	void run() {
+		ps_search_run($self);
+	}
+	void wait() {
+		ps_search_wait($self);
+	}
+	char const *hyp(int *OUTPUT) {
+		return ps_search_hyp($self, OUTPUT);
+	}
+};
+
+Search *fwdtree_search_init(Config *c, Acmod *am, Dict *d, DictToPid *d2p);
+Search *fwdflat_search_init(Config *c, Acmod *am, Dict *d, DictToPid *d2p,
+			    ArcBuffer *input_arcs, NGramModel *lmset=NULL);
+/* FIXME (if possible??!): There is no type checking here so these
+ * functions will segfault if you look at them funny. */
+VocabMap *fwdflat_search_set_vocab_map(Search *s, VocabMap *vm);
+NGramModel *fwdflat_search_lmset(Search *s);
+NGramModel *fwdtree_search_lmset(Search *s);
+
 
 typedef struct bptbl_s {
 } Bptbl;
@@ -472,7 +542,7 @@ typedef struct bptbl_s {
 	~Bptbl() {
 		bptbl_free($self);
 	}
-}
+};
 
 typedef struct arc_buffer_s {
 } ArcBuffer;
@@ -484,5 +554,17 @@ typedef struct arc_buffer_s {
 	}
 	~ArcBuffer() {
 		arc_buffer_free($self);
+	}
+};
+
+typedef struct vocab_map_s {
+} VocabMap;
+
+%extend VocabMap {
+	VocabMap(Dict *d) {
+		return vocab_map_init(d);
+	}
+	~VocabMap() {
+		vocab_map_free($self);
 	}
 };

@@ -49,7 +49,6 @@
 #include "bptbl.h"
 #include "arc_buffer.h"
 #include "vocab_map.h"
-#include "hmm.h"
 
 /**
  * Initialize fwdflat search.
