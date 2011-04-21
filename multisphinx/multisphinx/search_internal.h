@@ -101,6 +101,9 @@ struct search_s {
     struct arc_buffer_s *input_arcs;  
     struct arc_buffer_s *output_arcs;
 
+    search_cb_func cb;
+    void *cb_data;
+
     /* Magical word IDs that must exist in the dictionary: */
     int32 start_wid;       /**< Start word ID. */
     int32 silence_wid;     /**< Silence word ID. */
@@ -121,6 +124,8 @@ struct search_s {
 #define search_silence_wid(s) search_base(s)->silence_wid
 #define search_start_wid(s) search_base(s)->start_wid
 #define search_finish_wid(s) search_base(s)->finish_wid
+#define search_cb(s) search_base(s)->cb;
+#define search_cb_data(s) search_base(s)->cb_data;
 
 /**
  * Initialize base structure.
@@ -163,6 +168,11 @@ struct ps_seg_s {
 
 #define search_seg_next(seg) (*(seg->vt->seg_next))(seg)
 #define search_seg_free(s) (*(seg->vt->seg_free))(seg)
+
+/**
+ * Call an event simply.
+ */
+int search_call_event(search_t *search, int event, int frame);
 
 /**
  * Get the latest segmentation from a search

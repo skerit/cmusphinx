@@ -24,6 +24,7 @@ libmultisphinx_la_SOURCES =			\
 	ptm_mgau.c				\
 	sendump.c				\
 	s2_semi_mgau.c				\
+	state_align_search.c	\
 	tmat.c					\
 	vector.c				\
 	vocab_map.c				\

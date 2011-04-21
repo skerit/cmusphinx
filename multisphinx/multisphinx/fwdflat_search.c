@@ -177,6 +177,15 @@ typedef struct fwdflat_search_s {
 
     fwdflat_stats_t st; /**< Various statistics for profiling. */
 
+    /**
+     * Best word exit in the most recent frame (used for partial results).
+     */
+    bpidx_t best_exit;
+    /**
+`     * Final word in best path (used for partial results).
+     */
+    int32 best_exit_wid;
+
     /* A children's treasury of beam widths. */
     int32 fwdflatbeam;
     int32 fwdflatwbeam;
@@ -579,6 +588,8 @@ fwdflat_search_start(search_t *base)
     ffs->st.n_fwdflat_words = 0;
     ffs->st.n_fwdflat_word_transition = 0;
     ffs->st.n_senone_active_utt = 0;
+
+    search_call_event(base, SEARCH_START_UTT, base->acmod->output_frame);
 
     return 0;
 }
@@ -1021,6 +1032,20 @@ fwdflat_create_active_word_list(fwdflat_search_t *ffs, int nf)
 }
 
 static int
+update_partials(fwdflat_search_t *ffs, int frame_idx)
+{
+    ffs->best_exit = bptbl_find_exit(ffs->bptbl, -1);
+    if (ffs->best_exit != NO_BP) {
+        int32 bbp = dict_basewid(search_dict(ffs), bptbl_ent(ffs->bptbl, ffs->best_exit)->wid);
+        if (bbp != ffs->best_exit_wid) {
+            ffs->best_exit_wid = bbp;
+            search_call_event(search_base(ffs), SEARCH_PARTIAL_RESULT, frame_idx);
+        }
+    }
+    return ffs->best_exit;
+}
+
+static int
 fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
 {
     acmod_t *acmod = search_acmod(ffs);
@@ -1070,6 +1095,9 @@ fwdflat_search_one_frame(fwdflat_search_t *ffs, int frame_idx)
     /* fwdflat_dump_expand_words(ffs, frame_idx); */
     fwdflat_word_transition(ffs, frame_idx);
     fwdflat_create_active_word_list(ffs, frame_idx + 1);
+
+    /* Update partial results. */
+    update_partials(ffs, frame_idx);
 
     /* Release the frame just searched. */
     acmod_consumer_release(acmod, frame_idx);
@@ -1257,6 +1285,8 @@ fwdflat_search_finish(search_t *base)
     /* Finalize the input acmod (signals producer) */
     acmod_consumer_end_utt(base->acmod);
     base->total_frames += base->acmod->output_frame;
+
+    search_call_event(base, SEARCH_END_UTT, base->acmod->output_frame);
 
     /* Print out some statistics. */
     if (cf > 0) {

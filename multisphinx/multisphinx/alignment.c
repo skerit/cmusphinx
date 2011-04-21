@@ -125,6 +125,23 @@ alignment_add_word(alignment_t *al,
 }
 
 int
+alignment_add_words(alignment_t *al, char const *w1, ...)
+{
+    char const *w;
+    va_list args;
+
+    alignment_add_word(al, dict_wordid(al->d2p->dict, w1), 0);
+    va_start(args, w1);
+    while ((w = va_arg(args, char const *)) != NULL) {
+        alignment_add_word(al, dict_wordid(al->d2p->dict, w), 0);
+    }
+    va_end(args);
+
+    return al->word.n_ent;
+}
+
+
+int
 alignment_populate(alignment_t *al)
 {
     dict2pid_t *d2p;

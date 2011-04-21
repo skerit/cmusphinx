@@ -53,14 +53,7 @@
 #include "search_internal.h"
 #include "hmm.h"
 
-/* FIXME: These are no longer necessary. */
-/* Special unlocked versions of some utility functions. */
 static int bptbl_rcsize(bptbl_t *bptbl, bp_t *be);
-static bpidx_t bptbl_find_exit(bptbl_t *bptbl, int32 wid);
-static int32 bptbl_ef_idx_internal(bptbl_t *bptbl, int frame_idx);
-static bp_t *bptbl_ent_internal(bptbl_t *bptbl, bpidx_t bpidx);
-static int bptbl_sf_internal(bptbl_t *bptbl, bpidx_t bpidx);
-static int bptbl_ef_count_internal(bptbl_t *bptbl, int frame_idx);
 
 #if 0
 #undef E_DEBUG
@@ -163,7 +156,7 @@ bptbl_dump(bptbl_t *bptbl)
         assert(ent->valid);
         E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d real_wid %-5d prev_real_wid %-5d\n",
                     i, dict_wordstr(bptbl->d2p->dict, ent->wid),
-                    bptbl_sf_internal(bptbl, i),
+                    bptbl_sf(bptbl, i),
                     ent->frame,
                     ent->score,
                     ent->bp,
@@ -180,7 +173,7 @@ bptbl_dump(bptbl_t *bptbl)
         else
             E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
                         i, dict_wordstr(bptbl->d2p->dict, ent->wid),
-                        bptbl_sf_internal(bptbl, i),
+                        bptbl_sf(bptbl, i),
                         ent->frame,
                         ent->score,
                         ent->bp);
@@ -203,25 +196,25 @@ bptbl_mark_all(bptbl_t *bptbl, int ef, int cf)
 
     assert(ef > bptbl_active_frame(bptbl));
 
-    for (i = bptbl_ef_idx_internal(bptbl, ef);
-         i < bptbl_ef_idx_internal(bptbl, cf); ++i) {
+    for (i = bptbl_ef_idx(bptbl, ef);
+         i < bptbl_ef_idx(bptbl, cf); ++i) {
         bp_t *ent;
-        ent = bptbl_ent_internal(bptbl, i);
+        ent = bptbl_ent(bptbl, i);
         ent->valid = TRUE;
     }
 
     E_DEBUG(2,("Marked bps %d to %d\n",
-               bptbl_ef_idx_internal(bptbl, bptbl_active_frame(bptbl)),
-               bptbl_ef_idx_internal(bptbl, ef)));
-    for (j = 0, i = bptbl_ef_idx_internal(bptbl, bptbl_active_frame(bptbl));
-         i < bptbl_ef_idx_internal(bptbl, ef); ++i) {
+               bptbl_ef_idx(bptbl, bptbl_active_frame(bptbl)),
+               bptbl_ef_idx(bptbl, ef)));
+    for (j = 0, i = bptbl_ef_idx(bptbl, bptbl_active_frame(bptbl));
+         i < bptbl_ef_idx(bptbl, ef); ++i) {
         bp_t *ent = garray_ptr(bptbl->ent, bp_t, i);
         assert(ent != NULL);
         if (ent->valid)
             ++j;
         E_DEBUG(3,("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
                    i, dict_wordstr(bptbl->d2p->dict, ent->wid),
-                   bptbl_sf_internal(bptbl, i),
+                   bptbl_sf(bptbl, i),
                    ent->frame,
                    ent->score,
                    ent->bp));
@@ -247,10 +240,10 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
     /* Invalidate all active backpointer entries up to ef. */
     E_DEBUG(2,("Invalidating backpointers from %d to %d (%d to %d)\n",
                bptbl_active_frame(bptbl), ef,
-               bptbl_ef_idx_internal(bptbl, bptbl_active_frame(bptbl)),
-               bptbl_ef_idx_internal(bptbl, ef)));
-    for (i = bptbl_ef_idx_internal(bptbl, bptbl_active_frame(bptbl));
-         i < bptbl_ef_idx_internal(bptbl, ef); ++i) {
+               bptbl_ef_idx(bptbl, bptbl_active_frame(bptbl)),
+               bptbl_ef_idx(bptbl, ef)));
+    for (i = bptbl_ef_idx(bptbl, bptbl_active_frame(bptbl));
+         i < bptbl_ef_idx(bptbl, ef); ++i) {
         E_DEBUG(5,("Invalidate bp %d\n", i));
         garray_ent(bptbl->ent, bp_t, i).valid = FALSE;
     }
@@ -258,18 +251,18 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
     /* Now re-activate all ones backwards reachable from the search graph. */
     E_DEBUG(2,("Finding coaccessible frames from backpointers from %d to %d (%d to %d)\n",
                ef, cf,
-               bptbl_ef_idx_internal(bptbl, ef), bptbl_ef_idx_internal(bptbl, cf)));
+               bptbl_ef_idx(bptbl, ef), bptbl_ef_idx(bptbl, cf)));
     /* Mark everything immediately reachable from (ef..cf) */
     bitvec_clear_all(bptbl->valid_fr, cf - bptbl_active_frame(bptbl));
     n_active_fr = 0;
     /* NOTE: This for statement can be sped up at the cost of being
      * less obvious. */
-    for (i = bptbl_ef_idx_internal(bptbl, ef);
-         i < bptbl_ef_idx_internal(bptbl, cf); ++i) {
+    for (i = bptbl_ef_idx(bptbl, ef);
+         i < bptbl_ef_idx(bptbl, cf); ++i) {
         bp_t *ent, *prev;
-        ent = bptbl_ent_internal(bptbl, i);
+        ent = bptbl_ent(bptbl, i);
         /* This one could be retired. */
-        prev = bptbl_ent_internal(bptbl, ent->bp);
+        prev = bptbl_ent(bptbl, ent->bp);
         if (!ent->valid) /* May be invalidated by maxwpf */
             continue;
         if (prev != NULL) {
@@ -299,10 +292,10 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
                 bitvec_clear(bptbl->valid_fr, i - bptbl_active_frame(bptbl));
                 /* Add all backpointers in this frame (the bogus
                  * lattice generation algorithm) */
-                for (j = bptbl_ef_idx_internal(bptbl, i);
-                     j < bptbl_ef_idx_internal(bptbl, i + 1); ++j) {
-                    bp_t *ent = bptbl_ent_internal(bptbl, j);
-                    bp_t *prev = bptbl_ent_internal(bptbl, ent->bp);
+                for (j = bptbl_ef_idx(bptbl, i);
+                     j < bptbl_ef_idx(bptbl, i + 1); ++j) {
+                    bp_t *ent = bptbl_ent(bptbl, j);
+                    bp_t *prev = bptbl_ent(bptbl, ent->bp);
                     ent->valid = TRUE;
                     if (prev != NULL) {
                         int frame = prev->frame;
@@ -323,8 +316,8 @@ bptbl_mark(bptbl_t *bptbl, int ef, int cf)
         last_gc_fr = next_gc_fr;
     }
     E_DEBUG(2,("Removed"));
-    for (j = 0, i = bptbl_ef_idx_internal(bptbl, bptbl_active_frame(bptbl));
-         i < bptbl_ef_idx_internal(bptbl, ef); ++i) {
+    for (j = 0, i = bptbl_ef_idx(bptbl, bptbl_active_frame(bptbl));
+         i < bptbl_ef_idx(bptbl, ef); ++i) {
         bp_t *ent = garray_ptr(bptbl->ent, bp_t, i);
         assert(ent != NULL);
         if (ent->valid)
@@ -451,7 +444,7 @@ bptbl_remap(bptbl_t *bptbl, int first_retired_bp,
                 E_DEBUG(4,("remap retired %d => %d in %d\n",
                            bpe->bp, garray_ent(bptbl->permute, bpidx_t, bpe->bp), i));
             bpe->bp = garray_ent(bptbl->permute, bpidx_t, bpe->bp);
-            assert(bptbl_sf_internal(bptbl, i) <= bpe->frame);
+            assert(bptbl_sf(bptbl, i) <= bpe->frame);
         }
     }
 
@@ -466,7 +459,7 @@ bptbl_remap(bptbl_t *bptbl, int first_retired_bp,
                 E_DEBUG(4,("remap active %d => %d in %d\n",
                            bpe->bp, garray_ent(bptbl->permute, bpidx_t, bpe->bp), i));
             bpe->bp = garray_ent(bptbl->permute, bpidx_t, bpe->bp);
-            assert(bptbl_sf_internal(bptbl, i) <= bpe->frame);
+            assert(bptbl_sf(bptbl, i) <= bpe->frame);
         }
         if (bpe->bp < bptbl->oldest_bp)
             bptbl->oldest_bp = bpe->bp;
@@ -523,25 +516,25 @@ bptbl_gc(bptbl_t *bptbl, int oldest_bp, int frame_idx)
     if (next_active_fr <= bptbl_active_frame(bptbl) + 1)
         return;
     /* If there is nothing to GC then finish up. */
-    if (bptbl_ef_idx_internal(bptbl, bptbl_active_frame(bptbl))
-        == bptbl_ef_idx_internal(bptbl, next_active_fr)) {
+    if (bptbl_ef_idx(bptbl, bptbl_active_frame(bptbl))
+        == bptbl_ef_idx(bptbl, next_active_fr)) {
         bptbl_update_active(bptbl, next_active_fr);
         return;
     }
     E_DEBUG(2,("GC from frame %d to %d\n", bptbl_active_frame(bptbl),
                next_active_fr));
     /* Expand the permutation table if necessary. */
-    garray_expand_to(bptbl->permute, bptbl_ef_idx_internal(bptbl, next_active_fr));
+    garray_expand_to(bptbl->permute, bptbl_ef_idx(bptbl, next_active_fr));
     garray_set_base(bptbl->permute, bptbl_active_idx(bptbl));
     /* Mark, compact, snap pointers. */
     n_retired = bptbl_mark(bptbl, next_active_fr, frame_idx);
     E_DEBUG(2,("About to retire %d bps\n", n_retired));
     first_retired_bp = bptbl_retired_idx(bptbl);
     bptbl_retire(bptbl, n_retired,
-                 bptbl_ef_idx_internal(bptbl, next_active_fr));
+                 bptbl_ef_idx(bptbl, next_active_fr));
     bptbl_remap(bptbl, first_retired_bp,
-                bptbl_ef_idx_internal(bptbl, next_active_fr),
-                bptbl_ef_idx_internal(bptbl, next_active_fr));
+                bptbl_ef_idx(bptbl, next_active_fr),
+                bptbl_ef_idx(bptbl, next_active_fr));
     bptbl_update_active(bptbl, next_active_fr);
     E_DEBUG(2,("Retired %d bps: now %d retired, %d active\n", n_retired,
                bptbl_retired_idx(bptbl),
@@ -564,7 +557,7 @@ bptbl_push_frame(bptbl_t *bptbl, int oldest_bp)
     E_DEBUG(2,("pushing frame %d, oldest bp %d in frame %d\n",
                frame_idx, oldest_bp,
                oldest_bp == NO_BP
-               ? -1 : bptbl_ent_internal(bptbl, oldest_bp)->frame));
+               ? -1 : bptbl_ent(bptbl, oldest_bp)->frame));
     garray_expand_to(bptbl->ef_idx, frame_idx + 1);
     if (frame_idx - bptbl_active_frame(bptbl) >= bptbl->n_frame_alloc) {
         assert(bptbl->n_frame_alloc != 0);
@@ -587,7 +580,7 @@ bptbl_commit(bptbl_t *bptbl)
     /* This is the frame we're working on and its bps. */
     bptbl_lock(bptbl);
     frame_idx = bptbl->n_frame - 1;
-    dest = bptbl_ef_idx_internal(bptbl, frame_idx);
+    dest = bptbl_ef_idx(bptbl, frame_idx);
     dest_s_idx = garray_ent(bptbl->ent, bp_t, dest).s_idx;
     eidx = bptbl_end_idx(bptbl);
     E_DEBUG(4,("compacting %d bps\n", eidx - dest));
@@ -619,7 +612,7 @@ bptbl_commit(bptbl_t *bptbl)
     }
     E_DEBUG(4, ("Frame %d removed %d invalid bps out of %d\n",
                 frame_idx, eidx - dest,
-                eidx - bptbl_ef_idx_internal(bptbl, frame_idx)));
+                eidx - bptbl_ef_idx(bptbl, frame_idx)));
 
     /* Truncate active arrays. */
     garray_pop_from(bptbl->rc, dest_s_idx);
@@ -627,6 +620,12 @@ bptbl_commit(bptbl_t *bptbl)
     bptbl_unlock(bptbl);
 
     return dest - src;
+}
+
+int
+bptbl_is_final(bptbl_t *bptbl)
+{
+    return (bptbl_end_idx(bptbl) == bptbl_active_idx(bptbl));
 }
 
 int
@@ -638,7 +637,7 @@ bptbl_finalize(bptbl_t *bptbl)
     E_DEBUG(2,("Final GC from frame %d to %d\n",
                bptbl_active_frame(bptbl), bptbl->n_frame));
     /* If there is nothing to GC then finish up. */
-    if (bptbl_end_idx(bptbl) == bptbl_active_idx(bptbl)) {
+    if (bptbl_is_final(bptbl)) {
         bptbl_unlock(bptbl);
         return 0;
     }
@@ -648,7 +647,7 @@ bptbl_finalize(bptbl_t *bptbl)
     /* Mark and GC everything from the last frame. */
     n_retired = bptbl_mark(bptbl, bptbl->n_frame - 1, bptbl->n_frame);
     /* Include the last frame in the retired count. */
-    n_retired += bptbl_ef_count_internal(bptbl, bptbl->n_frame - 1);
+    n_retired += bptbl_ef_count(bptbl, bptbl->n_frame - 1);
     E_DEBUG(2,("About to retire %d bps\n", n_retired));
     first_retired_bp = bptbl_retired_idx(bptbl);
     bptbl_retire(bptbl, n_retired, bptbl_end_idx(bptbl));
@@ -718,7 +717,7 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
         assert(ent->valid);
         E_INFO_NOFN("%-5d %-10s start %-3d end %-3d score %-8d bp %-3d\n",
                     i, dict_wordstr(bptbl->d2p->dict, ent->wid),
-                    bptbl_sf_internal(bptbl, i),
+                    bptbl_sf(bptbl, i),
                     ent->frame,
                     ent->score,
                     ent->bp);
@@ -735,7 +734,7 @@ bptbl_release(bptbl_t *bptbl, bpidx_t first_idx)
     return first_idx - base_idx;
 }
 
-static bpidx_t
+bpidx_t
 bptbl_find_exit(bptbl_t *bptbl, int32 wid)
 {
     bpidx_t start, end, best;
@@ -752,9 +751,9 @@ bptbl_find_exit(bptbl_t *bptbl, int32 wid)
         bpidx_t first_retired = garray_base(bptbl->retired);
         /* Final, so it's in retired. */
         start = end = bptbl_retired_idx(bptbl) - 1;
-        ef = bptbl_ent_internal(bptbl, start)->frame;
+        ef = bptbl_ent(bptbl, start)->frame;
         while (start >= first_retired) {
-            if (bptbl_ent_internal(bptbl, start)->frame != ef)
+            if (bptbl_ent(bptbl, start)->frame != ef)
                 break;
             --start;
         }
@@ -763,9 +762,9 @@ bptbl_find_exit(bptbl_t *bptbl, int32 wid)
         bpidx_t first_ent = garray_base(bptbl->ent);
         /* Not final, so it's in ent. */
         start = end = garray_next_idx(bptbl->ent) - 1;
-        ef = bptbl_ent_internal(bptbl, start)->frame;
+        ef = bptbl_ent(bptbl, start)->frame;
         while (start >= first_ent) {
-            if (bptbl_ent_internal(bptbl, start)->frame != ef)
+            if (bptbl_ent(bptbl, start)->frame != ef)
                 break;
             --start;
         }
@@ -780,7 +779,7 @@ bptbl_find_exit(bptbl_t *bptbl, int32 wid)
     best_score = WORST_SCORE;
     best = NO_BP;
     while (start <= end) {
-        bp_t *ent = bptbl_ent_internal(bptbl, start);
+        bp_t *ent = bptbl_ent(bptbl, start);
         if (ent->score BETTER_THAN best_score
             && (wid == BAD_S3WID || ent->wid == wid)) {
             best = start;
@@ -791,8 +790,8 @@ bptbl_find_exit(bptbl_t *bptbl, int32 wid)
     return best;
 }
 
-static int32
-bptbl_ef_idx_internal(bptbl_t *bptbl, int frame_idx)
+int32
+bptbl_ef_idx(bptbl_t *bptbl, int frame_idx)
 {
     if (frame_idx < bptbl_active_frame(bptbl))
         return 0;
@@ -802,18 +801,8 @@ bptbl_ef_idx_internal(bptbl_t *bptbl, int frame_idx)
         return garray_ent(bptbl->ef_idx, bpidx_t, frame_idx);
 }
 
-int32
-bptbl_ef_idx(bptbl_t *bptbl, int frame_idx)
-{
-    int32 idx;
-
-    idx = bptbl_ef_idx_internal(bptbl, frame_idx);
-
-    return idx;
-}
-
-static bp_t *
-bptbl_ent_internal(bptbl_t *bptbl, bpidx_t bpidx)
+bp_t *
+bptbl_ent(bptbl_t *bptbl, bpidx_t bpidx)
 {
     if (bpidx == NO_BP)
         return NULL;
@@ -828,10 +817,7 @@ bptbl_get_bp(bptbl_t *bptbl, bpidx_t bpidx, bp_t *out_bp)
 {
     bp_t *ent;
 
-    if (bpidx == NO_BP)
-        return -1;
-
-    ent = bptbl_ent_internal(bptbl, bpidx);
+    ent = bptbl_ent(bptbl, bpidx);
     if (ent == NULL) {
         return -1;
     }
@@ -848,7 +834,7 @@ bptbl_set_bp(bptbl_t *bptbl, bpidx_t bpidx, bp_t const *bp)
     if (bpidx == NO_BP)
         return -1;
 
-    ent = bptbl_ent_internal(bptbl, bpidx);
+    ent = bptbl_ent(bptbl, bpidx);
     if (ent == NULL) {
         return -1;
     }
@@ -897,24 +883,24 @@ bptbl_active_sf(bptbl_t *bptbl)
         sf = 0;
     else {
         bp_t *ent;
-        ent = bptbl_ent_internal(bptbl, bptbl->oldest_bp);
+        ent = bptbl_ent(bptbl, bptbl->oldest_bp);
         sf = ent->frame + 1;
     }
     bptbl_unlock(bptbl);
     return sf;
 }
 
-static int
-bptbl_sf_internal(bptbl_t *bptbl, bpidx_t bpidx)
+int
+bptbl_sf(bptbl_t *bptbl, bpidx_t bpidx)
 {
     bp_t *ent;
     bp_t *prev;
 
-    ent = bptbl_ent_internal(bptbl, bpidx);
+    ent = bptbl_ent(bptbl, bpidx);
     if (ent == NULL)
         return -1;
     else {
-        prev = bptbl_ent_internal(bptbl, ent->bp);
+        prev = bptbl_ent(bptbl, ent->bp);
         if (prev == NULL)
             return 0;
         else
@@ -923,32 +909,12 @@ bptbl_sf_internal(bptbl_t *bptbl, bpidx_t bpidx)
 }
 
 int
-bptbl_sf(bptbl_t *bptbl, bpidx_t bpidx)
-{
-    int sf;
-
-    sf = bptbl_sf_internal(bptbl, bpidx);
-
-    return sf;
-}
-
-static int
-bptbl_ef_count_internal(bptbl_t *bptbl, int frame_idx)
-{
-    bpidx_t start, end;
-    start = bptbl_ef_idx_internal(bptbl, frame_idx);
-    end = bptbl_ef_idx_internal(bptbl, frame_idx + 1);
-    return end - start;
-}
-
-int
 bptbl_ef_count(bptbl_t *bptbl, int frame_idx)
 {
-    int count;
-
-    count = bptbl_ef_count_internal(bptbl, frame_idx);
-
-    return count;
+    bpidx_t start, end;
+    start = bptbl_ef_idx(bptbl, frame_idx);
+    end = bptbl_ef_idx(bptbl, frame_idx + 1);
+    return end - start;
 }
 
 void
@@ -957,7 +923,7 @@ bptbl_set_rcscore(bptbl_t *bptbl, bpidx_t bpidx, int rc, int32 score)
     bp_t *bpe;
     int delta;
 
-    bpe = bptbl_ent_internal(bptbl, bpidx);
+    bpe = bptbl_ent(bptbl, bpidx);
     /* No rc scores to set! */
     if (dict_is_single_phone(bptbl->d2p->dict, bpe->wid))
         return;
@@ -975,7 +941,7 @@ bptbl_get_rcscores(bptbl_t *bptbl, bpidx_t bpidx, int32 *out_rcscores)
     bp_t *bpe;
     int rcsize;
 
-    bpe = bptbl_ent_internal(bptbl, bpidx);
+    bpe = bptbl_ent(bptbl, bpidx);
     rcsize = bptbl_rcsize(bptbl, bpe);
     if (rcsize == 0) {
         assert(dict_is_single_phone(bptbl->d2p->dict, bpe->wid));
@@ -1002,7 +968,7 @@ bptbl_get_rcdeltas(bptbl_t *bptbl, bpidx_t bpidx, rcdelta_t *out_rcdeltas)
     bp_t *bpe;
     int rcsize;
 
-    bpe = bptbl_ent_internal(bptbl, bpidx);
+    bpe = bptbl_ent(bptbl, bpidx);
     rcsize = bptbl_rcsize(bptbl, bpe);
     if (rcsize == 0) {
         assert(dict_is_single_phone(bptbl->d2p->dict, bpe->wid));
@@ -1046,7 +1012,7 @@ bptbl_fake_lmstate_internal(bptbl_t *bptbl, bp_t *ent)
 {
     bp_t *prev;
 
-    prev = bptbl_ent_internal(bptbl, ent->bp);
+    prev = bptbl_ent(bptbl, ent->bp);
     /* Propagate lm state for fillers, rotate it for words. */
     if (dict_filler_word(bptbl->d2p->dict, ent->wid)) {
         if (prev != NULL) {
@@ -1073,9 +1039,9 @@ bptbl_fake_lmscore(bptbl_t *bptbl, ngram_model_t *lm,
 {
     bp_t *prev, *ent;
 
-    ent = bptbl_ent_internal(bptbl, bp);
+    ent = bptbl_ent(bptbl, bp);
     assert(ent != NULL);
-    prev = bptbl_ent_internal(bptbl, ent->bp);
+    prev = bptbl_ent(bptbl, ent->bp);
 
     /* Start word has lscr = 0 */
     if (prev == NULL)
@@ -1137,9 +1103,9 @@ bptbl_enter(bptbl_t *bptbl, int32 w, int32 path, int32 score, int rc)
     }
     E_DEBUG(3,("Entered bp %d sf %d ef %d s_idx %d active_fr %d\n",
                bptbl_end_idx(bptbl) - 1,
-               bptbl_sf_internal(bptbl, bptbl_end_idx(bptbl) - 1),
+               bptbl_sf(bptbl, bptbl_end_idx(bptbl) - 1),
                bptbl->n_frame - 1, bss_head, bptbl_active_frame(bptbl)));
-    assert(bptbl_sf_internal(bptbl, bptbl_end_idx(bptbl) - 1)
+    assert(bptbl_sf(bptbl, bptbl_end_idx(bptbl) - 1)
            >= bptbl_active_frame(bptbl));
     bptbl_unlock(bptbl);
     return bpidx;
@@ -1153,7 +1119,7 @@ bptbl_update_bp(bptbl_t *bptbl, int32 bp, int rc,
     int rcsize;
 
     assert(bp != NO_BP);
-    ent = bptbl_ent_internal(bptbl, bp);
+    ent = bptbl_ent(bptbl, bp);
     assert(new_score > ent->score);
     rcsize = bptbl_rcsize(bptbl, ent);
     if (rcsize != 0) {
@@ -1181,12 +1147,51 @@ bptbl_update_bp(bptbl_t *bptbl, int32 bp, int rc,
 }
 
 char *
+bptbl_backtrace(bptbl_t *bptbl, bpidx_t bp)
+{
+    char *c, *hyp_str;
+    size_t len;
+    bp_t *bpe;
+
+    bpe = bptbl_ent(bptbl, bp);
+    len = 0;
+
+    while (bpe != NULL) {
+        assert(bpe->valid);
+        if (dict_real_word(bptbl->d2p->dict, bpe->wid))
+            len += strlen(dict_basestr(bptbl->d2p->dict, bpe->wid)) + 1;
+        bpe = bptbl_ent(bptbl, bpe->bp);
+    }
+
+    if (len == 0) {
+        return NULL;
+    }
+    hyp_str = ckd_calloc(1, len);
+
+    bpe = bptbl_ent(bptbl, bp);
+    c = hyp_str + len - 1;
+    while (bpe != NULL) {
+        size_t len;
+        if (dict_real_word(bptbl->d2p->dict, bpe->wid)) {
+            len = strlen(dict_basestr(bptbl->d2p->dict, bpe->wid));
+            c -= len;
+            memcpy(c, dict_basestr(bptbl->d2p->dict, bpe->wid), len);
+            if (c > hyp_str) {
+                --c;
+                *c = ' ';
+            }
+        }
+        bpe = bptbl_ent(bptbl, bpe->bp);
+    }
+
+    return hyp_str;
+}
+
+char *
 bptbl_hyp(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
 {
     bpidx_t exit;
     bp_t *bpe;
-    char *c, *hyp_str;
-    size_t len;
 
     /* Look for </s> in the last frame. */
     if ((exit = bptbl_find_exit(bptbl, finish_wid)) == NO_BP) {
@@ -1200,43 +1205,14 @@ bptbl_hyp(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
         E_WARN("No %s found in last frame, using %s instead\n",
                dict_wordstr(bptbl->d2p->dict, finish_wid),
                dict_wordstr(bptbl->d2p->dict,
-                            bptbl_ent_internal(bptbl, exit)->wid));
+                            bptbl_ent(bptbl, exit)->wid));
 #endif
     }
 
-    bpe = bptbl_ent_internal(bptbl, exit);
+    bpe = bptbl_ent(bptbl, exit);
     if (out_score)
         *out_score = bpe->score;
-    len = 0;
-    while (bpe != NULL) {
-        assert(bpe->valid);
-        if (dict_real_word(bptbl->d2p->dict, bpe->wid))
-            len += strlen(dict_basestr(bptbl->d2p->dict, bpe->wid)) + 1;
-        bpe = bptbl_ent_internal(bptbl, bpe->bp);
-    }
-
-    if (len == 0) {
-	return NULL;
-    }
-    hyp_str = ckd_calloc(1, len);
-
-    bpe = bptbl_ent_internal(bptbl, exit);
-    c = hyp_str + len - 1;
-    while (bpe != NULL) {
-        size_t len;
-        if (dict_real_word(bptbl->d2p->dict, bpe->wid)) {
-            len = strlen(dict_basestr(bptbl->d2p->dict, bpe->wid));
-            c -= len;
-            memcpy(c, dict_basestr(bptbl->d2p->dict, bpe->wid), len);
-            if (c > hyp_str) {
-                --c;
-                *c = ' ';
-            }
-        }
-        bpe = bptbl_ent_internal(bptbl, bpe->bp);
-    }
-
-    return hyp_str;
+    return bptbl_backtrace(bptbl, exit);
 }
 
 
@@ -1257,8 +1233,8 @@ bptbl_bp2itor(ps_seg_t *seg, int bp)
     bptbl_seg_t *bseg = (bptbl_seg_t *)seg;
     bp_t *be, *pbe;
 
-    be = bptbl_ent_internal(bseg->bptbl, bp);
-    pbe = bptbl_ent_internal(bseg->bptbl, be->bp);
+    be = bptbl_ent(bseg->bptbl, bp);
+    pbe = bptbl_ent(bseg->bptbl, be->bp);
     seg->word = dict_wordstr(bseg->bptbl->d2p->dict, be->wid);
     seg->ef = be->frame;
     seg->sf = pbe ? pbe->frame + 1 : 0;
@@ -1325,10 +1301,10 @@ bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
         E_WARN("No %s found in last frame, using %s instead\n",
                dict_wordstr(bptbl->d2p->dict, finish_wid),
                dict_wordstr(bptbl->d2p->dict,
-                            bptbl_ent_internal(bptbl, exit)->wid));
+                            bptbl_ent(bptbl, exit)->wid));
     }
 
-    bpe = bptbl_ent_internal(bptbl, exit);
+    bpe = bptbl_ent(bptbl, exit);
     if (out_score)
         *out_score = bpe->score;
 
@@ -1343,7 +1319,7 @@ bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
     itor->n_bpidx = 0;
     while (bpe != NULL) {
         ++itor->n_bpidx;
-        bpe = bptbl_ent_internal(bptbl, bpe->bp);
+        bpe = bptbl_ent(bptbl, bpe->bp);
     }
     if (itor->n_bpidx == 0) {
         ckd_free(itor);
@@ -1351,11 +1327,11 @@ bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
     }
     itor->bpidx = ckd_calloc(itor->n_bpidx, sizeof(*itor->bpidx));
     cur = itor->n_bpidx - 1;
-    bpe = bptbl_ent_internal(bptbl, exit);
+    bpe = bptbl_ent(bptbl, exit);
     while (bpe != NULL) {
         itor->bpidx[cur] = exit;
         exit = bpe->bp;
-        bpe = bptbl_ent_internal(bptbl, exit);
+        bpe = bptbl_ent(bptbl, exit);
         --cur;
     }
 

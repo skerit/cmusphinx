@@ -53,6 +53,7 @@
 #include <sphinxbase/profile.h>
 
 #include <multisphinx/dict2pid.h>
+#include <multisphinx/bptbl.h>
 
 #define NO_BP		-1
 
@@ -160,11 +161,21 @@ void bptbl_dump(bptbl_t *bptbl);
 void bptbl_reset(bptbl_t *bptbl);
 
 /**
+ * Check if the backpointer table is final.
+ */
+int bptbl_is_final(bptbl_t *bptbl);
+
+/**
  * Finalize the backpointer table.
  *
  * Garbage collects and retires all active backpointers.
  */
 int bptbl_finalize(bptbl_t *bptbl);
+
+/**
+ * Find the best early exit from an utterance, exp
+ */
+bpidx_t bptbl_find_exit(bptbl_t *bptbl, int32 wid);
 
 /**
  * Record the current frame's index in the backpointer table.
@@ -238,6 +249,11 @@ int bptbl_active_sf(bptbl_t *bptbl);
 int bptbl_get_bp(bptbl_t *bptbl, bpidx_t bpidx, bp_t *out_ent);
 
 /**
+ * Get pointer to a backpointer entry.
+ */
+bp_t *bptbl_ent(bptbl_t *bptbl, bpidx_t bpidx);
+
+/**
  * Update a backpointer entry.
  */
 int bptbl_set_bp(bptbl_t *bptbl, bpidx_t bpidx, bp_t const *ent);
@@ -282,6 +298,13 @@ void bptbl_update_bp(bptbl_t *bptbl, int32 bp, int rc,
  */
 int32 bptbl_fake_lmscore(bptbl_t *bptbl, ngram_model_t *lm,
                          bpidx_t bp, int *out_n_used);
+
+/**
+ * Construct a hypothesis string by backtracing from an entry.
+ * @param bp Entry from which to backtrace
+ * @return Newly allocated hypothesis string (free with ckd_free())
+ */
+char *bptbl_backtrace(bptbl_t *bptbl, bpidx_t bp);
 
 /**
  * Construct a hypothesis string from the best path in bptbl.

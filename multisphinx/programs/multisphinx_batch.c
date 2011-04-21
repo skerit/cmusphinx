@@ -62,6 +62,8 @@ typedef struct batch_decoder_s
     search_t *fwdflat;
     search_t *latgen;
 
+    struct timeval utt_start;
+
     FILE *ctlfh;
 } batch_decoder_t;
 
@@ -128,7 +130,6 @@ static int batch_decoder_decode_adc(batch_decoder_t *bd, FILE *infh, int sf, int
     fseek(infh, cmd_ln_int32_r(bd->config, "-adchdr") + sf * sizeof(int16),
             SEEK_SET);
 
-    // FIXME: should try to do whole utterance if possible...
     while (sf < ef) {
         size_t nread = fread(buf, sizeof(int16), 2048, infh);
         if (nread == 0)
@@ -188,6 +189,7 @@ int batch_decoder_decode(batch_decoder_t *bd, char *file,
     }
 
     fb = search_factory_featbuf(bd->sf);
+    gettimeofday(&bd->utt_start, NULL);
     featbuf_producer_start_utt(fb, uttid);
 
     if (cmd_ln_boolean_r(bd->config, "-adcin"))
@@ -195,7 +197,6 @@ int batch_decoder_decode(batch_decoder_t *bd, char *file,
     else
         rv = batch_decoder_decode_mfc(bd, infh, sf, ef);
 
-    /* FIXME: This will wait for the utterance to be over, which isn't actually what we want. */
     featbuf_producer_end_utt(fb);
 
     fclose(infh);
@@ -256,6 +257,41 @@ int batch_decoder_run(batch_decoder_t *bd)
     return 0;
 }
 
+static int
+search_cb(search_t *search, search_event_t *evt, void *udata)
+{
+    batch_decoder_t *bd = (batch_decoder_t *)udata;
+    struct timeval tv;
+
+    gettimeofday(&tv, NULL);
+    E_INFO("%s: time delta %f ",
+            search_name(search),
+           ((double)tv.tv_sec + (double)tv.tv_usec / 1000000)
+           - ((double)bd->utt_start.tv_sec + (double)bd->utt_start.tv_usec / 1000000));
+    switch (evt->event) {
+    case SEARCH_PARTIAL_RESULT: {
+        int32 score;
+        char const *hyp = search_hyp(search, &score);
+        E_INFOCONT("partial: %s (%d)\n", hyp, score);
+        break;
+    }
+    case SEARCH_START_UTT:
+        E_INFOCONT("start\n");
+        break;
+    case SEARCH_END_UTT:
+        E_INFOCONT("end\n");
+        break;
+    case SEARCH_FINAL_RESULT: {
+        int32 score;
+        char const *hyp = search_hyp(search, &score);
+        E_INFOCONT("full: %s (%d)\n", hyp, score);
+        break;
+    }
+    }
+    return 0;
+}
+
+
 batch_decoder_t *
 batch_decoder_init_argv(int argc, char *argv[])
 {
@@ -286,6 +322,8 @@ batch_decoder_init_argv(int argc, char *argv[])
 
     search_link(bd->fwdtree, bd->fwdflat, "fwdtree", FALSE);
     // search_link(bd->fwdflat, bd->latgen, "fwdflat", TRUE);
+    search_set_cb(bd->fwdtree, search_cb, bd);
+    search_set_cb(bd->fwdflat, search_cb, bd);
 
     return bd;
 

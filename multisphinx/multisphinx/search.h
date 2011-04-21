@@ -59,6 +59,30 @@ typedef struct search_s search_t;
 typedef struct searchfuncs_s searchfuncs_t;
 
 /**
+ * Event in search.
+ */
+typedef struct search_event_s search_event_t;
+struct search_event_s {
+    int16 event;
+    int16 frame;
+};
+
+/**
+ * Event types.
+ */
+enum search_event_e {
+    SEARCH_START_UTT,
+    SEARCH_PARTIAL_RESULT,
+    SEARCH_FINAL_RESULT,
+    SEARCH_END_UTT
+};
+
+/**
+ * Callback for search events.
+ */
+typedef int (*search_cb_func)(search_t *search, search_event_t *evt, void *udata);
+
+/**
  * Start a search thread.
  */
 sbthread_t *search_run(search_t *search);
@@ -74,23 +98,25 @@ int search_wait(search_t *search);
 int search_free(search_t *search);
 
 /**
+ * Get the name of the search implementation.
+ */
+char const *search_name(search_t *search);
+
+/**
  * Link one search structure to another via an arc buffer.
  */
 arc_buffer_t *search_link(search_t *from, search_t *to,
                           char const *name, int keep_scores);
 
 /**
- * Get the latest hypothesis from a search.
- *
- * FIXME: This will probably go away due to hypothesis splicing
+ * Add a callback for search events.
  */
-char const *search_hyp(search_t *search, int32 *out_score);
+void search_set_cb(search_t *search, search_cb_func cb, void *udata);
 
 /**
- * Splice hypotheses from multiple searches.
+ * Get the latest hypothesis from a search.
  */
-char const *search_splice(search_t **searches, int nsearches,
-                          int32 *out_score);
+char const *search_hyp(search_t *search, int32 *out_score);
 
 /**
  * Get the backpointer table, if any, from a search.

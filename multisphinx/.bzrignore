@@ -183,3 +183,5 @@ test/test_ngram_trie_iteration
 test/test_nodeid_map
 test/test_partial_backward
 test/test_search_factory
+test/test_partial_results
+test/test_state_align

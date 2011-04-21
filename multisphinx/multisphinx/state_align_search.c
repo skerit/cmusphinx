@@ -39,7 +39,10 @@
  * @file state_align_search.c State (and phone and word) alignment search.
  */
 
+#include <multisphinx/search_internal.h>
+
 #include "state_align_search.h"
+#include "tmat.h"
 
 /**
  * State alignment search structure.
@@ -59,7 +62,6 @@ struct state_align_search_s {
     int n_fr_alloc;         /**< Number of frames of tokens allocated. */
 };
 typedef struct state_align_search_s state_align_search_t;
-
 
 static int
 state_align_search_start(search_t *search)
@@ -193,13 +195,19 @@ state_align_search_step(search_t *search)
     int16 const *senscr;
     int i, frame_idx;
 
-    /* FIXME: actually we should consume as many frames as available. */
-    frame_idx = acmod_consumer_wait(acmod, -1);
+    if ((frame_idx = acmod_consumer_wait(acmod, -1)) < 0) {
+        /* Normal end of utterance... */
+        if (acmod_eou(acmod))
+            return 0;
+        /* Or something bad (i.e. cancellation)? */
+        return -1;
+    }
 
     /* Calculate senone scores. */
     for (i = 0; i < sas->n_phones; ++i)
         acmod_activate_hmm(acmod, sas->hmms + i);
-    senscr = acmod_score(acmod, frame_idx);
+    if ((senscr = acmod_score(acmod, frame_idx)) == NULL)
+        return 0;
 
     /* Renormalize here if needed. */
     /* FIXME: Make sure to (unit-)test this!!! */
@@ -219,10 +227,13 @@ state_align_search_step(search_t *search)
     /* Generate new tokens from best path results. */
     record_transitions(sas, frame_idx);
 
+    /* Release the frame just searched. */
+    acmod_consumer_release(acmod, frame_idx);
+
     /* Update frame counter */
     sas->frame = frame_idx;
 
-    return 0;
+    return 1;
 }
 
 static int
@@ -268,50 +279,73 @@ state_align_search_finish(search_t *search)
     alignment_iter_free(itor);
     alignment_propagate(sas->al);
 
+    /* Finalize the input acmod (signals producer) */
+    acmod_consumer_end_utt(search->acmod);
+    search->total_frames += search->acmod->output_frame;
+
     return 0;
 }
 
 static int
-state_align_search_reinit(search_t *search, dict_t *dict, dict2pid_t *d2p)
+state_align_search_decode(search_t *base)
 {
-    /* This does nothing. */
-    return 0;
+    int nfr, k;
+
+    if (acmod_consumer_start_utt(base->acmod, -1) < 0)
+        return -1;
+
+    base->uttid = base->acmod->uttid;
+    nfr = 0;
+    state_align_search_start(base);
+    while ((k = state_align_search_step(base)) > 0) {
+        nfr += k;
+    }
+
+    /* Abnormal termination (cancellation, error) */
+    if (k < 0) {
+        if (base->output_arcs)
+            arc_buffer_producer_shutdown(base->output_arcs);
+        return k;
+    }
+
+    state_align_search_finish(base);
+    return nfr;
 }
 
-static void
+static int
 state_align_search_free(search_t *search)
 {
     state_align_search_t *sas = (state_align_search_t *)search;
+    if (sas == NULL)
+        return 0;
     ckd_free(sas->hmms);
     ckd_free(sas->tokens);
     hmm_context_free(sas->hmmctx);
+    return 0;
 }
 
 static searchfuncs_t state_align_search_funcs = {
     /* name: */   "state_align",
+    /* init: */   state_align_search_init,
     /* free: */   state_align_search_free,
+    /* decode: */ state_align_search_decode,
 };
 
-search_t *
-state_align_search_init(cmd_ln_t *config,
-                        acmod_t *acmod,
-                        alignment_t *al)
+searchfuncs_t const *
+state_align_search_query(void)
 {
-    state_align_search_t *sas;
+    return &state_align_search_funcs;
+}
+
+int
+state_align_search_set_alignment(search_t *base, alignment_t *al)
+{
+    state_align_search_t *sas = (state_align_search_t *)base;
     alignment_iter_t *itor;
     hmm_t *hmm;
 
-    sas = ckd_calloc(1, sizeof(*sas));
-    search_init(search_base(sas), &state_align_search_funcs,
-                   config, acmod, al->d2p);
-    sas->hmmctx = hmm_context_init(bin_mdef_n_emit_state(acmod->mdef),
-                                   acmod->tmat->tp, NULL, acmod->mdef->sseq);
-    if (sas->hmmctx == NULL) {
-        ckd_free(sas);
-        return NULL;
-    }
+    alignment_free(sas->al);
     sas->al = al;
-
     /* Generate HMM vector from phone level of alignment. */
     sas->n_phones = alignment_n_phones(al);
     sas->n_emit_state = alignment_n_states(al);
@@ -321,6 +355,25 @@ state_align_search_init(cmd_ln_t *config,
         alignment_entry_t *ent = alignment_iter_get(itor);
         hmm_init(sas->hmmctx, hmm, FALSE,
                  ent->id.pid.ssid, ent->id.pid.tmatid);
+    }
+    return 0;
+}
+
+search_t *
+state_align_search_init(cmd_ln_t *config,
+                        acmod_t *acmod,
+                        dict2pid_t *d2p)
+{
+    state_align_search_t *sas;
+
+    sas = ckd_calloc(1, sizeof(*sas));
+    search_base_init(search_base(sas), &state_align_search_funcs,
+                   config, acmod, d2p);
+    sas->hmmctx = hmm_context_init(bin_mdef_n_emit_state(acmod->mdef),
+                                   acmod->tmat->tp, NULL, acmod->mdef->sseq);
+    if (sas->hmmctx == NULL) {
+        ckd_free(sas);
+        return NULL;
     }
     return search_base(sas);
 }

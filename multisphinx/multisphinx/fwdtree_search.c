@@ -310,6 +310,15 @@ typedef struct fwdtree_search_s {
      */
     bestbp_rc_t *bestbp_rc;
 
+    /**
+     * Best word exit in the most recent frame (used for partial results).
+     */
+    bpidx_t best_exit;
+    /**
+     * Final word in best path (used for partial results).
+     */
+    int32 best_exit_wid;
+
     uint16 *zeroPermTab; /**< Null right context table (contains zeros) */
 
     int32 best_score; /**< Best Viterbi path score. */
@@ -984,6 +993,8 @@ fwdtree_search_start(search_t *base)
     rhmm = (root_node_t *) fts->word_chan[dict_startwid(search_dict(fts))];
     hmm_clear(&rhmm->hmm);
     hmm_enter(&rhmm->hmm, 0, NO_BP, 0);
+
+    search_call_event(base, SEARCH_START_UTT, base->acmod->output_frame);
 
     return 0;
 }
@@ -1989,6 +2000,20 @@ deactivate_channels(fwdtree_search_t *fts, int frame_idx)
 }
 
 static int
+update_partials(fwdtree_search_t *fts, int frame_idx)
+{
+    fts->best_exit = bptbl_find_exit(fts->bptbl, -1);
+    if (fts->best_exit != NO_BP) {
+        int32 bbp = dict_basewid(search_dict(fts), bptbl_ent(fts->bptbl, fts->best_exit)->wid);
+        if (bbp != fts->best_exit_wid) {
+            fts->best_exit_wid = bbp;
+            search_call_event(search_base(fts), SEARCH_PARTIAL_RESULT, frame_idx);
+        }
+    }
+    return fts->best_exit;
+}
+
+static int
 fwdtree_search_one_frame(fwdtree_search_t *fts)
 {
     acmod_t *acmod = search_acmod(fts);
@@ -2054,6 +2079,9 @@ fwdtree_search_one_frame(fwdtree_search_t *fts)
     /* Release the frame just searched. */
     acmod_consumer_release(acmod, frame_idx);
 
+    /* Update partial results. */
+    update_partials(fts, frame_idx);
+
     /* Return the number of frames processed. */
     ptmr_stop(&fts->base.t);
     return 1;
@@ -2109,6 +2137,8 @@ fwdtree_search_finish(search_t *base)
     /* Finalize the input acmod (signals producer) */
     acmod_consumer_end_utt(base->acmod);
     base->total_frames += base->acmod->output_frame;
+
+    search_call_event(base, SEARCH_END_UTT, base->acmod->output_frame);
 
     /*
      * The previous search code did a postprocessing of the
@@ -2307,7 +2337,13 @@ fwdtree_search_hyp(search_t *base, int32 *out_score)
     fwdtree_search_t *fts = (fwdtree_search_t *)base;
 
     ckd_free(base->hyp_str);
-    base->hyp_str = bptbl_hyp(fts->bptbl, out_score, search_finish_wid(fts));
+    if (bptbl_is_final(fts->bptbl)) {
+        base->hyp_str = bptbl_hyp(fts->bptbl, out_score, base->finish_wid);
+    }
+    else {
+        *out_score = fts->best_score;
+        base->hyp_str = bptbl_backtrace(fts->bptbl, fts->best_exit);
+    }
     return base->hyp_str;
 }
 

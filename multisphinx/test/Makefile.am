@@ -3,17 +3,15 @@ check_PROGRAMS =				\
 	test_bptbl				\
 	test_build_lattice			\
 	test_forward_backward			\
-	test_fwdflat				\
-	test_fwdtree				\
-	test_fwdtree_fwdflat			\
-	test_fwdtree_fwdflat_homos		\
 	test_htk_lattice			\
 	test_latgen				\
 	test_ngram_trie				\
 	test_ngram_trie_iteration		\
 	test_nodeid_map				\
 	test_partial_backward			\
-	test_search_factory
+	test_search_factory			\
+	test_state_align		\
+	test_partial_results
 
 TESTS = $(check_PROGRAMS)
 

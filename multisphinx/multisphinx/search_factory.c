@@ -15,6 +15,7 @@
 #include <multisphinx/search_factory.h>
 #include <multisphinx/fwdtree_search.h>
 #include <multisphinx/fwdflat_search.h>
+#include <multisphinx/state_align_search.h>
 #include <multisphinx/latgen_search.h>
 
 #include "search_internal.h"
@@ -31,6 +32,11 @@ struct search_factory_s
     dict_t *dict;
     dict2pid_t *d2p;
     glist_t searches;
+
+    /**
+     * Used to determine if we need to clone the acmod yet.
+     */
+    int build_count;
 };
 
 static const arg_t ms_args_def[] =
@@ -159,6 +165,8 @@ static int search_factory_initialize(search_factory_t *dcf)
             (void *) fwdflat_search_query());
     dcf->searches
             = glist_add_ptr(dcf->searches, (void *) latgen_search_query());
+    dcf->searches = glist_add_ptr(dcf->searches,
+            (void *) state_align_search_query());
 
     return 0;
 }
@@ -288,6 +296,7 @@ search_factory_create_argv(search_factory_t *dcf, char const *name, int argc, ch
     /* Find the matching search module. */
     searchfuncs_t *sf;
     cmd_ln_t *config;
+    acmod_t *acmod;
 
     sf = search_factory_find(dcf, name);
     if (sf == NULL)
@@ -299,7 +308,14 @@ search_factory_create_argv(search_factory_t *dcf, char const *name, int argc, ch
     /* Copy and override the configuration with extra parameters. */
     config = cmd_ln_parse_r(cmd_ln_copy(dcf->config), ms_args_def, argc, (char **)argv, FALSE);
 
-    return (*sf->init)(config, dcf->acmod, dcf->d2p);
+    if (dcf->build_count > 0)
+        acmod = acmod_copy(dcf->acmod);
+    else
+        acmod = dcf->acmod;
+    ++dcf->build_count;
+
+    /* FIXME: clone dictionary and language model here... */
+    return (*sf->init)(config, acmod, dcf->d2p);
 }
 
 search_t *

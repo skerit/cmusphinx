@@ -43,13 +43,14 @@
 #define __PS_ALIGNMENT_H__
 
 /* System headers. */
+#include <stdarg.h>
 
 /* SphinxBase headers. */
 #include <sphinxbase/prim_type.h>
 
-/* Local headers. */
-#include "dict2pid.h"
-#include "hmm.h"
+/* MultiSphinx headers. */
+#include <multisphinx/dict2pid.h>
+#include <multisphinx/hmm.h>
 
 #define PS_ALIGNMENT_NONE ((uint16)0xffff)
 
@@ -102,10 +103,19 @@ alignment_t *alignment_init(dict2pid_t *d2p);
 int alignment_free(alignment_t *al);
 
 /**
- * Append a word.
+ * Append a word to the alignment.
+ *
+ * @param al Alignment to add the word to.
+ * @param wid Word ID for the word.
+ * @param duration Duration of the word (or zero if no explicit duration given).
  */
 int alignment_add_word(alignment_t *al,
                           int32 wid, int duration);
+
+/**
+ * Append a sequence of words to the alignment using its internal dictionary.
+ */
+int alignment_add_words(alignment_t *al, char const *w1, ...);
 
 /**
  * Populate lower layers using available word information.

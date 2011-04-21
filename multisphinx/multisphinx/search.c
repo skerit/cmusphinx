@@ -98,6 +98,13 @@ search_free(search_t *search)
     return 0;
 }
 
+char const *
+search_name(search_t *search)
+{
+    return search->vt->name;
+}
+
+
 arc_buffer_t *
 search_link(search_t *from, search_t *to,
                char const *name, int keep_scores)
@@ -135,6 +142,28 @@ search_run(search_t *search)
     search->thr = sbthread_start(NULL, search_main, search);
     return search->thr;
 }
+
+int
+search_call_event(search_t *search, int event, int frame)
+{
+    search_event_t evt;
+    if (search->cb != NULL) {
+        evt.event = event;
+        evt.frame = frame;
+        return (*search->cb)(search, &evt, search->cb_data);
+    }
+    else {
+        return 0;
+    }
+}
+
+void
+search_set_cb(search_t *search, search_cb_func cb, void *udata)
+{
+    search->cb = cb;
+    search->cb_data = udata;
+}
+
 
 int
 search_wait(search_t *search)
