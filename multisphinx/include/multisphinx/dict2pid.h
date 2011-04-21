@@ -222,20 +222,6 @@ void dict2pid_dump(FILE *fp,        /**< In: a file pointer */
 void dict2pid_report(dict2pid_t *d2p /**< In: a dict2pid_t structure */
     );
 
-/**
- * Get number of rc 
- */
-int32 get_rc_nssid(dict2pid_t *d2p,  /**< In: a dict2pid */
-		   s3wid_t w         /**< In: a wid */
-    );
-
-/**
- * Get RC map 
- */
-s3cipid_t* dict2pid_get_rcmap(dict2pid_t *d2p,  /**< In: a dict2pid */
-			      s3wid_t w        /**< In: a wid */
-    );
-
 #if 0
 { /* Stop indent from complaining */
 #endif

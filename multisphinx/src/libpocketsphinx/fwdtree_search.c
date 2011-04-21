@@ -461,7 +461,7 @@ fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,
 
     /* Create output arc buffer. */
     ps_search_output_arcs(fts) = arc_buffer_init("fwdtree", fts->bptbl,
-                                                 fts->lmset, FALSE);
+                                                 fts->lmset, TRUE);
 
     /* Create word mappifts. */
     fwdtree_search_update_widmap(fts);
