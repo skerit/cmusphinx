@@ -46,7 +46,7 @@
 #include <sphinxbase/profile.h>
 
 /* Local headers. */
-#include "arc_buffer.h"
+ #include "arc_buffer.h"
 #include "ps_search.h"
 
 /**
@@ -54,7 +54,7 @@
  */
 ps_search_t *latgen_init(cmd_ln_t *config,
 			 dict2pid_t *d2p,
-                         logmath_t *lmath,
+                         ngram_model_t *lm,
 			 arc_buffer_t *input_arcs);
 
 #endif /* __LATGEN_SEARCH_H__ */

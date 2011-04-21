@@ -364,6 +364,12 @@ SPHINXBASE_EXPORT
 int32 const *ngram_model_get_counts(ngram_model_t *model);
 
 /**
+ * Get the log-math object associated with this language model.
+ */
+SPHINXBASE_EXPORT
+logmath_t *ngram_model_get_lmath(ngram_model_t *model);
+
+/**
  * M-gram iterator object.
  */
 typedef struct ngram_iter_s ngram_iter_t;

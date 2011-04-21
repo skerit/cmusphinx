@@ -1071,7 +1071,7 @@ ms_lattice_unlink_unreachable(ms_lattice_t *l)
 /**
  * Rotate a head word into a language model state.
  */
-static int
+int
 rotate_lmstate(int32 wid, int32 *hist, int n_hist, int max_n_hist)
 {
     if (wid == -1)
@@ -1096,28 +1096,27 @@ merge_exits(ms_lattice_t *l, ms_latnode_t *new,
     int32 newwid;
     ms_lattice_get_lmstate_wids(l, new->id.lmstate, &newwid, NULL);
 
+    /* In theory we should merge all arcs which lead to the same
+     * language model state, but this causes problems because it
+     * causes nodes with alternate pronunciations (or rather, their
+     * exit arcs) to be prematurely pruned. */
     assert(new != old);
     for (y = 0; y < ms_latnode_n_exits(old); ++y) {
         ms_latlink_t *ylink = ms_latnode_get_exit(l, old, y);
-        ms_latnode_t *ydest = ms_lattice_get_node_idx(l, ylink->dest);
         ms_latnode_t *ysrc = ms_lattice_get_node_idx(l, ylink->src);
+        ms_latnode_t *ydest = ms_lattice_get_node_idx(l, ylink->dest);
         ms_latlink_t *yylink;
         int z, duplicate;
-        int32 ydestwid;
 
-        ms_lattice_get_lmstate_wids(l, ydest->id.lmstate, &ydestwid, NULL);
-        ydestwid = dict_basewid(l->dict, ydestwid);
         duplicate = FALSE;
         for (z = 0; z < ms_latnode_n_exits(new); ++z) {
             ms_latlink_t *zlink = ms_latnode_get_exit(l, new, z);
-            ms_latnode_t *zdest = ms_lattice_get_node_idx(l, zlink->dest);
             ms_latnode_t *zsrc = ms_lattice_get_node_idx(l, zlink->src);
-            int32 zdestwid;
-            ms_lattice_get_lmstate_wids(l, zdest->id.lmstate, &zdestwid, NULL);
-            zdestwid = dict_basewid(l->dict, zdestwid);
             if (dict_basewid(l->dict, ylink->wid)
                 == dict_basewid(l->dict, zlink->wid)
-                && ydestwid == zdestwid
+                /* See above...  In theory this should just check the
+                 * base word IDs. */
+                && ylink->dest == zlink->dest
                 && ysrc->id.sf == zsrc->id.sf) {
                 /* Tropical semiring assumption... */
                 if (ylink->ascr > zlink->ascr)

@@ -62,16 +62,17 @@ static ps_searchfuncs_t latgen_funcs = {
 
 typedef struct latgen_search_s {
     ps_search_t base;
+    ngram_model_t *lm;
     logmath_t *lmath;
     arc_buffer_t *input_arcs;
     ms_lattice_t *output_lattice;
-    int32 incomplete;
+    int32 *lmhist;
 } latgen_search_t;
 
 ps_search_t *
 latgen_init(cmd_ln_t *config,
 	    dict2pid_t *d2p,
-            logmath_t *lmath,
+            ngram_model_t *lm,
 	    arc_buffer_t *input_arcs)
 {
     latgen_search_t *latgen;
@@ -80,7 +81,10 @@ latgen_init(cmd_ln_t *config,
     ps_search_init(&latgen->base, &latgen_funcs,
                    config, NULL, d2p->dict, d2p);
     latgen->input_arcs = arc_buffer_retain(input_arcs);
-    latgen->lmath = logmath_retain(lmath);
+    latgen->lmath = logmath_retain(ngram_model_get_lmath(lm));
+    latgen->lm = ngram_model_retain(lm);
+    latgen->lmhist = ckd_calloc(ngram_model_get_size(lm)-1,
+                                sizeof(*latgen->lmhist));
 	
     return &latgen->base;
 }
@@ -89,80 +93,18 @@ static int
 latgen_search_process_arcs(latgen_search_t *latgen,
                            sarc_t *itor, int32 frame_idx)
 {
-    ms_latnode_t *src_incomplete;
     int n_arc;
-    /* Find the incomplete node for this start frame.  If said node
-     * does not exist, then do nothing, since no future arcs can exist
-     * with an end frame of frame_idx-1, and thus no links will be made
-     * to any nodes created in this frame (bptbl gc gets rid of a lot
-     * of these spurious arcs but not all of them since it only
-     * operates locally). */
-    if ((src_incomplete = ms_lattice_get_node_id
-         (latgen->output_lattice, frame_idx, latgen->incomplete)) == NULL)
-        return 0;
 
+    /* Iterate over all arcs exiting in this frame */
     for (n_arc = 0; itor; ++n_arc, 
              itor = (sarc_t *)arc_buffer_iter_next
              (latgen->input_arcs, &itor->arc)) {
-        ms_latnode_t *src, *dest;
-        int32 lmstate;
-
-        if (itor->arc.src != frame_idx) /* FIXME: iterators don't work
-                                           like they should */
-            continue;
-        /* Create or find a "language model state" (actually not a
-         * language model state, just a node identifier). */
-        if ((lmstate = ms_lattice_get_lmstate_idx
-             (latgen->output_lattice, itor->arc.wid, NULL, 0)) == -1)
-            lmstate = ms_lattice_lmstate_init
-                (latgen->output_lattice, itor->arc.wid, NULL, 0);
-
-        E_INFO("Input arc %s / %d -> %d / %d\n",
-               dict_wordstr(ps_search_dict(latgen), itor->arc.wid),
-               itor->arc.src, itor->arc.dest + 1, itor->score);
-        /* Look for a node to extend with this arc. */
-        if ((src = ms_lattice_get_node_id
-             (latgen->output_lattice, frame_idx, lmstate)) == NULL) {
-            int i;
-            /* Copy the incomplete node and all its input arcs.
-             * Calculate acoustic scores for the arcs based on the
-             * first phone of this word. */
-            src = ms_lattice_node_init(latgen->output_lattice,
-                                       frame_idx, lmstate);
-            for (i = 0; i < ms_latnode_n_entries(src_incomplete); ++i) {
-                ms_latlink_t *link =
-                    ms_latnode_get_entry(latgen->output_lattice,
-                                         src_incomplete, i);
-                ms_latnode_t *prev =
-                    ms_lattice_get_node_idx(latgen->output_lattice,
-                                            link->src);
-                /* Calculate acoustic score based on first phone of
-                 * this word.  FIXME: arc_buffer_t needs to calculate
-                 * this for us. */
-                ms_lattice_link(latgen->output_lattice, prev, src,
-                                link->wid, link->ascr
-                                 /* add in delta here. */ );
-            }
-        }
-
-
-        /* Get or create the incomplete node for the destination
-         * frame.  Note that the arc buffer stores *inclusive* end
-         * frame indices, since they are derived from backpointers. */
-        if ((dest = ms_lattice_get_node_id
-             (latgen->output_lattice, itor->arc.dest + 1,
-              latgen->incomplete)) == NULL) {
-            dest = ms_lattice_node_init
-                (latgen->output_lattice, itor->arc.dest + 1, latgen->incomplete);
-
-            int32 wid;
-            ms_lattice_get_lmstate_wids(latgen->output_lattice,
-                                        dest->id.lmstate, &wid, NULL);
-            E_INFO("Created destination node %s/%d\n",
-                   dict_wordstr(ps_search_dict(latgen), wid),
-                   dest->id.sf);
-        }
-        /* Create arc to destination node. */
+        /* See note in arc_buffer.h... */
+        if (itor->arc.src != frame_idx)
+            break;
+        /* Construct/find language model states associated with this
+         * arc.  This is done by scanning all existing arcs pointing
+         * to this start frame and rotating in their words. */
     }
     return n_arc;
 }
@@ -171,8 +113,6 @@ static int
 latgen_search_decode(ps_search_t *base)
 {
     latgen_search_t *latgen = (latgen_search_t *)base;
-    ms_latnode_t *start;
-    int32 incomplete_wid;
     int frame_idx;
 
     frame_idx = 0;
@@ -181,21 +121,8 @@ latgen_search_decode(ps_search_t *base)
         return -1;
     latgen->output_lattice = ms_lattice_init(latgen->lmath,
                                              ps_search_dict(base));
-    /* Create a special language model state for incomplete nodes. */
-    incomplete_wid = dict_add_word(ps_search_dict(base),
-                                   "<incomplete>", NULL, 0);
-    latgen->incomplete = ms_lattice_lmstate_init
-        (latgen->output_lattice, incomplete_wid, NULL, 0);
-    /* And create a start node (which will always be <s>, but we will
-     * use <incomplete> anyway in case something changes) */
-    start = ms_lattice_node_init(latgen->output_lattice,
-                                 0, latgen->incomplete);
-    ms_lattice_set_start(latgen->output_lattice, start);
+
     while (arc_buffer_consumer_wait(latgen->input_arcs, -1) >= 0) {
-        /* Process any incoming arcs.  For the time being the arc
-         * buffer is treated essentially like a bptbl that has been
-         * forward-sorted for us.  N-Gram expansion and
-         * determinization are done by the lattice code. */
         ptmr_start(&base->t);
         while (1) {
             arc_t *itor;
@@ -230,6 +157,8 @@ latgen_search_free(ps_search_t *base)
 
     arc_buffer_free(latgen->input_arcs);
     logmath_free(latgen->lmath);
+    ngram_model_free(latgen->lm);
+    ckd_free(latgen->lmhist);
 
     return 0;
 }

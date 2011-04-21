@@ -50,7 +50,9 @@ main(int argc, char *argv[])
 	fwdflat = fwdflat_search_init(config, acmod2, dict, d2p,
 				      ps_search_output_arcs(fwdtree),
 				      fwdtree_search_lmset(fwdtree));
-	latgen = latgen_init(config, d2p, lmath, ps_search_output_arcs(fwdflat));
+	latgen = latgen_init(config, d2p, 
+			     fwdtree_search_lmset(fwdtree),
+			     ps_search_output_arcs(fwdflat));
 
 	/* Launch search threads. */
 	ps_search_run(fwdtree);

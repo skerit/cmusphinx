@@ -675,6 +675,14 @@ ngram_model_get_counts(ngram_model_t *model)
   return NULL;
 }
 
+logmath_t *
+ngram_model_get_lmath(ngram_model_t *model)
+{
+  if (model != NULL)
+      return model->lmath;
+  return NULL;
+}
+
 void
 ngram_iter_init(ngram_iter_t *itor, ngram_model_t *model,
                 int m, int successor)

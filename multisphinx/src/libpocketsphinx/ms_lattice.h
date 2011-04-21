@@ -105,6 +105,22 @@ int32 ms_lattice_get_lmstate_idx(ms_lattice_t *l, int32 w,
                                  int32 const *hist, int32 n_hist);
 
 /**
+ * Rotate a head word into a language model state array.
+ *
+ * FIXME: Needs actually to take one language model state and generate
+ * another, or something suitably encapsulated as that.
+ *
+ * @param wid Head word of previous language model state.
+ * @param hist History component of previous langauge model state.
+ * @param n_hist Size of history component.
+ * @param max_n_hist Allocation size of @a hist.
+ * @return Number of words in newly created language model history
+ *         array.
+ */
+int rotate_lmstate(int32 wid, int32 *hist,
+                   int n_hist, int max_n_hist);
+
+/**
  * Look up a language model state's word IDs by index.
  *
  * @return number of history entries.
