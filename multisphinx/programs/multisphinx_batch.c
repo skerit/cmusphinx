@@ -111,12 +111,59 @@ ARG_STRING,
 CMDLN_EMPTY_OPTION
 };
 
-int batch_decoder_decode(batch_decoder_t *bd, char const *file,
-        char const *uttid, int32 sf, int32 ef)
+static int batch_decoder_decode_adc(batch_decoder_t *bd, FILE *infh, int sf, int ef)
 {
+    featbuf_t *fb = search_factory_featbuf(bd->sf);
+    int16 *buf;
+
+    if (ef != -1)
+    {
+        ef = (int32) ((ef - sf) * (cmd_ln_float32_r(bd->config, "-samprate")
+                / cmd_ln_int32_r(bd->config, "-frate"))
+                + (cmd_ln_float32_r(bd->config, "-samprate")
+                        * cmd_ln_float32_r(bd->config, "-wlen")));
+    }
+    sf = (int32) (sf * (cmd_ln_float32_r(bd->config, "-samprate")
+            / cmd_ln_int32_r(bd->config, "-frate")));
+    fseek(infh, cmd_ln_int32_r(bd->config, "-adchdr") + sf * sizeof(int16),
+            SEEK_SET);
+
+    // FIXME: should try to do whole utterance if possible...
+    while (sf < ef) {
+        size_t nread = fread(buf, sizeof(int16), 2048, infh);
+        if (nread == 0)
+            break;
+        if (nread > ef - sf)
+            nread = ef - sf;
+        featbuf_producer_process_raw(fb, buf, nread, FALSE);
+        sf += nread;
+    }
+    return 0;
+}
+
+static int batch_decoder_decode_mfc(batch_decoder_t *bd, FILE *infh, int sf, int ef)
+{
+    featbuf_t *fb = search_factory_featbuf(bd->sf);
+    mfcc_t **mfcs;
+    int nfr, rv;
+
+    if (NULL == (mfcs = read_mfc_file(infh, sf, ef, &nfr,
+            cmd_ln_int32_r(bd->config, "-ceplen"))))
+        return -1;
+
+    rv = featbuf_producer_process_cep(fb, mfcs, nfr, TRUE);
+    ckd_free_2d(mfcs);
+    return rv;
+}
+
+int batch_decoder_decode(batch_decoder_t *bd, char *file,
+        char *uttid, int32 sf, int32 ef)
+{
+    featbuf_t *fb;
     FILE *infh;
     char const *cepdir, *cepext;
     char *infile;
+    int rv;
 
     if (ef != -1 && ef < sf)
     {
@@ -140,45 +187,30 @@ int batch_decoder_decode(batch_decoder_t *bd, char const *file,
         return -1;
     }
 
-    if (cmd_ln_boolean_r(bd->config, "-adcin"))
-    {
-        if (ef != -1)
-        {
-            ef = (int32)((ef - sf)
-                    * (cmd_ln_float32_r(bd->config, "-samprate")
-                            / cmd_ln_int32_r(bd->config, "-frate"))
-                    + (cmd_ln_float32_r(bd->config, "-samprate")
-                            * cmd_ln_float32_r(bd->config, "-wlen")));
-        }
-        sf = (int32)(sf
-                * (cmd_ln_float32_r(bd->config, "-samprate")
-                        / cmd_ln_int32_r(bd->config, "-frate")));
-        fseek(infh, cmd_ln_int32_r(bd->config, "-adchdr") + sf * sizeof(int16), SEEK_SET);
-    }
-    else
-    {
-        mfcc_t **mfcs;
-        int nfr;
+    fb = search_factory_featbuf(bd->sf);
+    featbuf_producer_start_utt(fb, uttid);
 
-        if (NULL == (mfcs = read_mfc_file(infh, sf, ef, &nfr,
-                                cmd_ln_int32_r(bd->config, "-ceplen"))))
-        {
-            fclose(infh);
-            ckd_free(infile);
-            return -1;
-        }
-        ckd_free_2d(mfcs);
-    }
+    if (cmd_ln_boolean_r(bd->config, "-adcin"))
+        rv = batch_decoder_decode_adc(bd, infh, sf, ef);
+    else
+        rv = batch_decoder_decode_mfc(bd, infh, sf, ef);
+
+    /* FIXME: This will wait for the utterance to be over, which isn't actually what we want. */
+    featbuf_producer_end_utt(fb);
+
     fclose(infh);
     ckd_free(infile);
 
-    return 0;
+    return rv;
 }
 
 int batch_decoder_run(batch_decoder_t *bd)
 {
     int32 ctloffset, ctlcount, ctlincr;
     lineiter_t *li;
+
+    search_run(bd->fwdtree);
+    search_run(bd->fwdflat);
 
     ctloffset = cmd_ln_int32_r(bd->config, "-ctloffset");
     ctlcount = cmd_ln_int32_r(bd->config, "-ctlcount");
@@ -208,7 +240,7 @@ int batch_decoder_run(batch_decoder_t *bd)
         }
         else
         {
-            char const *file, *uttid;
+            char *file, *uttid;
             file = wptr[0];
             uttid = NULL;
             if (nf > 1)
@@ -251,6 +283,9 @@ batch_decoder_init_argv(int argc, char *argv[])
     goto error_out;
     if ((bd->latgen = search_factory_create(bd->sf, "latgen", NULL)) == NULL)
     goto error_out;
+
+    search_link(bd->fwdtree, bd->fwdflat, "fwdtree", FALSE);
+    // search_link(bd->fwdflat, bd->latgen, "fwdflat", TRUE);
 
     return bd;
 
