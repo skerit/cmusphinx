@@ -1,10 +1,8 @@
 check_PROGRAMS = cmdln_parse cmdln_parse_multiple cmdln_parse_r
 
-INCLUDES = \
-	-I$(top_srcdir)/include/sphinxbase \
-	-I$(top_builddir)/include
+INCLUDES =  -I$(top_srcdir)
 
-LDADD = ${top_builddir}/src/libsphinxbase/libsphinxbase.la -lm
+LDADD = ${top_builddir}/libmultisphinx.la -lm
 
 
 TESTS = _test_parse_badargs.test		\

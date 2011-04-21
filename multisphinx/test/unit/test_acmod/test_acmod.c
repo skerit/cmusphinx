@@ -2,11 +2,9 @@
 #include <string.h>
 #include <time.h>
 
-#include <pocketsphinx.h>
-
 #include <multisphinx/acmod.h>
+#include <multisphinx/pocketsphinx_internal.h>
 
-#include "pocketsphinx_internal.h"
 #include "test_macros.h"
 
 static int
@@ -78,7 +76,7 @@ main(int argc, char *argv[])
 	}
 	fclose(raw);
 	printf("Waiting for consumers\n");
-	featbuf_producer_end_utt(fb, -1);
+	featbuf_producer_end_utt(fb);
 	printf("Finished waiting\n");
 
 	/* Reap those threads. */

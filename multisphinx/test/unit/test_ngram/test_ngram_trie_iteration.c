@@ -1,7 +1,7 @@
 #include "test_macros.h"
-#include "pocketsphinx_internal.h"
 
 #include <multisphinx/ngram_trie.h>
+#include <multisphinx/pocketsphinx_internal.h>
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -2,11 +2,9 @@ check_PROGRAMS = displayhash deletehash test_hash_iter
 
 noinst_HEADERS = test_macros.h
 
-INCLUDES = \
-        -I$(top_srcdir)/include/sphinxbase \
-        -I$(top_builddir)/include
+INCLUDES = -I$(top_srcdir)
 
-LDADD = ${top_builddir}/src/libsphinxbase/libsphinxbase.la
+LDADD = ${top_builddir}/libmultisphinx.la
 
 TESTS = test_hash_iter				\
 	_hash_delete1.test			\

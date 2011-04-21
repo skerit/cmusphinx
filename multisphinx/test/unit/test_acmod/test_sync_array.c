@@ -5,7 +5,8 @@
 #include <sphinxbase/sbthread.h>
 #include <sphinxbase/garray.h>
 #include <sphinxbase/err.h>
-#include <pocketsphinx.h>
+
+#include <multisphinx/pocketsphinx.h>
 
 #include "test_macros.h"
 

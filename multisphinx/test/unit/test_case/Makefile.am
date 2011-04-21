@@ -1,11 +1,9 @@
 check_PROGRAMS = chgCase
 
 
-INCLUDES = \
-	-I$(top_srcdir)/include/sphinxbase \
-	-I$(top_builddir)/include
+INCLUDES = -I$(top_srcdir)
 
-LDADD = ${top_builddir}/src/libsphinxbase/libsphinxbase.la -lm
+LDADD = ${top_builddir}/libmultisphinx.la -lm
 
 TESTS = _lcase1.test				\
 	_lcase2.test				\

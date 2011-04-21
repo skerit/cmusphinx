@@ -8,15 +8,11 @@ check_PROGRAMS = \
 TESTS = $(check_PROGRAMS)
 
 INCLUDES = \
-	-I$(top_srcdir)/include/sphinxbase \
-	-I$(top_srcdir)/include/multisphinx \
-	-I$(top_srcdir)/src/libpocketsphinx \
-	-I$(top_builddir)/include \
+	-I$(top_srcdir) \
 	-DTESTDATADIR=\"$(top_srcdir)/test/data\" \
 	-DMODELDIR=\"$(top_srcdir)/model\"
 
-LDADD = ${top_builddir}/src/libsphinxbase/libsphinxbase.la \
-	 ${top_builddir}/src/libpocketsphinx/libpocketsphinx.la
+LDADD = ${top_builddir}/libmultisphinx.la
 
 noinst_HEADERS = test_macros.h
 

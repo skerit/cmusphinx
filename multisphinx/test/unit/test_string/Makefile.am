@@ -1,11 +1,9 @@
 check_PROGRAMS = strtest test_atof
 
-INCLUDES = \
-	-I$(top_srcdir)/include/sphinxbase \
-	-I$(top_builddir)/include \
+INCLUDES =  -I$(top_srcdir) \
 	-DTESTDATADIR=\"$(srcdir)\"
 
-LDADD = ${top_builddir}/src/libsphinxbase/libsphinxbase.la
+LDADD = ${top_builddir}/libmultisphinx.la
 
 TESTS = _fread_line.test			\
 	_nextword.test				\

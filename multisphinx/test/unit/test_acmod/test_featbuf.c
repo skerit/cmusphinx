@@ -3,9 +3,9 @@
 #include <time.h>
 
 #include <sphinxbase/sbthread.h>
-#include <pocketsphinx.h>
 
-#include "pocketsphinx_internal.h"
+#include <multisphinx/pocketsphinx_internal.h>
+
 #include "test_macros.h"
 
 /* This will be a prototype for how acmod works. */
@@ -86,7 +86,7 @@ main(int argc, char *argv[])
 	}
 	fclose(raw);
 	printf("Waiting for consumers\n");
-	featbuf_producer_end_utt(fb, -1);
+	featbuf_producer_end_utt(fb);
 	printf("Finished waiting\n");
 
 	/* Reap those threads. */
