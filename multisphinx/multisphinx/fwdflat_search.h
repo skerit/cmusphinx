@@ -49,9 +49,8 @@
 #include <multisphinx/vocab_map.h>
 #include <multisphinx/acmod.h>
 
-/**
- * Initialize fwdflat search.
- */
+searchfuncs_t const *fwdflat_search_query(void);
+
 search_t *fwdflat_search_init(cmd_ln_t *config, acmod_t *acmod,
                               dict_t *dict, dict2pid_t *d2p,
                               ngram_model_t *lmset);

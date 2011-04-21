@@ -1,3 +1,4 @@
+/* -*- c-basic-offset: 4 -*- */
 /**
  * @file search_factory.c
  * @author David Huggins Daines
@@ -23,6 +24,7 @@ struct search_factory_s
     ngram_model_t *lm;
     dict_t *dict;
     dict2pid_t *d2p;
+    glist_t searches;
 };
 
 static const arg_t ps_args_def[] =
@@ -153,6 +155,13 @@ static int search_factory_initialize(search_factory_t *dcf, cmd_ln_t *config)
     if ((dcf->d2p = dict2pid_build(dcf->acmod->mdef, dcf->dict)) == NULL)
         return -1;
 
+    /* If search engines become pluggable then we would scan for them
+     * here.  For now we just build the list from the ones that are
+     * known inside multisphinx. */
+    dcf->searches = glist_add_ptr(dcf->searches, fwdtree_search_query());
+    dcf->searches = glist_add_ptr(dcf->searches, fwdflat_search_query());
+    dcf->searches = glist_add_ptr(dcf->searches, latgen_search_query());
+
     return 0;
 }
 
@@ -203,7 +212,6 @@ search_factory_init(config_t *config)
         search_factory_free(dcf);
         return NULL;
     }
-
 
     return dcf;
 }

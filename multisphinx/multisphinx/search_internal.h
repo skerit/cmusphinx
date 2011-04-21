@@ -63,7 +63,7 @@ typedef struct ps_seg_s ps_seg_t;
 /**
  * V-table for search algorithm functions, not called directly by users.
  */
-typedef struct ps_searchfuncs_s {
+struct searchfuncs_s {
     char const *name;
 
     int (*free)(search_t *search);   /**< Free search-specific stuff. */
@@ -75,13 +75,13 @@ typedef struct ps_searchfuncs_s {
 
     bptbl_t *(*bptbl)(search_t *search);
     ngram_model_t *(*lmset)(search_t *search);
-} ps_searchfuncs_t;
+};
 
 /**
  * Base structure for search module.
  */
 struct search_s {
-    ps_searchfuncs_t *vt;  /**< V-table of search methods. */
+    searchfuncs_t *vt;  /**< V-table of search methods. */
     sbthread_t *thr;       /**< Thread in which this search runs. */
     sbmtx_t *mtx;          /**< Lock for this search. */
     ptmr_t t;              /**< Overall performance timer for this search. */
@@ -124,7 +124,7 @@ struct search_s {
 /**
  * Initialize base structure.
  */
-void search_init(search_t *search, ps_searchfuncs_t *vt,
+void search_init(search_t *search, searchfuncs_t *vt,
                  cmd_ln_t *config, acmod_t *acmod, dict_t *dict,
                  dict2pid_t *d2p);
 

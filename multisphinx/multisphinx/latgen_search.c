@@ -57,7 +57,7 @@ static char const *latgen_search_hyp(search_t *base, int32 *out_score);
 static int32 latgen_search_prob(search_t *base);
 static ps_seg_t *latgen_search_seg_iter(search_t *base, int32 *out_score);
 
-static ps_searchfuncs_t latgen_funcs = {
+static searchfuncs_t latgen_funcs = {
     /* name: */   "latgen",
     /* free: */   latgen_search_free,
     /* decode: */ latgen_search_decode,
@@ -104,6 +104,12 @@ typedef struct latgen_search_s {
 
     int32 silpen, fillpen;
 } latgen_search_t;
+
+searchfuncs_t const *
+latgen_search_query(void)
+{
+    return &latgen_funcs;
+}
 
 search_t *
 latgen_init(cmd_ln_t *config,

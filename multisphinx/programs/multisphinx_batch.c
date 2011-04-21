@@ -282,18 +282,13 @@ process_ctl(FILE *ctlfh)
                 uttid = wptr[3];
             /* Do actual decoding. */
             process_ctl_line(file, uttid, sf, ef);
-            hyp = ps_get_hyp(ps, &score, &uttid);
+            //hyp = ps_get_hyp(ps, &score, &uttid);
             
             /* Write out results and such. */
             if (hypfh) {
                 fprintf(hypfh, "%s (%s %d)\n", hyp ? hyp : "", uttid, score);
             }
-            if (hypsegfh) {
-                write_hypseg(hypsegfh, ps, uttid);
-            }
-            if (outlatdir) {
-            }
-            ps_get_utt_time(ps, &n_speech, &n_cpu, &n_wall);
+            //ps_get_utt_time(ps, &n_speech, &n_cpu, &n_wall);
             E_INFO("%s: %.2f seconds speech, %.2f seconds CPU, %.2f seconds wall\n",
                    uttid, n_speech, n_cpu, n_wall);
             E_INFO("%s: %.2f xRT (CPU), %.2f xRT (elapsed)\n",
@@ -304,7 +299,7 @@ process_ctl(FILE *ctlfh)
         ckd_free(line);
     }
 
-    ps_get_all_time(ps, &n_speech, &n_cpu, &n_wall);
+    //ps_get_all_time(ps, &n_speech, &n_cpu, &n_wall);
     E_INFO("TOTAL %.2f seconds speech, %.2f seconds CPU, %.2f seconds wall\n",
            n_speech, n_cpu, n_wall);
     E_INFO("AVERAGE %.2f xRT (CPU), %.2f xRT (elapsed)\n",

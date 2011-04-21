@@ -196,7 +196,7 @@ static ps_seg_t *fwdflat_search_seg_iter(search_t *base, int32 *out_score);
 static bptbl_t *fwdflat_search_bptbl(search_t *base);
 static ngram_model_t *fwdflat_search_lmset(search_t *base);
 
-static ps_searchfuncs_t fwdflat_funcs = {
+static searchfuncs_t fwdflat_funcs = {
     /* name: */   "fwdflat",
     /* free: */   fwdflat_search_free,
     /* decode: */ fwdflat_search_decode,
@@ -248,6 +248,12 @@ fwdflat_search_update_widmap(fwdflat_search_t *ffs)
         words[i] = (const char *)dict_wordstr(search_dict(ffs), i);
     ngram_model_set_map_words(ffs->lmset, words, n_words);
     ckd_free(words);
+}
+
+searchfuncs_t const *
+fwdflat_search_query(void)
+{
+    return &fwdflat_funcs;
 }
 
 search_t *

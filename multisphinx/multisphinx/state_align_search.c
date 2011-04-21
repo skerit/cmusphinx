@@ -287,7 +287,7 @@ state_align_search_free(search_t *search)
     hmm_context_free(sas->hmmctx);
 }
 
-static ps_searchfuncs_t state_align_search_funcs = {
+static searchfuncs_t state_align_search_funcs = {
     /* name: */   "state_align",
     /* free: */   state_align_search_free,
 };

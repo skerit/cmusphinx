@@ -49,9 +49,8 @@
 #include <multisphinx/arc_buffer.h>
 #include <multisphinx/search.h>
 
-/**
- * Create a new lattice generator.
- */
+searchfuncs_t const *latgen_search_query(void);
+
 search_t *latgen_init(cmd_ln_t *config,
 			 dict2pid_t *d2p,
                          ngram_model_t *lm);

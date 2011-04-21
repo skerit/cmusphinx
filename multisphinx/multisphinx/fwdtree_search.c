@@ -345,7 +345,7 @@ static ps_seg_t *fwdtree_search_seg_iter(search_t *base, int32 *out_score);
 static bptbl_t *fwdtree_search_bptbl(search_t *base);
 static ngram_model_t *fwdtree_search_lmset(search_t *base);
 
-static ps_searchfuncs_t fwdtree_funcs = {
+static searchfuncs_t fwdtree_funcs = {
     /* name: */   "fwdtree",
     /* free: */   fwdtree_search_free,
     /* decode: */ fwdtree_search_decode,
@@ -386,6 +386,12 @@ static int32 eval_root_chan(fwdtree_search_t *fts, int frame_idx);
 static void renormalize_scores(fwdtree_search_t *fts,
                                int frame_idx, int32 norm);
 static void compute_sen_active(fwdtree_search_t *fts, int frame_idx);
+
+searchfuncs_t const *
+fwdtree_search_query(void)
+{
+    return &fwdtree_funcs;
+}
 
 search_t *
 fwdtree_search_init(cmd_ln_t *config, acmod_t *acmod,

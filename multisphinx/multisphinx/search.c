@@ -46,9 +46,9 @@
 #include "search_internal.h"
 
 void
-search_init(search_t *search, ps_searchfuncs_t *vt,
-               cmd_ln_t *config, acmod_t *acmod, dict_t *dict,
-               dict2pid_t *d2p)
+search_init(search_t *search, searchfuncs_t *vt,
+            cmd_ln_t *config, acmod_t *acmod, dict_t *dict,
+            dict2pid_t *d2p)
 {
     ptmr_init(&search->t);
     search->vt = vt;

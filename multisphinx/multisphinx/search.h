@@ -54,6 +54,11 @@
 typedef struct search_s search_t;
 
 /**
+ * Structure describing a search algorithm.
+ */
+typedef struct searchfuncs_s searchfuncs_t;
+
+/**
  * Start a search thread.
  */
 sbthread_t *search_run(search_t *search);
