@@ -13,6 +13,9 @@
 #include <multisphinx/dict.h>
 #include <multisphinx/dict2pid.h>
 #include <multisphinx/ngram_trie.h>
+#include <multisphinx/featbuf.h>
+#include <multisphinx/bptbl.h>
+#include <multisphinx/arc_buffer.h>
 
 #include <pocketsphinx.h>
 
@@ -22,6 +25,10 @@ typedef struct cmd_ln_s Config;
 typedef struct bin_mdef_s Mdef;
 typedef struct ngram_model_s NGramModel;
 typedef struct ngram_iter_s NGramIterator;
+typedef struct featbuf_s FeatBuf;
+typedef struct ps_search_s Search;
+typedef struct bptbl_s Bptbl;
+typedef struct arc_buffer_s ArcBuffer;
 typedef dict_t Dict;
 typedef dict2pid_t DictToPid;
 typedef struct ngram_trie_s NGramTrie;
@@ -428,3 +435,54 @@ typedef struct ngram_trie_s {
 		ngram_trie_free($self);
 	}
 }
+
+typedef struct featbuf_s {
+} FeatBuf;
+
+%extend FeatBuf {
+	FeatBuf(Config *c) {
+		return featbuf_init(c);
+	}
+	~FeatBuf() {
+		featbuf_free($self);
+	}
+};
+
+typedef struct ps_search_s {
+} Search;
+
+%extend Search {
+	/* Something like an abstract base class... */
+	Search() {
+		return NULL;
+	}
+	~Search() {
+		ps_search_free($self);
+	}
+}
+
+typedef struct bptbl_s {
+} Bptbl;
+
+%extend Bptbl {
+	Bptbl(char const *name, DictToPid *d2p,
+	      int n_alloc=512, int n_frame_alloc=128) {
+		return bptbl_init(name, d2p, n_alloc, n_frame_alloc);
+	}
+	~Bptbl() {
+		bptbl_free($self);
+	}
+}
+
+typedef struct arc_buffer_s {
+} ArcBuffer;
+
+%extend ArcBuffer {
+	ArcBuffer(char const *name, Bptbl *input_bptbl,
+		  NGramModel *lm, bool keep_scores) {
+		return arc_buffer_init(name, input_bptbl, lm, keep_scores);
+	}
+	~ArcBuffer() {
+		arc_buffer_free($self);
+	}
+};
