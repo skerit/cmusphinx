@@ -90,7 +90,6 @@ def build_arcbuf_lattice(arcbuf):
                 node.score = max(node.score, incoming_score)
         return node
     for outgoing in arcbuf:
-        if outging.word == "</s>" and outgoing.ef != arcbuf.n_frames: continue
         if dag.find_node(outgoing.word, outgoing.sf): continue
         build_arc_node(outgoing.word, outgoing.sf)
     end_pscr = -999999999
