@@ -131,7 +131,7 @@ get_frame_active_nodes(ms_lattice_t *l, garray_t *out_active_nodes,
          node_itor = ms_latnode_iter_next(node_itor)) {
         int32 node_idx = ms_latnode_iter_get_idx(node_itor);
         garray_append(out_active_nodes, &node_idx);
-        E_INFO("Frame %d added node ", frame_idx);
+        E_INFO("Frame %d active node ", frame_idx);
         ms_latnode_print(err_get_logfp(), l,
                          ms_lattice_get_node_idx(l, node_idx));
         E_INFOCONT("\n");
@@ -284,7 +284,7 @@ create_outgoing_links_one(latgen_search_t *latgen,
         /* <s> is not an N-gram but it is an acceptable LM state. */
         if (headwid == dict_startwid(latgen->d2p->dict)
             || (ni = ngram_ng_iter(latgen->lm, headwid,
-                                    latgen->lmhist, n_hist)) != NULL) {
+                                   latgen->lmhist, n_hist)) != NULL) {
             /* Create or find the relevant lmstate. */
             if ((lmstate = ms_lattice_get_lmstate_idx
                  (latgen->output_lattice, headwid,
