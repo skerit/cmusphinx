@@ -48,7 +48,9 @@ libsphinxbase_la_SOURCES = agc.c		\
 	utf8.c					\
 	yin.c
 
-include_HEADERS = \
+sbincludedir := ${includedir}/sphinxbase
+
+sbinclude_HEADERS = \
 	ad.h					\
 	agc.h					\
 	bio.h					\

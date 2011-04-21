@@ -29,7 +29,7 @@ libmultisphinx_la_SOURCES =			\
 	vocab_map.c				\
 	pocketsphinx.c
 
-include_HEADERS = \
+pkginclude_HEADERS = \
 	acmod.h					\
 	arc_buffer.h				\
 	bin_mdef.h				\
