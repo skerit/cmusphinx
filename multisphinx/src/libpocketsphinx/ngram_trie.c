@@ -47,6 +47,7 @@
 
 #include <sphinxbase/pio.h>
 #include <sphinxbase/garray.h>
+#include <sphinxbase/gq.h>
 #include <sphinxbase/strfuncs.h>
 #include <sphinxbase/listelem_alloc.h>
 
@@ -391,35 +392,37 @@ ngram_trie_iter_t *
 ngram_trie_ngrams(ngram_trie_t *t, int n)
 {
     ngram_trie_iter_t *itor;
-    ngram_trie_node_t *h;
-    int i;
+    ngram_trie_node_t *cur = NULL;
+    gq_t *q;
 
-    /* Find first N-1-Gram */
-    h = t->root;
-    for (i = 1; i < n; ++i) {
-        size_t pos;
-        if (h->successors == NULL) {
-            E_ERROR("Found no %d-gram successors\n", i);
-            return NULL;
+    /* Depth-first search (preorder traversal) in trie to find first
+     * N-1-Gram that has N-Gram successors.  FIXME: Should just have
+     * generic trie traversal functions as they will come in handy. */
+    q = gq_init(sizeof(ngram_trie_node_t *));
+    /* Note that we are actually using q as a stack.  It does not care. */
+    gq_append(q, &t->root);
+    while (gq_size(q)) {
+        ngram_trie_node_t *h = gq_tail(q, ngram_trie_node_t *);
+        size_t i;
+        gq_pop(q, 1);
+        if (h->successors == NULL)
+            continue;
+        if (ngram_trie_node_n(t, h) == n - 1) {
+            cur = h;
+            break;
         }
-        for (pos = 0; pos < garray_size(h->successors); ++pos) {
-            ngram_trie_node_t *hh;
-            hh = garray_ent(h->successors, ngram_trie_node_t *, pos);
-            if (hh->successors) {
-                h = hh;
-                break;
-            }
-        }
-        if (pos == garray_size(h->successors)) {
-            E_ERROR("Found no %d-gram successors\n", i);
-            return NULL;
-        }
+        for (i = garray_size(h->successors); i > 0; --i)
+            gq_append(q, garray_void(h->successors, i-1));
     }
+    gq_free(q);
+
+    if (cur == NULL)
+        return NULL;
 
     /* Create an iterator with nostop=TRUE */
     itor = ckd_calloc(1, sizeof(*itor));
     itor->t = t;
-    itor->cur = h;
+    itor->cur = cur;
     itor->pos = 0;
     itor->nostop = TRUE;
 
@@ -699,10 +702,7 @@ ngram_trie_add_successor(ngram_trie_t *t, ngram_trie_node_t *h, int32 w)
         pos = garray_bisect_right(h->successors, &ng);
         garray_insert(h->successors, pos, &ng);
     }
-    /* Find order of this N-Gram and update N if needed (FIXME: this
-     * might be slow). */
-    for (n = 0; h; h = h->history)
-        ++n;
+    n = ngram_trie_node_n(t, ng);
     if (n > t->n) {
         E_INFO("Updated N to %d\n", n);
         t->n = n;
@@ -716,6 +716,8 @@ ngram_trie_add_successor_ngram(ngram_trie_t *t,
                                ngram_trie_node_t *h,
                                ngram_trie_node_t *w)
 {
+    int n;
+
     assert(w->word >= 0);
     assert(w->log_prob <= 0);
     if (h->successors == NULL) {
@@ -730,6 +732,11 @@ ngram_trie_add_successor_ngram(ngram_trie_t *t,
     }
     w->history = h;
     w->backoff = (ngram_trie_node_t *)-1;
+    n = ngram_trie_node_n(t, w);
+    if (n > t->n) {
+        E_INFO("Updated N to %d\n", n);
+        t->n = n;
+    }
 
     return 0;
 }
@@ -762,6 +769,15 @@ ngram_trie_rename_successor(ngram_trie_t *t,
     return 0;
 }
 
+int
+ngram_trie_node_n(ngram_trie_t *t, ngram_trie_node_t *ng)
+{
+    ngram_trie_node_t *h;
+    int n = 0;
+    for (h = ng->history; h; h = h->history)
+        ++n;
+    return n;
+}
 
 int32
 ngram_trie_node_get_word_hist(ngram_trie_t *t,

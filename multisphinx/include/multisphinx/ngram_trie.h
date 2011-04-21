@@ -269,6 +269,11 @@ int32 ngram_trie_calc_bowt(ngram_trie_t *t, ngram_trie_node_t *h);
 int32 ngram_trie_node_validate(ngram_trie_t *t, ngram_trie_node_t *h);
 
 /**
+ * Get the order of a node.
+ */
+int ngram_trie_node_n(ngram_trie_t *t, ngram_trie_node_t *ng);
+
+/**
  * Get the word history from a node.
  */
 int32 ngram_trie_node_get_word_hist(ngram_trie_t *t,
