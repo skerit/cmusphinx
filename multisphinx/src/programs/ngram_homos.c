@@ -147,12 +147,17 @@ add_weighted_successors(ngram_trie_t *lm, ngram_trie_node_t *dest,
     return 0;
 }
 
+typedef struct fast_vmap_s {
+    int32 pseudo_wid;
+    int32 n_wids;
+    bitvec_t *wids;
+} fast_vmap_t;
+
 static int32
 find_word_succ(ngram_trie_t *lm, ngram_trie_node_t *node,
-               garray_t *word_succ,
-               bitvec_t *cset, int32 const *wids, int32 n_wids)
+               garray_t *word_succ, fast_vmap_t *vmap)
 {
-    int32 succ_prob, i;
+    int32 succ_prob;
     dict_t *dict;
     logmath_t *lmath;
     ngram_trie_node_t **ni;
@@ -161,17 +166,13 @@ find_word_succ(ngram_trie_t *lm, ngram_trie_node_t *node,
     dict = ngram_trie_dict(lm);
     lmath = ngram_trie_logmath(lm);
     succ_prob = logmath_get_zero(lmath);
-    bitvec_clear_all(cset, dict_size(dict));
-    for (i = 0; i < n_wids; ++i) {
-        int32 basewid = dict_basewid(dict, wids[i]);
-        bitvec_set(cset, basewid);
-    }
     if ((ni = ngram_trie_successors_unchecked(lm, node, &nsucc)) == NULL)
         return succ_prob;
+
     for (pos = 0; pos < nsucc; ++pos) {
         ngram_trie_node_t *succ = ni[pos];
         int32 basewid = ngram_trie_node_word(lm, succ);
-        if (bitvec_is_set(cset, basewid)) {
+        if (bitvec_is_set(vmap->wids, basewid)) {
             int32 log_prob, log_bowt;
             i32p_t sent;
             ngram_trie_node_params(lm, succ, &log_prob, &log_bowt);
@@ -213,14 +214,14 @@ merge_successors(ngram_trie_t *lm, ngram_trie_node_t *node,
 
 
 static int
-merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
-            vocab_map_t *vm, bitvec_t *cset)
+merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node, garray_t *vmaps)
 {
     ngram_trie_iter_t *ni;
-    vocab_map_iter_t *vi;
     logmath_t *lmath;
     garray_t *word_succ;
     dict_t *dict;
+    size_t pos, nmaps;
+    fast_vmap_t *vmaps_arr;
 
     /* Stop condition: This is a leaf node, nothing to do. */
     if ((ni = ngram_trie_successors(lm, node)) == NULL)
@@ -228,7 +229,7 @@ merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
 
     /* Traverse the N-Gram trie in pre-order. */
     for (; ni; ni = ngram_trie_iter_next(ni))
-        if (merge_homos(lm, ngram_trie_iter_get(ni), vm, cset) < 0)
+        if (merge_homos(lm, ngram_trie_iter_get(ni), vmaps) < 0)
             return -1;
 
     /* Merge within-distribution probabilities. */
@@ -236,27 +237,28 @@ merge_homos(ngram_trie_t *lm, ngram_trie_node_t *node,
     lmath = ngram_trie_logmath(lm);
     word_succ = garray_init(0, sizeof(i32p_t));
     garray_set_cmp(word_succ, garray_cmp_i32p_first, NULL);
-    for (vi = vocab_map_mappings(vm); vi;
-         vi = vocab_map_iter_next(vi)) {
-        int32 pseudo_wid, n_wids, succ_prob;
-        int32 const *wids;
+    nmaps = garray_size(vmaps);
+    vmaps_arr = garray_ptr(vmaps, fast_vmap_t, 0);
+    for (pos = 0; pos < nmaps; ++pos) {
+        fast_vmap_t *vmap = vmaps_arr + pos;
+        int32 succ_prob;
+
         /* Collect base words to be merged (if any). */
         garray_reset(word_succ);
-        wids = vocab_map_iter_get(vi, &pseudo_wid, &n_wids);
-        if (n_wids == 0)
+        if (vmap->n_wids == 0)
             continue;
         /* Calculate normalizer for weights along the way. */
-        succ_prob = find_word_succ(lm, node, word_succ, cset, wids, n_wids);
+        succ_prob = find_word_succ(lm, node, word_succ, vmap);
         if (garray_size(word_succ) == 0)
             continue;
         else if (garray_size(word_succ) == 1) {
             i32p_t sent = garray_ent(word_succ, i32p_t, 0);
             ngram_trie_node_t *pseudo_succ;
             pseudo_succ = ngram_trie_successor(lm, node, sent.a);
-            ngram_trie_rename_successor(lm, node, pseudo_succ, pseudo_wid);
+            ngram_trie_rename_successor(lm, node, pseudo_succ, vmap->pseudo_wid);
         }
         else {
-            if (merge_successors(lm, node, word_succ, succ_prob, pseudo_wid) < 0)
+            if (merge_successors(lm, node, word_succ, succ_prob, vmap->pseudo_wid) < 0)
                 return -1;
         }
     }
@@ -309,8 +311,8 @@ main(int argc, char *argv[])
     cmd_ln_t *config;
     vocab_map_t *vm;
     vocab_map_iter_t *vi;
+    garray_t *vmaps;
     ngram_trie_t *lm;
-    bitvec_t *cset;
     logmath_t *lmath;
     dict_t *dict, *vdict;
     FILE *fh;
@@ -341,9 +343,11 @@ main(int argc, char *argv[])
     for (vi = vocab_map_mappings(vm); vi;
          vi = vocab_map_iter_next(vi)) {
         char const *pseudo_word;
-        int32 pseudo_wid;
-        vocab_map_iter_get(vi, &pseudo_wid, NULL);
-        pseudo_word = dict_wordstr(vdict, pseudo_wid);
+        fast_vmap_t vmap;
+        int32 const *wids;
+
+        wids = vocab_map_iter_get(vi, &vmap.pseudo_wid, &vmap.n_wids);
+        pseudo_word = dict_wordstr(vdict, vmap.pseudo_wid);
         /* FIXME: No pronunciation for now. */
         dict_add_word(dict, pseudo_word, NULL, 0);
     }
@@ -356,10 +360,22 @@ main(int argc, char *argv[])
         return 1;
     fclose(fh);
 
-    cset = bitvec_alloc(dict_size(dict));
-    if (merge_homos(lm, ngram_trie_root(lm), vm, cset) < 0)
+    /* Construct fast word mappings. */
+    vmaps = garray_init(0, sizeof(fast_vmap_t));
+    for (vi = vocab_map_mappings(vm); vi;
+         vi = vocab_map_iter_next(vi)) {
+        fast_vmap_t vmap;
+        int32 const *wids;
+        int32 i;
+
+        wids = vocab_map_iter_get(vi, &vmap.pseudo_wid, &vmap.n_wids);
+        vmap.wids = bitvec_alloc(dict_size(dict));
+        for (i = 0; i < vmap.n_wids; ++i)
+            bitvec_set(vmap.wids, wids[i]);
+        garray_append(vmaps, &vmap);
+    }
+    if (merge_homos(lm, ngram_trie_root(lm), vmaps) < 0)
         return 1;
-    bitvec_free(cset);
 
     if (recalc_bowts(lm) < 0)
         return 1;

@@ -433,13 +433,15 @@ ngram_trie_ngrams(ngram_trie_t *t, int n)
 ngram_trie_node_t **
 ngram_trie_successors_unchecked(ngram_trie_t *t, ngram_trie_node_t *h, size_t *out_nsucc)
 {
-    if (h->successors == NULL || garray_size(h->successors) == 0) {
+    size_t nsucc;
+    if (h->successors == NULL
+        || (nsucc = garray_size(h->successors)) == 0) {
         if (out_nsucc)
             *out_nsucc = 0;
         return NULL;
     }
     if (out_nsucc)
-        *out_nsucc = garray_size(h->successors);
+        *out_nsucc = nsucc;
     return garray_void(h->successors, 0);
 }
 
