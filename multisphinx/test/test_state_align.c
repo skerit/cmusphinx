@@ -27,9 +27,9 @@ int main(int argc, char *argv[])
     TEST_ASSERT(sas != NULL);
 
     al = alignment_init(search_factory_d2p(dcf));
-    alignment_add_words(al, "A", "LONG", "DISCUSSION", "ABOUT", "HOW", "WE",
+    alignment_add_words(al, "<s>", "A", "LONG", "DISCUSSION", "ABOUT", "HOW", "WE",
             "WANT", "TO", "MAKE", "IT", "EASIER", "FOR", "PEOPLE", "TO",
-            "BLEEP", "THINGS", "OUT", NULL);
+            "BLEEP", "THINGS", "OUT", "</s>", NULL);
     alignment_populate_ci(al);
     state_align_search_set_alignment(sas, al);
     search_run(sas);
