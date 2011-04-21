@@ -459,9 +459,9 @@ typedef struct featbuf_s {
 		/* FIXME: Also, exceptions, etc. */
 		featbuf_producer_start_utt($self, uttid);
 	}
-	void producer_end_utt(int timeout=-1) {
+	void producer_end_utt() {
 		/* FIXME: exceptions, etc. */
-		featbuf_producer_end_utt($self, timeout);
+		featbuf_producer_end_utt($self);
 	}
 	void shutdown() {
 		featbuf_producer_shutdown($self);
@@ -523,13 +523,10 @@ typedef struct ps_search_s {
 
 Search *fwdtree_search_init(Config *c, Acmod *am, Dict *d, DictToPid *d2p);
 Search *fwdflat_search_init(Config *c, Acmod *am, Dict *d, DictToPid *d2p,
-			    ArcBuffer *input_arcs, NGramModel *lmset=NULL);
+			    NGramModel *lmset=NULL);
 /* FIXME (if possible??!): There is no type checking here so these
  * functions will segfault if you look at them funny. */
 VocabMap *fwdflat_search_set_vocab_map(Search *s, VocabMap *vm);
-NGramModel *fwdflat_search_lmset(Search *s);
-NGramModel *fwdtree_search_lmset(Search *s);
-
 
 typedef struct bptbl_s {
 } Bptbl;
