@@ -99,6 +99,11 @@ typedef struct alignment_iter_s alignment_iter_t;
 alignment_t *alignment_init(dict2pid_t *d2p);
 
 /**
+ * Retain an alignment
+ */
+alignment_t *alignment_retain(alignment_t *al);
+
+/**
  * Release an alignment
  */
 int alignment_free(alignment_t *al);

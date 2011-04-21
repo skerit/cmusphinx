@@ -108,7 +108,6 @@ struct search_s {
 /* A variety of accessors. */
 #define search_base(s) ((search_t *)s)
 #define search_thread(s) search_base(s)->thr
-#define search_config(s) search_base(s)->config
 #define search_acmod(s) search_base(s)->acmod
 #define search_dict(s) search_base(s)->dict
 #define search_dict2pid(s) search_base(s)->d2p
@@ -148,7 +147,7 @@ typedef struct segfuncs_s {
 struct seg_iter_s {
     segfuncs_t *vt;     /**< V-table of seg methods */
     search_t *search;   /**< Search object from whence this came */
-    char const *word;      /**< Word string (pointer into dictionary hash) */
+    int32 wid;          /**< Word ID. */
     int16 sf;                /**< Start frame. */
     int16 ef;                /**< End frame. */
     int32 ascr;            /**< Acoustic score. */

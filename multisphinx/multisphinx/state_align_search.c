@@ -369,9 +369,8 @@ typedef struct state_align_seg_s {
 static void
 state_align_bp2itor(state_align_seg_t *itor)
 {
-    state_align_search_t *sas = (state_align_search_t *)itor->base.search;
     alignment_entry_t *ent = alignment_iter_get(itor->itor);
-    itor->base.word = dict_wordstr(search_dict(sas), ent->id.wid);
+    itor->base.wid= ent->id.wid;
     itor->base.sf = ent->start;
     itor->base.ef = ent->start + ent->duration - 1;
 }

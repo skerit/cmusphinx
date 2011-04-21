@@ -199,7 +199,13 @@ seg_iter_free(seg_iter_t *itor)
 char const *
 seg_iter_word(seg_iter_t *itor)
 {
-    return itor->word;
+    return dict_wordstr(search_dict(itor->search), itor->wid);
+}
+
+int32
+seg_iter_wid(seg_iter_t *itor)
+{
+    return itor->wid;
 }
 
 void
@@ -223,4 +229,16 @@ search_lmset(search_t *search)
     if (search->vt->lmset == NULL)
         return NULL;
     return (*search->vt->lmset)(search);
+}
+
+cmd_ln_t *
+search_config(search_t *search)
+{
+    return search->config;
+}
+
+char const *
+search_uttid(search_t *search)
+{
+    return search->uttid;
 }

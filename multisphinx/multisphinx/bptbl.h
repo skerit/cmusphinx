@@ -326,4 +326,13 @@ char *bptbl_hyp(bptbl_t *bptbl, int32 *out_score, int32 finish_wid);
  */
 struct seg_iter_s *bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid);
 
+/**
+ * Construct a segmentation iterator from the best path ending with a given bp.
+ *
+ * @param out_score Output: Score of hypothesis.
+ * @param bp Entry from which to backtrace.
+  * @return New segmentation iterator.
+ */
+struct seg_iter_s *bptbl_seg_backtrace(bptbl_t *bptbl, bpidx_t bp);
+
 #endif /* __BPTBL_H__ */

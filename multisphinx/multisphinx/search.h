@@ -144,6 +144,11 @@ void seg_iter_free(seg_iter_t *itor);
 char const *seg_iter_word(seg_iter_t *itor);
 
 /**
+ * Get word ID from iterator.
+ */
+int32 seg_iter_wid(seg_iter_t *itor);
+
+/**
  * Get frames from iterator.
  */
 void seg_iter_times(seg_iter_t *itor, int *out_sf, int *out_ef);
@@ -157,5 +162,15 @@ bptbl_t *search_bptbl(search_t *search);
  * Get the N-Gram language model set, if any, from a search.
  */
 ngram_model_t *search_lmset(search_t *search);
+
+/**
+ * Get the configuration from a search.
+ */
+cmd_ln_t *search_config(search_t *search);
+
+/**
+ * Get the current utterance ID from a search.
+ */
+char const *search_uttid(search_t *search);
 
 #endif /* __PS_SEARCH_H__ */

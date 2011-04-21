@@ -226,7 +226,7 @@ static void fwdflat_search_calc_beams(fwdflat_search_t *ffs)
     cmd_ln_t *config;
     acmod_t *acmod;
 
-    config = search_config(ffs);
+    config = search_config((search_t *)ffs);
     acmod = search_acmod(ffs);
 
     /* Log beam widths. */
@@ -242,7 +242,7 @@ static void fwdflat_search_calc_beams(fwdflat_search_t *ffs)
             cmd_ln_float32_r(config, "-silprob")) >> SENSCR_SHIFT;
     ffs->fillpen = logmath_log(acmod->lmath,
             cmd_ln_float32_r(config, "-fillprob")) >> SENSCR_SHIFT;
-    ffs->max_sf_win = cmd_ln_int32_r(search_config(ffs), "-fwdflatsfwin");
+    ffs->max_sf_win = cmd_ln_int32_r(search_config((search_t *)ffs), "-fwdflatsfwin");
 }
 
 static void fwdflat_search_update_widmap(fwdflat_search_t *ffs)
@@ -1155,6 +1155,9 @@ static int fwdflat_search_decode(search_t *base)
         return -1;
     }
     base->uttid = base->acmod->uttid;
+    E_INFO("waiting for arc buffer start\n");
+    if (arc_buffer_consumer_start_utt(search_input_arcs(base), -1) < 0)
+        return -1;
     fwdflat_search_start(base);
     while (!acmod_eou(base->acmod))
     {
@@ -1320,10 +1323,16 @@ static int32 fwdflat_search_prob(search_t *base)
 static char const *
 fwdflat_search_hyp(search_t *base, int32 *out_score)
 {
-    fwdflat_search_t *ffs = (fwdflat_search_t *) base;
+    fwdflat_search_t *ffs = (fwdflat_search_t *)base;
 
     ckd_free(base->hyp_str);
-    base->hyp_str = bptbl_hyp(ffs->bptbl, out_score, search_finish_wid(ffs));
+    if (bptbl_is_final(ffs->bptbl)) {
+        base->hyp_str = bptbl_hyp(ffs->bptbl, out_score, base->finish_wid);
+    }
+    else {
+        *out_score = ffs->best_score;
+        base->hyp_str = bptbl_backtrace(ffs->bptbl, ffs->best_exit);
+    }
     return base->hyp_str;
 }
 
@@ -1331,7 +1340,12 @@ static seg_iter_t *
 fwdflat_search_seg_iter(search_t *base, int32 *out_score)
 {
     fwdflat_search_t *ffs = (fwdflat_search_t *) base;
-    return bptbl_seg_iter(ffs->bptbl, out_score, search_finish_wid(ffs));
+    if (bptbl_is_final(ffs->bptbl))
+        return bptbl_seg_iter(ffs->bptbl, out_score, search_finish_wid(ffs));
+    else {
+        *out_score = ffs->best_score;
+        return bptbl_seg_backtrace(ffs->bptbl, ffs->best_exit);
+    }
 }
 
 vocab_map_t *

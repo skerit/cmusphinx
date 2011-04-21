@@ -522,7 +522,7 @@ fwdtree_search_calc_beams(fwdtree_search_t *fts)
     cmd_ln_t *config;
     acmod_t *acmod;
 
-    config = search_config(fts);
+    config = search_config((search_t *)fts);
     acmod = search_acmod(fts);
 
     /* Log beam widths. */
@@ -2356,8 +2356,13 @@ fwdtree_search_hyp(search_t *base, int32 *out_score)
 static seg_iter_t *
 fwdtree_search_seg_iter(search_t *base, int32 *out_score)
 {
-    fwdtree_search_t *fts = (fwdtree_search_t *)base;
-    return bptbl_seg_iter(fts->bptbl, out_score, search_finish_wid(fts));
+    fwdtree_search_t *fts = (fwdtree_search_t *) base;
+    if (bptbl_is_final(fts->bptbl))
+        return bptbl_seg_iter(fts->bptbl, out_score, search_finish_wid(fts));
+    else {
+        *out_score = fts->best_score;
+        return bptbl_seg_backtrace(fts->bptbl, fts->best_exit);
+    }
 }
 
 static bptbl_t *

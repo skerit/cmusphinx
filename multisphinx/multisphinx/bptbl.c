@@ -1235,7 +1235,7 @@ bptbl_bp2itor(seg_iter_t *seg, int bp)
 
     be = bptbl_ent(bseg->bptbl, bp);
     pbe = bptbl_ent(bseg->bptbl, be->bp);
-    seg->word = dict_wordstr(bseg->bptbl->d2p->dict, be->wid);
+    seg->wid = be->wid;
     seg->ef = be->frame;
     seg->sf = pbe ? pbe->frame + 1 : 0;
     seg->prob = 0; /* Bogus value... */
@@ -1285,28 +1285,38 @@ static segfuncs_t bptbl_segfuncs = {
 seg_iter_t *
 bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
 {
-    bptbl_seg_t *itor;
-    bpidx_t exit;
+    bpidx_t bp;
     bp_t *bpe;
-    int cur;
 
     /* Look for </s> in the last frame. */
-    if ((exit = bptbl_find_exit(bptbl, finish_wid)) == NO_BP) {
+    if ((bp = bptbl_find_exit(bptbl, finish_wid)) == NO_BP) {
         /* If not found then take the best scoring word exit (with warning). */
-        exit = bptbl_find_exit(bptbl, BAD_S3WID);
-        if (exit == NO_BP) {
+        bp = bptbl_find_exit(bptbl, BAD_S3WID);
+        if (bp == NO_BP) {
             E_ERROR("No word exits in last frame: recognition failure?\n");
             return NULL;
         }
         E_WARN("No %s found in last frame, using %s instead\n",
                dict_wordstr(bptbl->d2p->dict, finish_wid),
                dict_wordstr(bptbl->d2p->dict,
-                            bptbl_ent(bptbl, exit)->wid));
+                            bptbl_ent(bptbl, bp)->wid));
     }
 
-    bpe = bptbl_ent(bptbl, exit);
+    bpe = bptbl_ent(bptbl, bp);
     if (out_score)
         *out_score = bpe->score;
+
+    return bptbl_seg_backtrace(bptbl, bp);
+}
+
+seg_iter_t *
+bptbl_seg_backtrace(bptbl_t *bptbl, bpidx_t bp)
+{
+    bptbl_seg_t *itor;
+    bp_t *bpe;
+    int cur;
+
+    bpe = bptbl_ent(bptbl, bp);
 
     /* Calling this an "iterator" is a bit of a misnomer since we have
      * to get the entire backtrace in order to produce it.  On the
@@ -1327,11 +1337,11 @@ bptbl_seg_iter(bptbl_t *bptbl, int32 *out_score, int32 finish_wid)
     }
     itor->bpidx = ckd_calloc(itor->n_bpidx, sizeof(*itor->bpidx));
     cur = itor->n_bpidx - 1;
-    bpe = bptbl_ent(bptbl, exit);
+    bpe = bptbl_ent(bptbl, bp);
     while (bpe != NULL) {
-        itor->bpidx[cur] = exit;
-        exit = bpe->bp;
-        bpe = bptbl_ent(bptbl, exit);
+        itor->bpidx[cur] = bp;
+        bp = bpe->bp;
+        bpe = bptbl_ent(bptbl, bp);
         --cur;
     }
 

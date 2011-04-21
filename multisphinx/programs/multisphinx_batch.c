@@ -38,6 +38,7 @@
 /* System headers. */
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/time.h>
 
 /* SphinxBase headers. */
@@ -54,9 +55,9 @@
 #include <multisphinx/dict.h>
 #include <multisphinx/search.h>
 #include <multisphinx/search_factory.h>
+#include <multisphinx/alignment.h>
 
-typedef struct batch_decoder_s
-{
+typedef struct batch_decoder_s {
     search_factory_t *sf;
     cmd_ln_t *config;
     search_t *fwdtree;
@@ -66,13 +67,15 @@ typedef struct batch_decoder_s
     struct timeval utt_start;
 
     FILE *ctlfh;
+    FILE *alignfh;
+
+    hash_table_t *hypfiles;
 } batch_decoder_t;
 
 /**
  * Command-line argument definitions for batch processing.
  */
-static const arg_t ms_args_def[] =
-{ MULTISPHINX_OPTIONS,
+static const arg_t ms_args_def[] = { MULTISPHINX_OPTIONS,
 /* Control file. */
 { "-ctl",
 ARG_STRING,
@@ -90,7 +93,16 @@ ARG_INT32,
 ARG_INT32,
 "1",
 "Do every Nth line in the control file"},
-
+/* Alignment file with times for input words */
+{"-align",
+ARG_STRING,
+NULL,
+"Alignment file with input word times for latency measurement"},
+/* Prefix for hypothesis files */
+{ "-hypprefix",
+        ARG_STRING,
+        NULL,
+        "Prefix for hypothesis files (will be suffixed with .{pass}.hyp"},
 /* Input file types and locations. */
 {"-adcin",
 ARG_BOOLEAN,
@@ -113,41 +125,86 @@ ARG_STRING,
 CMDLN_EMPTY_OPTION
 };
 
+static double get_time_delta(batch_decoder_t *bd)
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+
+    return ((double) tv.tv_sec + (double) tv.tv_usec / 1000000)
+            - ((double) bd->utt_start.tv_sec + (double) bd->utt_start.tv_usec
+                    / 1000000);
+}
+
 static int batch_decoder_decode_adc(batch_decoder_t *bd, FILE *infh, int sf,
-        int ef)
+        int ef, alignment_t *al)
 {
     featbuf_t *fb = search_factory_featbuf(bd->sf);
-    int16 buf[2048];
+    float32 samprate = cmd_ln_float32_r(bd->config, "-samprate");
+    int32 frate = cmd_ln_int32_r(bd->config, "-frate");
+    int16 buf[512];
 
-    if (ef != -1)
-    {
-        ef = (int32) ((ef - sf) * (cmd_ln_float32_r(bd->config, "-samprate")
-                / cmd_ln_int32_r(bd->config, "-frate"))
-                + (cmd_ln_float32_r(bd->config, "-samprate")
-                        * cmd_ln_float32_r(bd->config, "-wlen")));
+    if (ef != -1) {
+        ef = (int32) (((ef - sf) * samprate / frate) + (samprate
+                * cmd_ln_float32_r(bd->config, "-wlen")));
     }
-    sf = (int32) (sf * (cmd_ln_float32_r(bd->config, "-samprate")
-            / cmd_ln_int32_r(bd->config, "-frate")));
+    sf = (int32) (sf * (samprate / frate));
     fseek(infh, cmd_ln_int32_r(bd->config, "-adchdr") + sf * sizeof(int16),
             SEEK_SET);
 
-    while (ef == -1 || sf < ef)
-    {
-        size_t nread = 2048;
-        if (ef != -1 && nread > ef - sf)
+    if (al) {
+        alignment_iter_t *itor;
+        double starttime = 0.0;
+        for (itor = alignment_words(al); itor; itor = alignment_iter_next(itor)) {
+            alignment_entry_t *ent = alignment_iter_get(itor);
+            double nsec = (double) ent->duration / frate;
+            double endtime = starttime + nsec;
+            size_t nsamp = (size_t) (nsec * samprate);
+            E_INFO("Processing %d samples for %s (%f seconds ending %f)\n",
+                   nsamp, dict_wordstr(search_factory_d2p(bd->sf)->dict, ent->id.wid),
+                   nsec, endtime);
+            E_INFO("Woke up at delta %f\n", get_time_delta(bd));
+            while (nsamp > 0) {
+                size_t nread = 512;
+                if (nread > nsamp) nread = nsamp;
+                nread = fread(buf, sizeof(int16), nread, infh);
+                if (nread == 0)
+                break;
+                featbuf_producer_process_raw(fb, buf, nread, FALSE);
+                nsamp -= nread;
+                starttime += (nread / samprate); 
+                double delta = get_time_delta(bd);
+                if (starttime > delta) {
+                    E_INFO("Sleeping until next start time (%f seconds)\n",
+                           starttime - delta);
+                    usleep((int)((starttime - delta) * 1000000));
+                }
+            }
+            double delta = get_time_delta(bd);
+            if (endtime > delta) {
+                E_INFO("Sleeping until end time (%f seconds)\n",
+                       endtime - delta);
+                usleep((int)((endtime - delta) * 1000000));
+            }
+        }
+    }
+    else {
+        while (ef == -1 || sf < ef) {
+            size_t nread = 2048;
+            if (ef != -1 && nread > ef - sf)
             nread = ef - sf;
-        nread = fread(buf, sizeof(int16), 2048, infh);
-        if (nread == 0)
+            nread = fread(buf, sizeof(int16), nread, infh);
+            if (nread == 0)
             break;
-        featbuf_producer_process_raw(fb, buf, nread, FALSE);
-        //usleep((int)((double)nread / 16000 * 1000000));
-        sf += nread;
+            featbuf_producer_process_raw(fb, buf, nread, FALSE);
+            //usleep((int)((double)nread / 16000 * 1000000));
+            sf += nread;
+        }
     }
     return 0;
 }
 
 static int batch_decoder_decode_mfc(batch_decoder_t *bd, FILE *infh, int sf,
-        int ef)
+        int ef, alignment_t *al)
 {
     featbuf_t *fb = search_factory_featbuf(bd->sf);
     mfcc_t **mfcs;
@@ -163,7 +220,7 @@ static int batch_decoder_decode_mfc(batch_decoder_t *bd, FILE *infh, int sf,
 }
 
 int batch_decoder_decode(batch_decoder_t *bd, char *file, char *uttid,
-        int32 sf, int32 ef)
+        int32 sf, int32 ef, alignment_t *al)
 {
     featbuf_t *fb;
     FILE *infh;
@@ -171,8 +228,7 @@ int batch_decoder_decode(batch_decoder_t *bd, char *file, char *uttid,
     char *infile;
     int rv;
 
-    if (ef != -1 && ef < sf)
-    {
+    if (ef != -1 && ef < sf) {
         E_ERROR("End frame %d is < start frame %d\n", ef, sf);
         return -1;
     }
@@ -189,7 +245,6 @@ int batch_decoder_decode(batch_decoder_t *bd, char *file, char *uttid,
     if ((infh = fopen(infile, "rb")) == NULL)
     {
         E_ERROR_SYSTEM("Failed to open %s", infile);
-        ckd_free(infile);
         return -1;
     }
 
@@ -198,9 +253,9 @@ int batch_decoder_decode(batch_decoder_t *bd, char *file, char *uttid,
     featbuf_producer_start_utt(fb, uttid);
 
     if (cmd_ln_boolean_r(bd->config, "-adcin"))
-    rv = batch_decoder_decode_adc(bd, infh, sf, ef);
+    rv = batch_decoder_decode_adc(bd, infh, sf, ef, al);
     else
-    rv = batch_decoder_decode_mfc(bd, infh, sf, ef);
+    rv = batch_decoder_decode_mfc(bd, infh, sf, ef, al);
 
     featbuf_producer_end_utt(fb);
 
@@ -210,10 +265,46 @@ int batch_decoder_decode(batch_decoder_t *bd, char *file, char *uttid,
     return rv;
 }
 
+alignment_t *
+parse_alignment(char *line, dict2pid_t *d2p)
+{
+    alignment_t *al;
+    char **wptr;
+    int nf, i;
+    double spos;
+    int32 frate = 100; /* FIXME */
+
+    nf = str2words(line, NULL, 0);
+    if (nf < 0)
+        return NULL;
+    wptr = ckd_calloc(nf, sizeof(*wptr));
+    nf = str2words(line, wptr, nf);
+    if (nf < 0) {
+        ckd_free(wptr);
+        return NULL;
+    }
+    al = alignment_init(d2p);
+    spos = 0.0;
+    for (i = 0; i < nf; ++i) {
+        char *c = strchr(wptr[i], ':');
+        double epos;
+        int duration;
+        if (c == NULL) /* word ID */
+            break;
+        *c++ = '\0';
+        epos = atof(c);
+        duration = (int)((epos - spos) * frate);
+        alignment_add_word(al, dict_wordid(d2p->dict, wptr[i]),
+                           duration);
+        spos = epos;
+    }
+    return al;
+}
+
 int batch_decoder_run(batch_decoder_t *bd)
 {
     int32 ctloffset, ctlcount, ctlincr;
-    lineiter_t *li;
+    lineiter_t *li, *ali = NULL;
 
     search_run(bd->fwdtree);
     search_run(bd->fwdflat);
@@ -222,26 +313,34 @@ int batch_decoder_run(batch_decoder_t *bd)
     ctlcount = cmd_ln_int32_r(bd->config, "-ctlcount");
     ctlincr = cmd_ln_int32_r(bd->config, "-ctlincr");
 
-    for (li = lineiter_start(bd->ctlfh); li; li = lineiter_next(li))
-    {
+    if (bd->alignfh)
+        ali = lineiter_start(bd->alignfh);
+    for (li = lineiter_start(bd->ctlfh); li; li = lineiter_next(li)) {
+        alignment_t *al = NULL;
         char *wptr[4];
         int32 nf, sf, ef;
 
-        if (li->lineno < ctloffset)
+        if (li->lineno < ctloffset) {
+            if (ali)
+                ali = lineiter_next(ali);
             continue;
-        if ((li->lineno - ctloffset) % ctlincr != 0)
+        }
+        if ((li->lineno - ctloffset) % ctlincr != 0) {
+            if (ali)
+                ali = lineiter_next(ali);
             continue;
+        }
         if (ctlcount != -1 && li->lineno >= ctloffset + ctlcount)
             break;
+        if (ali)
+            al = parse_alignment(ali->buf, search_factory_d2p(bd->sf));
         sf = 0;
         ef = -1;
         nf = str2words(li->buf, wptr, 4);
-        if (nf == 0)
-        {
+        if (nf == 0) {
             /* Do nothing. */
         }
-        else if (nf < 0)
-        {
+        else if (nf < 0) {
             E_ERROR("Unexpected extra data in control file at line %d\n", li->lineno);
         }
         else
@@ -256,8 +355,10 @@ int batch_decoder_run(batch_decoder_t *bd)
             if (nf > 3)
             uttid = wptr[3];
             /* Do actual decoding. */
-            batch_decoder_decode(bd, file, uttid, sf, ef);
+            batch_decoder_decode(bd, file, uttid, sf, ef, al);
         }
+        alignment_free(al);
+        if (ali) ali = lineiter_next(ali);
     }
     featbuf_producer_shutdown(search_factory_featbuf(bd->sf));
     return 0;
@@ -266,33 +367,51 @@ int batch_decoder_run(batch_decoder_t *bd)
 static int search_cb(search_t *search, search_event_t *evt, void *udata)
 {
     batch_decoder_t *bd = (batch_decoder_t *) udata;
-    struct timeval tv;
+    dict_t *d = search_factory_d2p(bd->sf)->dict;
+    double delta = get_time_delta(bd);
+    double frate = cmd_ln_int32_r(search_config(search), "-frate");
+    FILE *hypfh = NULL;
+    void *val;
 
-    gettimeofday(&tv, NULL);
-    E_INFO("%s: time delta %f ",
-    search_name(search),
-    ((double)tv.tv_sec + (double)tv.tv_usec / 1000000)
-    - ((double)bd->utt_start.tv_sec + (double)bd->utt_start.tv_usec / 1000000));
+    if (hash_table_lookup(bd->hypfiles, search_name(search), &val) == 0)
+        hypfh = val;
+    else
+        hypfh = stdout;
+    fprintf(hypfh, "time delta %f ", delta);
     switch (evt->event)
     {
         case SEARCH_PARTIAL_RESULT:
         {
             int32 score;
-            char const *hyp = search_hyp(search, &score);
-            E_INFOCONT("partial: %s (%d)\n", hyp, score);
+            seg_iter_t *seg = search_seg_iter(search, &score);
+            fprintf(hypfh, "partial: ");
+            for (; seg; seg = seg_iter_next(seg)) {
+                int sf, ef;
+                seg_iter_times(seg, &sf, &ef);
+                fprintf(hypfh, "%s:%.3f ", dict_basestr(d, seg_iter_wid(seg)),
+                        (double)ef / frate);
+            }
+            fprintf(hypfh, "(%s)\n", search_uttid(search));
             break;
         }
         case SEARCH_START_UTT:
-        E_INFOCONT("start\n");
-        break;
+            fprintf(hypfh, "start %s\n", search_uttid(search));
+            break;
         case SEARCH_END_UTT:
-        E_INFOCONT("end\n");
-        break;
+            fprintf(hypfh, "end %s\n", search_uttid(search));
+            break;
         case SEARCH_FINAL_RESULT:
         {
             int32 score;
-            char const *hyp = search_hyp(search, &score);
-            E_INFOCONT("full: %s (%d)\n", hyp, score);
+            seg_iter_t *seg = search_seg_iter(search, &score);
+            fprintf(hypfh, "full: ");
+            for (; seg; seg = seg_iter_next(seg)) {
+                int sf, ef;
+                seg_iter_times(seg, &sf, &ef);
+                fprintf(hypfh, "%s:%.3f ", dict_basestr(d, seg_iter_wid(seg)),
+                        (double)ef / frate);
+            }
+            fprintf(hypfh, "(%s)\n", search_uttid(search));
             break;
         }
     }
@@ -307,8 +426,7 @@ batch_decoder_init_argv(int argc, char *argv[])
 
     bd = ckd_calloc(1, sizeof(*bd));
     bd->config = cmd_ln_parse_r(NULL, ms_args_def, argc, argv, FALSE);
-    if ((ctl = cmd_ln_str_r(bd->config, "-ctl")) == NULL)
-    {
+    if ((ctl = cmd_ln_str_r(bd->config, "-ctl")) == NULL) {
         E_ERROR("-ctl argument not present, nothing to do in batch mode!\n");
         goto error_out;
     }
@@ -316,6 +434,11 @@ batch_decoder_init_argv(int argc, char *argv[])
     {
         E_ERROR_SYSTEM("Failed to open control file '%s'", ctl);
         goto error_out;
+    }
+    if ((ctl = cmd_ln_str_r(bd->config, "-align")) != NULL)
+    {
+        if ((bd->alignfh = fopen(ctl, "r")) == NULL)
+        E_ERROR_SYSTEM("Failed to open align file '%s'", ctl);
     }
 
     if ((bd->sf = search_factory_init_cmdln(bd->config)) == NULL)
@@ -332,6 +455,25 @@ batch_decoder_init_argv(int argc, char *argv[])
     search_set_cb(bd->fwdtree, search_cb, bd);
     search_set_cb(bd->fwdflat, search_cb, bd);
 
+    bd->hypfiles = hash_table_new(0, FALSE);
+    if ((ctl = cmd_ln_str_r(bd->config, "-hypprefix"))) {
+        char *hypfile;
+        FILE *hypfh;
+        hypfile = string_join(ctl, ".fwdtree.hyp", NULL);
+        hypfh = fopen(hypfile, "w");
+        if (hypfh == NULL)
+            E_ERROR_SYSTEM("Could not open %s", hypfile);
+        else
+            hash_table_enter(bd->hypfiles, "fwdtree", hypfh);
+        ckd_free(hypfile);
+        hypfile = string_join(ctl, ".fwdflat.hyp", NULL);
+        hypfh = fopen(hypfile, "w");
+        if (hypfh == NULL)
+            E_ERROR_SYSTEM("Could not open %s", hypfile);
+        else
+            hash_table_enter(bd->hypfiles, "fwdflat", hypfh);
+        ckd_free(hypfile);
+    }
     return bd;
 
     error_out:
@@ -340,6 +482,7 @@ batch_decoder_init_argv(int argc, char *argv[])
 
 int batch_decoder_free(batch_decoder_t *bd)
 {
+    hash_iter_t *itor;
     if (bd == NULL)
         return 0;
     if (bd->ctlfh != NULL)
@@ -349,6 +492,11 @@ int batch_decoder_free(batch_decoder_t *bd)
     search_free(bd->fwdflat);
     //search_free(bd->latgen);
     search_factory_free(bd->sf);
+    for (itor = hash_table_iter(bd->hypfiles); itor;
+         itor = hash_table_iter_next(itor)) {
+        fclose(hash_entry_val(itor->ent));
+    }
+    hash_table_free(bd->hypfiles);
     ckd_free(bd);
     return 0;
 }
@@ -357,8 +505,7 @@ int main(int argc, char *argv[])
 {
     batch_decoder_t *bd;
 
-    if ((bd = batch_decoder_init_argv(argc, argv)) == NULL)
-    {
+    if ((bd = batch_decoder_init_argv(argc, argv)) == NULL) {
         E_ERROR("Failed to initialize decoder\n");
         return 1;
     }
