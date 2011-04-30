@@ -36,10 +36,10 @@
 
 #define DEFAULT_MAX_FILES 20
 
-#include <sys/types.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <errno.h>
 
 #include "../liblmest/toolkit.h"
