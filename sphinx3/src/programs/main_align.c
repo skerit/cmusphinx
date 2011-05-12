@@ -337,7 +337,7 @@ write_s2stseg(char *dir, align_stseg_t * stseg, char *uttid, char *ctlspec, int3
         }
     }
     if ((fp = fopen(filename, "wb")) == NULL) {
-        E_ERROR("fopen(%s,wb) failed\n", filename);
+        E_ERROR_SYSTEM("Failed to open %s for writing", filename);
         return;
     }
 
@@ -349,11 +349,11 @@ write_s2stseg(char *dir, align_stseg_t * stseg, char *uttid, char *ctlspec, int3
 
         fclose(fp);
         if ((fp = fopen(filename, "rb")) == NULL) {
-            E_ERROR("fopen(%s,rb) failed\n", filename);
+            E_ERROR_SYSTEM("Failed to open file %s for reading", filename);
             return;
         }
         if (fread(buf, 1, sizeof(int32), fp) != sizeof(int32)) {
-            E_ERROR("fread(%s) failed\n", filename);
+            E_ERROR_SYSTEM("Failed to read from the file %s", filename);
             return;
         }
         fclose(fp);
@@ -362,7 +362,7 @@ write_s2stseg(char *dir, align_stseg_t * stseg, char *uttid, char *ctlspec, int3
         byterev = (buf[0] == (BYTE_ORDER_MAGIC & 0x000000ff)) ? 1 : 0;
 
         if ((fp = fopen(filename, "wb")) == NULL) {
-            E_ERROR("fopen(%s,wb) failed\n", filename);
+            E_ERROR_SYSTEM("Failed to open file %s for writing", filename);
             return;
         }
     }
@@ -397,7 +397,7 @@ write_s2stseg(char *dir, align_stseg_t * stseg, char *uttid, char *ctlspec, int3
     return;
 
   write_error:
-    E_ERROR("fwrite(%s) failed\n", filename);
+    E_ERROR_SYSTEM("Failed to write data to the file %s", filename);
     fclose(fp);
 }
 
@@ -419,7 +419,7 @@ write_stseg(char *dir, align_stseg_t * stseg, char *uttid, char *ctlspec)
     strcat(filename, ".stseg");
     E_INFO("Writing state segmentation to: %s\n", filename);
     if ((fp = fopen(filename, "wb")) == NULL) {
-        E_ERROR("fopen(%s,wb) failed\n", filename);
+        E_ERROR_SYSTEM("Failed to open file %s for writing\n", filename);
         return;
     }
 
@@ -480,7 +480,7 @@ write_stseg(char *dir, align_stseg_t * stseg, char *uttid, char *ctlspec)
     return;
 
   write_error:
-    E_ERROR("fwrite(%s) failed\n", filename);
+    E_ERROR_SYSTEM("Failed to write to the file %s\n", filename);
     fclose(fp);
 }
 
@@ -498,7 +498,7 @@ write_phseg(char *dir, align_phseg_t * phseg, char *uttid, char *ctlspec)
     strcat(str, ".phseg");
     E_INFO("Writing phone segmentation to: %s\n", str);
     if ((fp = fopen(str, "w")) == NULL) {
-        E_ERROR("fopen(%s,w) failed\n", str);
+        E_ERROR_SYSTEM("Failed to open file %s for writing", str);
         fp = stdout;            /* Segmentations can be directed to stdout this way */
         E_INFO("Phone segmentation (%s):\n", uttid);
         dir = NULL;             /* Flag to indicate fp shouldn't be closed at the end */
@@ -551,7 +551,7 @@ write_phlab(char *dir, align_phseg_t * phseg, char *uttid, char *ctlspec, int32 
     strcat(str, ".lab");
     E_INFO("Writing xlabel style phone labels to: %s\n", str);
     if ((fp = fopen(str, "w")) == NULL) {
-        E_ERROR("fopen(%s,w) failed\n", str);
+        E_ERROR_SYSTEM("Failed to open file %s for writing", str);
         fp = stdout;            /* Segmentations can be directed to stdout this way */
         E_INFO("Phone segmentation (%s):\n", uttid);
         dir = NULL;             /* Flag to indicate fp shouldn't be closed at the end */
@@ -598,7 +598,7 @@ write_wdseg(char *dir, align_wdseg_t * wdseg, char *uttid, char *ctlspec)
     strcat(str, ".wdseg");
     E_INFO("Writing word segmentation to: %s\n", str);
     if ((fp = fopen(str, "w")) == NULL) {
-        E_ERROR("fopen(%s,w) failed\n", str);
+        E_ERROR_SYSTEM("Failed to open file %s for writing", str);
         fp = stdout;            /* Segmentations can be directed to stdout this way */
         E_INFO("Word segmentation (%s):\n", uttid);
         dir = NULL;             /* Flag to indicate fp shouldn't be closed at the end */
@@ -937,7 +937,7 @@ main(int32 argc, char *argv[])
     sentfile = cmd_ln_str_r(config, "-insent");
 
     if ((sentfp = fopen(sentfile, "r")) == NULL)
-        E_FATAL("fopen(%s,r) failed\n", sentfile);
+        E_FATAL_SYSTEM("Failed to open file %s for reading", sentfile);
 
     /* Note various output directories */
     if (cmd_ln_str_r(config, "-s2stsegdir") != NULL)
@@ -971,12 +971,12 @@ main(int32 argc, char *argv[])
 
     if ((outsentfile = cmd_ln_str_r(config, "-outsent")) != NULL) {
         if ((outsentfp = fopen(outsentfile, "w")) == NULL)
-            E_FATAL("fopen(%s,r) failed\n", outsentfile);
+            E_FATAL_SYSTEM("Failed to open file %s for writing", outsentfile);
     }
 
     if ((outctlfile = cmd_ln_str_r(config, "-outctl")) != NULL) {
         if ((outctlfp = fopen(outctlfile, "w")) == NULL)
-            E_FATAL("fopen(%s,r) failed\n", outctlfile);
+            E_FATAL_SYSTEM("Failed top open file %s for writing", outctlfile);
     }
 
     if ((cmd_ln_str_r(config, "-s2stsegdir") == NULL) &&
