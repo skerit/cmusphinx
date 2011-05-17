@@ -2,7 +2,7 @@
 #define __S3DECODER_EXPORT_H__
 
 /* Win32/WinCE DLL gunk */
-#if (defined(_WIN32) || defined(_WIN32_WCE)) && !defined(CYGWIN)
+#if (defined(_WIN32) || defined(_WIN32_WCE)) && !defined(__CYGWIN__)
 #ifdef S3DECODER_EXPORTS
 #define S3DECODER_EXPORT __declspec(dllexport)
 #else
