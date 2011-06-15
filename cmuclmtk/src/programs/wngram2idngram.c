@@ -361,7 +361,7 @@ int main(int argc, char *argv[]) {
       }else {
 	/* Write to temporary file */
 	for (i=0;i<=n-1;i++) 
-	  rr_fwrite((char*)&current_ngram[i],sizeof(unsigned short),1,
+	  rr_fwrite((char*)&current_ngram[i],sizeof(wordid_t),1,
 		    non_unk_fp,"temporary n-gram ids");
 
 	rr_fwrite((char*)&current_count,sizeof(int),1,non_unk_fp,
@@ -426,38 +426,25 @@ int main(int argc, char *argv[]) {
 	      "temporary n-gram counts");
     fclose(tempfile);
     
-    /* Merge the temporary files, and output the result to standard output */
 
-    fclose(non_unk_fp);
-
-    pc_message(verbosity,2,"Merging temporary files...\n");
-    
-    merge_idngramfiles(1,
-		    number_of_tempfiles,
-		    temp_directory,
-		    temp_file_ext,
-		    max_files,
-		    outfile,
-		    write_ascii,
-		    fof_size,
-		    n); 
-  }else {
-
-    /* Just write out the none OOV buffer to stdout */
-    fclose(non_unk_fp);
-
-    merge_idngramfiles(1,
-		    1,
-		    temp_directory,
-		    temp_file_ext,
-		    max_files,
-		    outfile,
-		    write_ascii,
-		    fof_size,
-		    n); 
   }
+  
+
+  /* Merge the temporary files, and output the result */
+  fclose(non_unk_fp);
+  pc_message(verbosity,2,"Merging temporary files...\n");
+  merge_idngramfiles(1,
+		     number_of_tempfiles,
+		     temp_directory,
+		     temp_file_ext,
+		     max_files,
+		     outfile,
+		     write_ascii,
+		     fof_size,
+		     n);
 
   fclose(outfile);
+
   rmdir(temp_directory);
   pc_message(verbosity,0,"wngram2idngram : Done.\n");
 
