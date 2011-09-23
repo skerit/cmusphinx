@@ -118,7 +118,6 @@
 #include <float.h>
 
 #include <sphinxbase/bio.h>
-#include <sphinxbase/libutil.h>
 
 #include "ms_gauden.h"
 

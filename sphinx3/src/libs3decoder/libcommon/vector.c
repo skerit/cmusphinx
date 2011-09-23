@@ -96,7 +96,6 @@
 
 #include <sphinxbase/profile.h>
 #include <sphinxbase/bitvec.h>
-#include <sphinxbase/libutil.h>
 #include <sphinxbase/genrand.h>
 
 #include "vector.h"

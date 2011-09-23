@@ -123,7 +123,6 @@
 #include <string.h>
 #include <math.h>
 #include <sphinxbase/bio.h>
-#include <sphinxbase/libutil.h>
 #include <sphinxbase/matrix.h>
 
 #include "vector.h"

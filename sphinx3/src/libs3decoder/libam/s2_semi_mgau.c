@@ -53,7 +53,6 @@
 #include <sphinxbase/bio.h>
 #include <sphinxbase/err.h>
 #include <sphinxbase/prim_type.h>
-#include <sphinxbase/libutil.h>
 #include <sphinxbase/ckd_alloc.h>
 #include <sphinxbase/bio.h>
 
