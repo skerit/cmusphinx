@@ -294,6 +294,10 @@ hmm_vit_eval_5st_lr(hmm_t * hmm)
 
     s4 = hmm_score(hmm, 4) + nonmpx_senscr(4);
     s3 = hmm_score(hmm, 3) + nonmpx_senscr(3);
+    
+    /* Avoid wraparound */
+    if (s4 < WORST_SCORE)
+	s4 = WORST_SCORE;
 
     /* Transitions into non-emitting state 5 */
     if (s3 > WORST_SCORE) {
