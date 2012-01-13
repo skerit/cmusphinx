@@ -10,6 +10,7 @@ from struct import unpack, pack
 import sys
 from sys import exit
 import time
+import operator
 
 from ply import *
 
@@ -142,6 +143,12 @@ class HtkConverter(object):
 		# Split the tied list in monophone and triphone tied lists.
 		self.monophoneTiedlist = [(nameFrom, nameTo) for (nameFrom, nameTo) in self.tiedlist.iteritems() if self.monophone_reobj.match(nameFrom)]
 		self.triphoneTiedlist = [(nameFrom, nameTo) for (nameFrom, nameTo) in self.tiedlist.iteritems() if self.triphone_reobj.match(nameFrom)]
+
+		# Check that all tmats have same number of states
+		badHmms = [hmm for hmm in self.hmms if hmm.tmat.numStates != self.hmms[0].tmat.numStates]
+		if len(badHmms) > 0:
+			names = " ".join([hmm.name for hmm in badHmms])
+			raise HtkConverterError('Transition matrix %s have different number of states than others. Such model can not be converted.' % (names))
 		
 		pr('HTK model files loaded and parsed.')
 	
@@ -445,14 +452,7 @@ class HtkConverter(object):
 		# This means that for each tmat, the first and last row and the
 		# first column are not written.
 		n = 0
-		ns = 0
 		for tmat in tmats:
-			if ns == 0:
-			    ns = tmat.numStates
-			elif tmat.numStates != ns:
-			    badHmms = filter(lambda x: x.tmat == tmat, hmms)
-			    names = " ".join([hmm.name for hmm in badHmms])
-			    raise HtkConverterError('Transition matrix %s have different number of states than others. Such model can not be converted.' % (names))
 			for o in range(1, tmat.numStates - 1):
 				for i in range(o * tmat.numStates + 1, (o + 1) * tmat.numStates):
 					file.write(pack('=f', tmat.vector[i]))
