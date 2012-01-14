@@ -68,7 +68,6 @@ class HtkConverter(object):
 	
 	# Dictionaries containing mappings from instances of State/Tmat to id's.
 	# This is needed to write the Sphinx 3 model files.
-	ciStatesToIds = {}
 	statesToIds = {}
 	tmatsToIds = {}
 		
@@ -149,7 +148,7 @@ class HtkConverter(object):
 		if len(badHmms) > 0:
 			names = " ".join([hmm.name for hmm in badHmms])
 			raise HtkConverterError('Transition matrix %s have different number of states than others. Such model can not be converted.' % (names))
-
+		
 		pr('HTK model files loaded and parsed.')
 	
 	# Display the loaded HTK models.
@@ -160,7 +159,7 @@ class HtkConverter(object):
 		
 		for hmm in hmms:
 			hmm.display()
-	
+
 	def _countItems(self, hmms):
 		# Create a set of all states.
 		states = unique([state for hmm in hmms for (iState, state) in hmm.states])
@@ -168,24 +167,21 @@ class HtkConverter(object):
 		# Create a set of all transition matrices.
 		tmats = unique([hmm.tmat for hmm in hmms])
 
-		# Monophone states
+		# Monophones
 		monophoneStates = unique([state for hmm in self.monophoneHmms for (iState, state) in hmm.states])
 		
-		# Create the State/Tmat-instance to id mappings, first we count all monophones
+		# Create the State/Tmat-instance to id mappings.
 		for state in monophoneStates:
-			self.ciStatesToIds[state] = len(self.ciStatesToIds)
-	
-		# Then count all states again for triphones
+			self.statesToIds[state] = len(self.statesToIds)
 		for state in states:
-			self.statesToIds[state] = len(self.statesToIds) + len(self.ciStatesToIds)
-		
+			if not self.statesToIds.has_key(state):
+				self.statesToIds[state] = len(self.statesToIds)
 		for tmat in tmats:
 			self.tmatsToIds[tmat] = len(self.tmatsToIds)
-		
-		self.states = sorted(self.ciStatesToIds, key=self.ciStatesToIds.__getitem__)
-		self.states.extend(sorted(self.statesToIds, key=self.statesToIds.__getitem__))
+
+		self.states = sorted(self.statesToIds, key=self.statesToIds.__getitem__)
 		self.tmats = sorted(self.tmatsToIds, key=self.tmatsToIds.__getitem__)
-	
+		
 	# Create Sphinx 3 model files.
 	def writeS3(self, outprefix = ''):
 		hmms = self.hmms
@@ -193,9 +189,8 @@ class HtkConverter(object):
 			raise HtkConverterError('Please load the HTK models first.')
 		
 		self.outprefix = outprefix
-
-		self._countItems(hmms)
 		
+		self._countItems(hmms)		
 		self._writeS3Mdef(hmms)
 		self._writeS3MeanVar(hmms)
 		self._writeS3Mixw(hmms)
@@ -235,7 +230,8 @@ class HtkConverter(object):
 
 		# n_tied_ci_state: no. of (emitting) states for your 'base' phones
 		# after state-sharing is done.
-		file.write('%s n_tied_ci_state\n' % len(self.ciStatesToIds))
+		monophoneStates = unique([state for hmm in self.monophoneHmms for (iState, state) in hmm.states])
+		file.write('%s n_tied_ci_state\n' % len(monophoneStates))
 
 		# n_tied_tmat: The HMM for each CI phone has a transition
 		# probability matrix associated it. This is the total number of
@@ -286,22 +282,21 @@ class HtkConverter(object):
 		file.write('#\n')
 		file.write('# base lft rt p attrib tmat ... state id\'s ...\n')
 		for (tupleFrom, nameTo) in tiedlist:
-
-			hmm = self.namesToHmms[nameTo]
-
 			if tupleFrom[0] == 1:
 				blrp = tupleFrom[1:4] + ('-',)
-				stateIds = tuple([self.ciStatesToIds[state] for (iState, state) in hmm.states])
 			elif tupleFrom[0] == 3:
 				blrp = tupleFrom[1:4] + ('i',)
-				stateIds = tuple([self.statesToIds[state] for (iState, state) in hmm.states])
 			else:
 				raise HtkConverterError('Programming error: tupleFrom[0] == %s' % tupleFrom[0])
 			
 			if tupleFrom[1].lower() != 'sil':
 				a = 'n/a'
 			else:
-				a = 'filler'			
+				a = 'filler'
+			
+			hmm = self.namesToHmms[nameTo]
+			
+			stateIds = tuple([self.statesToIds[state] for (iState, state) in hmm.states])
 			
 			#         b  l  r  p  a  t       s
 			format = '%s\t%s\t%s\t%s\t%s\t%s\t' + '%s\t' * len(stateIds) + 'N\n'
