@@ -203,7 +203,8 @@ sphinx3_get_hypothesis(PyObject *self, PyObject *args)
 	allphone = (cmd_ln_int32("-op_mode") == 1);
 
 	hypstr_obj = PyString_FromString(hypstr);
-	hypseg_obj = PyTuple_New(nhyps);
+	if ((hypseg_obj = PyTuple_New(nhyps)) == NULL)
+		return PyErr_NoMemory();
 	for (i = 0; i < nhyps; ++i) {
 		PyObject *seg_obj;
 		const char *wordstr;
@@ -227,7 +228,7 @@ sphinx3_get_hypothesis(PyObject *self, PyObject *args)
 		PyTuple_SET_ITEM(hypseg_obj, i, seg_obj);
 	}
 
-	return Py_BuildValue("(OO)", hypstr_obj, hypseg_obj);
+	return Py_BuildValue("(NN)", hypstr_obj, hypseg_obj);
 }
 
 static PyObject *
