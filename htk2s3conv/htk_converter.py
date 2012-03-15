@@ -148,6 +148,15 @@ class HtkConverter(object):
 		if len(badHmms) > 0:
 			names = " ".join([hmm.name for hmm in badHmms])
 			raise HtkConverterError('Transition matrix %s have different number of states than others. Such model can not be converted.' % (names))
+
+		# Check that all states have the same number of mixtures
+		# Check that all tmats have same number of states
+		i0, s0 = self.hmms[0].states[0]
+		correct_mixtures = len(s0.mixtures)
+		for hmm in self.hmms:
+		    for iState, state in hmm.states:
+			if len(state.mixtures) != correct_mixtures:
+			    raise HtkConverterError('State %d in hmm %s have different number of mixtures %d than expected %d.' % (iState, hmm.name, len(state.mixtures), correct_mixtures))
 		
 		pr('HTK model files loaded and parsed.')
 	
