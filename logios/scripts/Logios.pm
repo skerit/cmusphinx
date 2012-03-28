@@ -263,11 +263,6 @@ sub makelm {
     &LogiosLog::say('Logios', "up-to-date");
     return;
   }
-
-  if(!$self->{'FORCE'} && &up_to_date(\@targets, \@sources)) {
-    &LogiosLog::say('Logios', "up-to-date");
-    return;
-  }
   &LogiosLog::say('Logios', 'generating corpus...');
   $self->get_corpus($RANDOMSAMPS, $self->{'GRABSFILE'},$self->{'CORPUSFILE'});
   &LogiosLog::fail("Logios.pl: Corpus generation failed!\n")
