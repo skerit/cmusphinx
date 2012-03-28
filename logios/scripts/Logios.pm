@@ -48,7 +48,7 @@ sub new {
       #... where to put it
       'OUTPATH' => $params{'OUTPATH'},
       #size of the synthetic corpus
-      'SAMPSIZE' => $params{'SAMPSIZE'} || 30000,
+      'SAMPSIZE' => $params{'SAMPSIZE'} || 300000,
       #name of the project (domain, really) we're in
       'PROJECT' => $params{'PROJECT'},
       #list of any auxiliary grammars that should be mixed in with the 'PROJECT' grammar
