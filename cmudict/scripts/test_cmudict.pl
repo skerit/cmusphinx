@@ -118,11 +118,9 @@ while (<DICT>) {
     my $errs = "";
     my ($ph,$stress,$tail);
     foreach my $s (@sym) {
-	$ph = $stress = $tail = 0;
+	$ph = $stress = 0;
 	($ph,$stress) = ($s =~ /([A-Z]+)([012]*)/);
-	if ( # (defined $tail ) or
-	     # ((defined $stress) and not ($stress =~ /[012]/)) or
-	     ( not defined $phone{$ph} )
+	if ( ( not defined $phone{$ph} )
 	    ) { $errs .= " $s"; } else { $phone{$s}++; }
     }
     if ($errs ne "") { print "ERROR: $word has illegal symbols: '$errs'\n"; }

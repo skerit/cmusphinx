@@ -11,7 +11,7 @@ The process is the following:
  - check your work by doing a svn diff with the previous version
 
 2) run scripts/test_cmudict.pl
- EG: ./scripts/test_cmudict.pl -p cmudict.0.7a.phones cmudict.0.7a
+ EG: ./scripts/test_cmudict.pl -p cmudict.0.7a.symbols cmudict.0.7a
  - this checks for collation order, legal entry format and phonetic symbols
  - if necessary fix problems then repeat this step until no errors
  
