@@ -154,9 +154,16 @@ print "TOTAL Insertions: $total_ins Deletions: $total_del Substitutions: $total_
 # This function normalizes a line of a match file. 
 sub s3_magic_norm{
     my ($word)=@_;
+    my $uttid;
 
     # Remove line endings
-    chomp  $word;
+    $word =~ s/[\n\r]+$//;  # the agnostic way...
+
+    # This computes the uttid and remove it from a line.
+    #print "\n>---- $word\n";
+    $word =~ s/\(([^) ]+)[^)]*\)$// ;
+    $uttid = $1; #print ">---- $word --> |$uttid| --\n\n";
+
     # Normalize case
     $word = uc $word;   
     # Remove filler words and context cues
@@ -170,13 +177,10 @@ sub s3_magic_norm{
     # Remove class tags
     $word =~ s/:\S+//g;
 
-    # This compute the uttid and remove it from a line.
-    $word =~ s/\(([^) ]+)[^)]*\)$// ;
-
     # Split apart compound words and acronyms
     $word =~ tr/-_./  /;
 
-    return ($word,$1);
+    return ($word,$uttid);
 }
 
 sub initialize {
