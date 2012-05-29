@@ -155,6 +155,8 @@
 #include <unistd.h>
 #endif
 
+#include <sphinxbase/pio.h>
+
 #include "astar.h"
 #include "s3types.h"
 #include "mdef.h"

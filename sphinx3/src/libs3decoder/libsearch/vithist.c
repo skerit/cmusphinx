@@ -1909,6 +1909,9 @@ latticehist_dag_build(latticehist_t * vh, glist_t hyp, dict_t * dict,
             /* Look for transitions from this dagnode to later ones, if not discarded */
             if (dn->seqid < 0)
                 continue;
+            /* Do not create edges from the sentence end word */
+            if (dn->wid == dict_finishwid(dict))
+                continue;
 
             for (gn2 = (glist_t) dn->hook; gn2; gn2 = gnode_next(gn2)) {
                 s3latid_t l;

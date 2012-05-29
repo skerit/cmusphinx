@@ -1374,8 +1374,10 @@ dag_load(char *file,          /**< Input: File to lod from */
         if (sscanf(line, "%d %d %d", &from, &to, &ascr) != 3)
             break;
         pd = darray[from];
-        if (pd->wid == finishwid)
+        if (pd->wid == finishwid) {
+    	    E_WARN("Dag has edges going out of sentence end node %d\n", from);
             continue;
+        }
         d = darray[to];
 
         if (dag_link(dag, pd, d, ascr, 0, d->sf - 1, NULL) < 0) {
