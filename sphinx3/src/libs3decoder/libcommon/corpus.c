@@ -724,7 +724,8 @@ ctl_process_utt(const char *uttfile, int32 count,
 
         /* Form uttid */
         sprintf(uttid, "%s_%08d", base, c);
-        strncpy(utterance_file, uttfile, strlen (utterance_file));
+        strncpy(utterance_file, uttfile, sizeof(utterance_file) - 1);
+        utterance_file[sizeof(utterance_file) - 1] = 0;
 
         /* Process this utterance */
         ptmr_start(&tm);
