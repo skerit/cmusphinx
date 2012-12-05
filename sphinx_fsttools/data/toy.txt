@@ -1,3 +1,0 @@
-<s> b a a a a </s>
-<s> b a a a a </s>
-<s> a </s>
